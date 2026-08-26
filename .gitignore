@@ -1,0 +1,16 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/tachy
+tachy.so
+tachy.dylib
+tachy.dll
+tachy.a
+tachy.lib
+tachy-test-*
+*.exe
+*.pdb
+*.o
+*.obj
+*.lst

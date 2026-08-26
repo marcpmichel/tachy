@@ -1,0 +1,154 @@
+module tachy.modules;
+
+/**
+ * Task modules: the unit of work applied to a host.  A task is exactly one
+ * module invocation; modules are idempotent — they inspect current state
+ * first and only act (and report `changed`) when it differs from the desired
+ * one.  With `TaskContext.checkMode` set they report would-be changes without
+ * mutating anything.
+ */
+public import tachy.modules.filemod : runFileModule;
+public import tachy.modules.servicemod : runServiceModule;
+
+import std.string : join;
+
+import tachy.errors;
+import tachy.transport;
+import tachy.value;
+
+struct TaskContext
+{
+    Transport transport;
+    bool checkMode;
+    string hostName;
+    string tasksFileDir; // base dir for relative `file.src` paths
+}
+
+struct TaskResult
+{
+    bool changed;
+    string msg;        // one-line summary
+    string[] details;  // commands executed + change details (shown with -v)
+}
+
+private immutable string[] allModules = ["file", "service"];
+
+/// Registered module names.
+string[] moduleNames() @safe pure nothrow
+{
+    return allModules.dup;
+}
+
+/// Static key validation (values may still contain templates at parse time).
+void validateModuleParams(string moduleName, in Val[string] params, string context)
+{
+    switch (moduleName)
+    {
+        case "file":
+            checkKeys(params, ["path", "state", "src", "content", "mode", "owner", "group"],
+                context ~ " (file)");
+            if ("path" !in params)
+                throw new TachyError(context ~ " (file): 'path' is required");
+            break;
+        case "service":
+            checkKeys(params, ["name", "state", "enabled"],
+                context ~ " (service)");
+            if ("name" !in params)
+                throw new TachyError(context ~ " (service): 'name' is required");
+            break;
+        default:
+            throw new TachyError("unknown module '" ~ moduleName ~ "'");
+    }
+}
+
+/// Dispatch a rendered parameter set to its module.
+TaskResult runModule(string moduleName, Val[string] params, TaskContext ctx)
+{
+    switch (moduleName)
+    {
+        case "file": return runFileModule(params, ctx);
+        case "service": return runServiceModule(params, ctx);
+        default:
+            throw new TachyError("unknown module '" ~ moduleName ~ "'");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Shared parameter accessors and command helpers for modules.
+// ---------------------------------------------------------------------------
+
+string requireStr(in Val[string] p, string key, string mod)
+{
+    auto pv = key in p;
+    if (pv is null)
+        throw new TachyError(mod ~ ": '" ~ key ~ "' is required");
+    if ((*pv).kind != Val.Kind.string_)
+        throw new TachyError(mod ~ ": '" ~ key ~ "' must be a string, not a " ~ (*pv).typeName());
+    return (*pv).str_;
+}
+
+string optStr(in Val[string] p, string key, string mod, string def = null)
+{
+    auto pv = key in p;
+    if (pv is null)
+        return def;
+    if ((*pv).kind != Val.Kind.string_)
+        throw new TachyError(mod ~ ": '" ~ key ~ "' must be a string, not a " ~ (*pv).typeName());
+    return (*pv).str_;
+}
+
+bool optBool(in Val[string] p, string key, string mod, bool def = false)
+{
+    auto pv = key in p;
+    if (pv is null)
+        return def;
+    if ((*pv).kind != Val.Kind.boolean_)
+        throw new TachyError(mod ~ ": '" ~ key ~ "' must be a boolean, not a " ~ (*pv).typeName());
+    return (*pv).boolean_;
+}
+
+/// Execute `cmd`; records it and throws a descriptive error on failure.
+/// In check mode the command is recorded but not executed.
+void mustRun(Transport t, TaskContext ctx, ref string[] details, string cmd, string action)
+{
+    import std.string : strip;
+    details ~= "cmd: " ~ cmd;
+    if (ctx.checkMode)
+        return;
+    auto r = t.run(cmd);
+    if (!r.ok)
+    {
+        auto m = r.errText.strip;
+        if (!m.length)
+            m = r.outText.strip;
+        if (!m.length)
+            m = "exit status " ~ intText(r.status);
+        throw new TachyError(action ~ " failed on " ~ ctx.hostName ~ ": `" ~ cmd ~ "`: " ~ m);
+    }
+}
+
+/// Like `mustRun` but feeds `input` to the command's stdin.
+void mustRunWithInput(Transport t, TaskContext ctx, ref string[] details,
+    string cmd, string input, string action)
+{
+    import std.string : strip;
+    details ~= "cmd: " ~ cmd ~ " (stdin: " ~ intText(cast(int) input.length) ~ " bytes)";
+    if (ctx.checkMode)
+        return;
+    auto r = t.runWithInput(cmd, input);
+    if (!r.ok)
+    {
+        auto m = r.errText.strip;
+        if (!m.length)
+            m = r.outText.strip;
+        if (!m.length)
+            m = "exit status " ~ intText(r.status);
+        throw new TachyError(action ~ " failed on " ~ ctx.hostName ~ ": `" ~ cmd ~ "`: " ~ m);
+    }
+}
+
+private string intText(int v) @safe pure
+{
+    import std.conv : text;
+    return text(v);
+}

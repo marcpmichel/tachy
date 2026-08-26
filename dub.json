@@ -1,0 +1,13 @@
+{
+	"authors": [
+		"Marc Michel"
+	],
+	"copyright": "Copyright © 2026, Marc Michel",
+	"description": "TOML-driven configuration management (Ansible-like)",
+	"license": "proprietary",
+	"name": "tachy",
+	"version": "0.1.0",
+	"dependencies": {
+		"toml": "~>2.0.1"
+	}
+}
