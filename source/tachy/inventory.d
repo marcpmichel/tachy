@@ -25,7 +25,7 @@ import std.string : join;
 
 import tachy.errors;
 import tachy.value;
-import tachy.vars : deepMerge;
+import tachy.vars : deepMerge, resolveEnvVars;
 
 struct HostConfig
 {
@@ -75,19 +75,19 @@ class Inventory
             if (h.connection != "ssh" && h.connection != "local")
                 throw new TachyError(ctx ~ ": 'connection' must be \"ssh\" or \"local\", not \"" ~ h.connection ~ "\"");
             h.tags = optStringArray(ht, "tags", ctx);
-            h.vars = optTable(ht, "vars", ctx);
+            h.vars = resolveEnvVars(optTable(ht, "vars", ctx), ctx);
             inv.hosts_[hname] = h;
         }
         if (inv.hosts_.length == 0)
             throw new TachyError(path ~ ": [hosts] defines no hosts");
 
         if ("vars" in t)
-            inv.globalVars_ = optTable(t, "vars", path);
+            inv.globalVars_ = resolveEnvVars(optTable(t, "vars", path), path);
 
         return inv;
     }
 
-    /// Select hosts by a comma-separated list of host names and `#tag`
+    /// Select hosts by a comma-separated list of host names and `@tag`
     /// selectors; `all` selects everything. Result is sorted by name.
     HostConfig[] select(string selection)
     {
@@ -107,7 +107,7 @@ class Inventory
                 foreach (n; hosts_.byKey)
                     picked[n] = true;
             }
-            else if (item[0] == '#')
+            else if (item[0] == '@')
             {
                 const string tag = item[1 .. $];
                 size_t found = 0;
@@ -210,19 +210,92 @@ connection = "local"
     assert(inv.select("web1").length == 1);
     assert(inv.select("web1")[0].address == "10.0.0.1");
 
-    auto web = inv.select("#web");
+    auto web = inv.select("@web");
     assert(web.length == 2);
     assert(web[0].name == "web1" && web[1].name == "web2"); // sorted
 
-    assert(inv.select("web1,#web").length == 2);            // union, deduped
+    assert(inv.select("web1,@web").length == 2);            // union, deduped
     assert(inv.select("all").length == 3);
-    assert(inv.select("#front")[0].name == "web1");
-    assert(inv.select("#front,buildbox").length == 2);      // mixed host + tag
+    assert(inv.select("@front")[0].name == "web1");
+    assert(inv.select("@front,buildbox").length == 2);      // mixed host + tag
 
     auto vars1 = inv.varsFor("web1");
     assert(vars1["inventory_hostname"].str_ == "web1");
     assert(vars1["admin"].str_ == "root");                  // global var
     assert(vars1["http_port"].integer_ == 81);              // host var wins
+}
+
+unittest // [vars] entries may read the environment: { env = "NAME" }
+{
+    import std.exception : assertThrown;
+    import std.process : environment;
+    environment["TACHY_UT_INV"] = "inv-value";
+
+    auto inv = Inventory.load(writeTemp("env.toml", `
+[vars]
+token = { env = "TACHY_UT_INV" }
+
+[hosts.web1]
+[hosts.web1.vars]
+secret = { env = "TACHY_UT_INV" }
+plain = "literal"
+`));
+
+    auto vars = inv.varsFor("web1");
+    assert(vars["token"].str_ == "inv-value");   // global, controller env
+    assert(vars["secret"].str_ == "inv-value");  // host var
+    assert(vars["plain"].str_ == "literal");
+
+    // unset environment variable is a load-time error with context
+    string msg;
+    try
+    {
+        Inventory.load(writeTemp("env_missing.toml",
+            "[vars]\nx = { env = \"TACHY_UT_INV_NOPE\" }\n[hosts.a]\n"));
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    import std.algorithm.searching : canFind;
+    assert(canFind(msg, "vars.x"));
+    assert(canFind(msg, "TACHY_UT_INV_NOPE"));
+}
+
+unittest // [vars] entries may read a dotenv file: { env, from }
+{
+    import std.algorithm.searching : canFind;
+    import std.process : environment;
+    environment["TACHY_UT_INV"] = "inv-value"; // 'from' must ignore this
+
+    writeTemp("inv.env", "TACHY_UT_INV=dotenv-value\nTACHY_UT_EMPTY=\n");
+    auto inv = Inventory.load(writeTemp("envfrom.toml", `
+[vars]
+token = { env = "TACHY_UT_INV", from = "inv.env" }
+
+[hosts.web1]
+[hosts.web1.vars]
+secret = { env = "TACHY_UT_INV", from = "inv.env" }
+fallback = { env = "TACHY_UT_ABSENT", from = "inv.env", default = "fb" }
+empty = { env = "TACHY_UT_EMPTY", from = "inv.env" }
+`));
+
+    auto vars = inv.varsFor("web1");
+    assert(vars["token"].str_ == "dotenv-value");
+    assert(vars["secret"].str_ == "dotenv-value");
+    assert(vars["fallback"].str_ == "fb");       // default covers a missing key
+    assert(vars["empty"].str_.length == 0);      // empty value is a value
+
+    // a missing dotenv file is a load-time error
+    string msg;
+    try
+    {
+        Inventory.load(writeTemp("envfrom_missing.toml",
+            "[vars]\nx = { env = \"K\", from = \"nope.env\" }\n[hosts.a]\n"));
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(canFind(msg, "cannot read dotenv file"));
 }
 
 unittest // validation errors
@@ -236,6 +309,6 @@ unittest // validation errors
 
     auto inv = Inventory.load(writeTemp("ok.toml", "[hosts.a]\ntags = [\"x\"]\n"));
     assertThrown!(TachyError)(inv.select("nope"));   // unknown host
-    assertThrown!(TachyError)(inv.select("#nope"));  // unknown tag
-    assertThrown!(TachyError)(inv.select("#"));      // empty tag
+    assertThrown!(TachyError)(inv.select("@nope"));  // unknown tag
+    assertThrown!(TachyError)(inv.select("@"));      // empty tag
 }
