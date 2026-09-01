@@ -26,7 +26,7 @@ struct TaskContext
     bool checkMode;
     string hostName;
     string tasksFileDir;  // base dir for relative `file.src` paths
-    Val[string] vars;     // rendered variable scope, for `template = true`
+    Val[string] vars;     // rendered variable scope, for template rendering
 }
 
 struct TaskResult
@@ -97,11 +97,28 @@ void validateModuleParams(string moduleName, in Val[string] params, string conte
             break;
         }
         case "service":
-            checkKeys(params, ["name", "state", "enabled"],
+        {
+            checkKeys(params, ["name", "state", "enabled", "src", "template", "vars"],
                 context ~ " (service)");
             if ("name" !in params)
                 throw new TachyError(context ~ " (service): 'name' is required");
+            if (("src" in params) !is null && ("template" in params) !is null)
+                throw new TachyError(context ~ " (service): 'src' and 'template' are mutually exclusive");
+            foreach (k; ["src", "template"])
+                if (auto p = k in params)
+                    if ((*p).kind != Val.Kind.string_)
+                        throw new TachyError(context ~ " (service): '" ~ k
+                            ~ "' must be a string, not a " ~ (*p).typeName());
+            if (auto p = "vars" in params)
+            {
+                if ((*p).kind != Val.Kind.table_)
+                    throw new TachyError(context ~ " (service): 'vars' must be a table, not a "
+                        ~ (*p).typeName());
+                if ("template" !in params)
+                    throw new TachyError(context ~ " (service): 'vars' is only meaningful with 'template'");
+            }
             break;
+        }
         default:
             throw new TachyError("unknown module '" ~ moduleName ~ "'");
     }

@@ -14,18 +14,7 @@ int main(string[] args)
 
     try
     {
-        getopt(
-            args,
-            "i|inventory", "PATH  inventory file (default: inventory.toml)", &opts.inventoryPath,
-            "c|check", "check mode: report changes without applying them", &opts.checkMode,
-            "v|verbose", "show executed commands and change details", &opts.verbose,
-            "list-hosts", "list hosts matching the selection, then exit", &opts.listHosts,
-            "color", "force colored statuses even when stdout is not a tty", &opts.forceColor,
-            "direct", "apply tasks files directly in this process, without bundling a project", &opts.direct,
-            "direct-report", "PATH  with --direct: write \"ok changed failed\" counters to PATH", &opts.directReport,
-            "keep-bundle", "keep each host's temporary bundle after the run (debugging)", &opts.keepBundle,
-            "h|help", "show this help", &wantHelp,
-        );
+        parseOptions(args, opts, wantHelp);
 
         if (wantHelp)
         {
@@ -80,7 +69,7 @@ private void printHelp()
   Examples: \"web1\", \"web1,web2\", \"@web,@db\", \"@web,buildbox\", \"all\"
 
   A tasks file argument may be a directory: its \"main.toml\" is then the
-  entry point.  With no tasks file at all, \"main.toml\" in the current
+  entry point. With no tasks file at all, \"main.toml\" in the current
   directory is used.
 
   Every task is an idempotent \"ensure\" job; running a tasks file twice
@@ -107,6 +96,10 @@ Options:
                          copied binary runs on each host)
       --direct-report P  With --direct: write \"ok changed failed\"
                          counters to P
+      --events           Print one JSON event per line on stdout instead
+                         of text (machine mode): with --direct, the
+                         local run's own events; otherwise the raw
+                         events streamed live from each host
       --keep-bundle      Keep each host's temporary bundle directory
                          after the run, for inspection (project copy,
                          generated inventory, report)
@@ -118,11 +111,6 @@ Inventory file (inventory.toml):
   [hosts.web1]
   address = \"192.168.1.10\"        # default: host name
   user = \"deploy\"                 # ssh user
-  port = 22
-  key = \"~/.ssh/id_ed25519\"
-  connection = \"ssh\"              # \"ssh\" (default) or \"local\"
-  tags = [\"web\", \"front\"]         # selection: tachy '@web' ...
-  [hosts.web1.vars]
   http_port = 80
 
   [vars]                          # optional global variables
@@ -154,8 +142,13 @@ Tasks file — managed resources are table keys:
   home = \"/home/epices\"           # also deletes the home directory)
 
   [services.app]                  # state (started/stopped/restarted/
-  state = \"started\"               # reloaded), enabled
-  enabled = true
+  state = \"started\"               # reloaded/enabled), enabled = true;
+  enabled = true                  # src/template manage the unit file
+                                  # itself (/etc/systemd/system/...):
+  [services.\"my_service\"]         # template renders it with the host
+  template = \"my.service.tmpl\"    # scope plus the entry's local
+  vars = { user = \"www\" }         # vars = { ... } (template only);
+  state = \"started\"               # src copies a file verbatim
 
   [execute.\"check if debian\"]    # run a shell command and check it:
   run = \"source /etc/os-release; echo $ID\"
@@ -216,4 +209,49 @@ accounts (groups+users) or services — are execute-style checks keyed by
 task name; they run at their group's position in the file's order,
 whether or not the group has entries.
 Managing the same target twice anywhere in a composition is an error.");
+}
+
+/// Option registration, extracted from main so a unittest can verify
+/// every documented option stays registered (keep-bundle once vanished
+/// from getopt while still listed in the help).
+void parseOptions(ref string[] args, ref RunOptions opts, ref bool wantHelp)
+{
+    getopt(
+        args,
+        "i|inventory", "PATH  inventory file (default: inventory.toml)", &opts.inventoryPath,
+        "c|check", "check mode: report changes without applying them", &opts.checkMode,
+        "v|verbose", "show executed commands and change details", &opts.verbose,
+        "list-hosts", "list hosts matching the selection, then exit", &opts.listHosts,
+        "color", "force colored statuses even when stdout is not a tty", &opts.forceColor,
+        "direct", "apply tasks files directly in this process, without bundling a project", &opts.direct,
+        "direct-report", "PATH  with --direct: write \"ok changed failed\" counters to PATH", &opts.directReport,
+        "events", "print one JSON event per line on stdout instead of text (machine mode)", &opts.events,
+        "keep-bundle", "keep each host's temporary bundle after the run (debugging)", &opts.keepBundle,
+        "h|help", "show this help", &wantHelp,
+    );
+}
+
+version (unittest) unittest // every documented option is registered
+{
+    import std.exception : assertNotThrown;
+
+    foreach (o; ["--keep-bundle", "--list-hosts", "--color", "--events",
+        "--verbose", "--check", "--direct"])
+    {
+        RunOptions opts;
+        bool wantHelp;
+        string[] args = ["/tachy", o, "localhost"];
+        assertNotThrown!GetOptException(parseOptions(args, opts, wantHelp),
+            "option no longer registered: " ~ o);
+    }
+    {
+        RunOptions opts;
+        bool wantHelp;
+        string[] args = ["/tachy", "-i", "inv.toml", "--direct-report", "r",
+            "-h", "localhost"];
+        assertNotThrown!GetOptException(parseOptions(args, opts, wantHelp));
+        assert(opts.inventoryPath == "inv.toml");
+        assert(opts.directReport == "r");
+        assert(wantHelp);
+    }
 }

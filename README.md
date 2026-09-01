@@ -206,6 +206,10 @@ tachy [options] <selection> [<tasks.toml>...]
       --direct           Run tasks files directly in this process, without
                          bundling a project (how the on-host copy runs)
       --direct-report P  With --direct: write "ok changed failed" to P
+      --events           Print one JSON event per line on stdout instead
+                         of text (machine mode): with --direct, the local
+                         run's own events; otherwise the raw events
+                         streamed live from each host
       --color            Force colored statuses when stdout is not a tty
   -h, --help             Show this help
 ```
@@ -232,6 +236,7 @@ Top-level tables (all optional):
 | `[vars]` | — | Variables for this file's jobs and everything it composes. Entries may be `{ env = "NAME", default = "...", from = ".env" }` to read the environment of the process loading the file (the host, in bundled runs) or a dotenv file relative to it. |
 | `[apply]` | path → vars | Same as `[includes]` (including the `vars = { ... }` spelling), but the applied file's jobs run **after** this file's own jobs, respecting the order of execution of the directives. |
 | `[directories]` | path → params | `state` (default `directory`; also `absent`), `mode`, `owner`, `group` |
+| `[services]` | unit → params | `state` (`started`, `stopped`, `restarted`, `reloaded`, or `enabled` = ensure boot enablement only), `enabled` (bool), `src`/`template` (manage the unit file at `/etc/systemd/system/<unit>`: verbatim copy or rendered template; mutually exclusive), `vars` (local template context, with `template` only). |
 | `[packages]` | `"<manager>:<name>"` → params | `version` (default `latest`; an explicit version pins it exactly — epoch-qualified, as dpkg reports it), `present` (default `true`; `false` removes). Only `apt` keys are supported. |
 | `[groups]` | name → params | `state` (default `present`; `absent` removes). |
 | `[users]` | name → params | `group` (primary; default: a group named after the user), `groups` (supplementary, additive only), `shell` (default `/bin/sh` at creation), `comment`, `create_home` (default `true`, creation only), `home` (default `/home/<name>` at creation), `state` (default `present`; `absent` removes), `remove_home` (default `false`, with `state = "absent"`). |
@@ -299,7 +304,13 @@ Idempotency semantics:
   alongside coreutils.
 - `[services]`: queries `systemctl is-active` / `is-enabled` and acts only
   on mismatch (`started`/`stopped`/`enabled`); `restarted`/`reloaded`
-  always act.
+  always act. `state = "enabled"` ensures boot enablement without touching
+  the running state. `src` or `template` manage the unit file itself at
+  `/etc/systemd/system/<unit>` (`.service` appended when the name has no
+  suffix): rendered with the host scope plus the entry's local `vars`
+  (`template`), or copied verbatim (`src`); checksum-compared, written and
+  `daemon-reload`ed on drift — a running service is not restarted (use
+  `state = "restarted"` to apply a new unit).
 - `[execute]`: runs `run` on the host and checks it — `exit_status`
   accepts an integer, `{ not = N }` or `{ cond = "OP N" }` with `OP`
   one of `==`, `!=`, `<`, `<=`, `>`, `>=` (default `0`); `output`

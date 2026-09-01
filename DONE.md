@@ -433,3 +433,104 @@
     jobs of the file stayed applied; check mode runs hooks. CLI help,
     README and DOCUMENTATION updated (execution order + a hooks
     section).
+
+20. modify [services]: add both a "src" attribute and a "template"
+    attribute to create/update the unit file of managed services (from a
+    plain file or a template), plus a "vars" attribute for a local
+    variable context (only meaningful with "template").
+   - `servicemod.d`: `src` copies the unit file verbatim (binary-safe),
+    `template` renders it with the host's variable scope merged with the
+    entry's local `vars` table (local values win; `vars` values
+    themselves may be templated, like every param). Paths resolve like
+    `file.src` — relative to the defining tasks file. The unit file
+    lives at /etc/systemd/system/<name> (".service" appended when the
+    name has no suffix), is checksum-compared (sha256, only the hash
+    crosses the transport) and, on drift, written and followed by
+    `systemctl daemon-reload` — always before any state action, so a
+    subsequent start uses the new definition. A running service is
+    never restarted by a file change alone (use state = "restarted" to
+    apply it); check mode reports the would-be write without touching
+    the host. An entry may now manage only the unit file (no state/
+    enabled required).
+   - `state = "enabled"` (the TODO example's spelling) is a new state:
+    ensure boot enablement without touching the running state (never
+    queries is-active); contradicts enabled = false with a clear error.
+   - Validation (package.d, load time): src/template mutually exclusive
+    and strings; vars must be a table and requires template; allowed
+    keys extended. State values re-validated at run time with "enabled"
+    added.
+   - Unittests: servicemod (template create with local-vars precedence
+    and daemon-reload ordering, checksum idempotence, drift without
+    restart, verbatim src, unit-file-only entries, enabled state both
+    branches + contradiction, check mode records without executing,
+    missing template file error) and models.d (the TODO's exact
+    spellings, exclusivity, vars-without-template, non-table vars).
+    Verified end-to-end on the Debian 12 VM over ssh (root@
+    testing.internal): template service created+enabled+started with the
+    local ttl winning over the host var (ExecStart=/bin/sleep 3600,
+    User=root), src service enabled-but-never-started (inactive +
+    enabled), [after.services] hook confirming active, fully idempotent
+    second run, drift run updating the unit file while the service
+    kept running, state="restarted" applying the new definition (new
+    MainPID), check mode, and full VM teardown. CLI help, README and
+    DOCUMENTATION updated; modules AGENTS.md contract refreshed (DOX).
+
+21. rework output: separate task-execution data (and metadata like
+    timing) from result rendering, producer-consumer style, so the host
+    report displays each task as it finishes instead of the whole report
+    at the end of the process.
+   - New `events.d`: `JobEvent` (fileStart / job / fileDone) with
+    builders, `foldCounters` (ok/changed/failed fold), `TextRenderer`
+    (the classic text output — headers, padded colored job lines,
+    `-v` details, check-mode footers — now the single renderer for
+    both modes) and NDJSON serialization (`eventLine` /
+    `parseEventLine`, flat JSON objects, strict parser, escaping incl.
+    control chars and \uXXXX; non-event lines are refused so remote
+    noise passes through, malformed event lines are errors).
+   - `runner.d`: the job loops (direct and the controller's own
+    failure lines) are producers — timing measured around `runModule`
+    (`ms` per event), counters via `foldCounters`; direct mode renders
+    in process (or serializes with `--events`); `printTask` and the
+    per-mode header/footer duplication are gone. Bundled mode: the
+    inner run executes with `--direct --events --direct-report`, its
+    stdout is one JSON event per line, and the controller parses and
+    renders each job line live as it arrives — header/footer/counters
+    stay controller-owned (the report file is still written and read).
+   - `transport.d`: `Transport` became an abstract class so
+    `runStreaming(command, sink)` can carry a default implementation
+    (batch `run` + split; FakeTransport inherits it) while local/ssh
+    override with true incremental delivery — stdout lines on the
+    calling thread, stderr on the drain thread, per-stream carry
+    buffers, partial final lines flushed at EOF, full text still
+    returned. Key fix found by testing: `File.rawRead` has fill-the-
+    buffer (fread) semantics that batch a stream until EOF — the
+    drains now use POSIX `read()` so lines are delivered as written.
+   - `--events` is a documented machine mode (requires --direct);
+    getopts, help, README and DOCUMENTATION updated ("What a run does"
+    now describes the live rendering).
+   - Unittests: events.d (golden renderer output incl. colors/padding/
+    check suffix/details, counter fold, NDJSON round trip with
+    escaping, malformed-line errors), transport.d (streamed lines
+    arrive while the command runs — µs-stamped assertions, race-
+    tolerant ordering, CommandResult unchanged). Output shape proven
+    byte-identical before/after for six reference runs (direct,
+    bundled, both -v, check×2, stdout+stderr) captured from the
+    pre-change binary. E2E on the Debian 12 VM over ssh: each job line
+    timestamped on the controller as its job finished (file lines at
+    t≈6.86s, the 2-second execute's line exactly 2s later — not
+    batched at the end), idempotent rerun, failing execute streaming
+    its line with failure isolation intact (exit 1). DOX: source/
+    AGENTS.md records events.d in the layering, the streaming
+    transport contract and the event-protocol byte-compare rule.
+
+   - Follow-up: `--events` no longer requires `--direct`. With
+    `--direct` it keeps its meaning (the local run's own NDJSON
+    events); without it, bundled mode displays the RAW event stream:
+    each host's inner-run lines pass straight to stdout, live as they
+    arrive (headers/footers suppressed, controller-side failures
+    emitted as events, `--keep-bundle` notes moved to stderr so stdout
+    stays machine-clean). Verified: both modes produce identical,
+    all-valid-JSON streams locally; over ssh on the VM the raw events
+    arrived live (2-second execute's event exactly 2 s after the
+    file's); classic text output unchanged. Help, README and
+    DOCUMENTATION updated.

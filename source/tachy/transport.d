@@ -29,13 +29,34 @@ struct CommandResult
     bool ok() const @safe pure nothrow { return status == 0; }
 }
 
-interface Transport
+abstract class Transport
 {
     /// Run a shell command, /dev/null on stdin.
     CommandResult run(string command);
 
     /// Run a shell command with `input` fed to its stdin.
     CommandResult runWithInput(string command, string input);
+
+    /// Run a shell command, delivering complete output lines to `sink`
+    /// as they arrive (`line`, `isStderr`).  The default implementation
+    /// runs to completion and splits the captured text; LocalTransport
+    /// and SshTransport deliver incrementally while the command runs.
+    /// The sink may be called from several threads (stdout on the
+    /// calling thread, stderr on a drain thread) and must be internally
+    /// synchronized; a final line without a trailing newline is flushed
+    /// at end of stream.  The returned result still carries the full
+    /// text.
+    CommandResult runStreaming(string command, void delegate(string, bool) sink)
+    {
+        import std.algorithm.searching : endsWith;
+        import std.string : splitLines;
+        auto r = run(command);
+        foreach (line; r.outText.splitLines())
+            sink(line, false);
+        foreach (line; r.errText.splitLines())
+            sink(line, true);
+        return r;
+    }
 
     string describe() const;
 }
@@ -54,10 +75,12 @@ string shQuote(string s) @safe pure
     return r ~ "'";
 }
 
-private CommandResult runCommand(string[] argv, string input = null)
+private CommandResult runCommand(string[] argv, string input = null,
+    void delegate(string, bool) sink = null)
 {
     auto outApp = appender!(ubyte[]);
     auto errApp = appender!(ubyte[])();
+    string outCarry, errCarry;
 
     Pipe pin, pout, perr;
     File stdinFile;
@@ -89,15 +112,21 @@ private CommandResult runCommand(string[] argv, string input = null)
         pin.writeEnd.close();
     }
 
-    // Drain stderr on a thread so large stdout cannot deadlock.
+    // Drain stderr on a thread so large stdout cannot deadlock.  With a
+    // sink, stderr lines are delivered from this thread and stdout
+    // lines from the calling thread; the sink must synchronize itself.
     auto errThread = new Thread({
         auto buf = new ubyte[4096];
         for (;;)
         {
-            auto n = perr.readEnd.rawRead(buf).length;
-            if (n == 0) break;
+            auto n = posixRead(perr.readEnd.fileno, buf);
+            if (n <= 0) break;
             errApp.put(buf[0 .. n]);
+            if (sink !is null)
+                feedLines(errCarry, cast(string) buf[0 .. n], sink, true);
         }
+        if (sink !is null && errCarry.length)
+            sink(errCarry, true);
     });
     errThread.start();
 
@@ -105,11 +134,15 @@ private CommandResult runCommand(string[] argv, string input = null)
         auto buf = new ubyte[65536];
         for (;;)
         {
-            auto n = pout.readEnd.rawRead(buf).length;
-            if (n == 0) break;
+            auto n = posixRead(pout.readEnd.fileno, buf);
+            if (n <= 0) break;
             outApp.put(buf[0 .. n]);
+            if (sink !is null)
+                feedLines(outCarry, cast(string) buf[0 .. n], sink, false);
         }
     }
+    if (sink !is null && outCarry.length)
+        sink(outCarry, false);
 
     errThread.join();
     const int status = wait(pid);
@@ -117,11 +150,53 @@ private CommandResult runCommand(string[] argv, string input = null)
     return CommandResult(status, cast(string) outApp.data, cast(string) errApp.data);
 }
 
+/// One unbuffered read on a descriptor: returns the bytes available
+/// now (0 at end of stream), unlike File.rawRead's fill-the-buffer
+/// semantics which would batch a streamed run until EOF.
+private ptrdiff_t posixRead(int fd, ubyte[] buf) @system
+{
+    version (Posix)
+    {
+        import core.sys.posix.unistd : read;
+        return read(fd, buf.ptr, buf.length);
+    }
+    else
+        static assert(false, "tachy requires a POSIX system");
+}
+
+/// Feed one chunk to a line sink, keeping the unterminated remainder in
+/// `carry`.  Newlines are byte-level, so multibyte sequences split
+/// across chunks are reassembled safely.
+private void feedLines(ref string carry, string chunk,
+    void delegate(string, bool) sink, bool isErr)
+{
+    import std.algorithm.searching : canFind;
+    carry ~= chunk;
+    while (canFind(carry, '\n'))
+    {
+        const size_t nl = cast(size_t) stdStringIndexOf(carry, '\n');
+        sink(carry[0 .. nl], isErr);
+        carry = carry[nl + 1 .. $];
+    }
+}
+
+private ptrdiff_t stdStringIndexOf(string s, char c) @safe pure
+{
+    import std.string : indexOf;
+    return indexOf(s, c);
+}
+
+
 final class LocalTransport : Transport
 {
     override CommandResult run(string command)
     {
         return runCommand(["/bin/sh", "-c", command]);
+    }
+
+    override CommandResult runStreaming(string command, void delegate(string, bool) sink)
+    {
+        return runCommand(["/bin/sh", "-c", command], null, sink);
     }
 
     override CommandResult runWithInput(string command, string input)
@@ -151,6 +226,12 @@ final class SshTransport : Transport
     {
         return runCommand(argvFor(command));
     }
+
+    override CommandResult runStreaming(string command, void delegate(string, bool) sink)
+    {
+        return runCommand(argvFor(command), null, sink);
+    }
+
 
     override CommandResult runWithInput(string command, string input)
     {
@@ -275,6 +356,47 @@ version (unittest)
         assert(r.outText == "hi\n");
         auto bad = t.run("exit 3");
         assert(!bad.ok && bad.status == 3);
+    }
+
+    unittest // runStreaming: lines arrive while the command runs
+    {
+        import std.conv : text;
+        import std.datetime.stopwatch : StopWatch;
+
+        auto t = new LocalTransport;
+        string[] lines;
+        bool[] errs;
+        ulong[] stamps; // ticks at each line
+        StopWatch clock;
+        clock.start();
+
+        auto r = t.runStreaming(
+            "echo one; echo err-one >&2; sleep 0.4; echo two; printf no-newline",
+            (string line, bool isErr)
+            {
+                synchronized (Object.classinfo)
+                {
+                    lines ~= line;
+                    errs ~= isErr;
+                    stamps ~= clock.peek.total!"usecs";
+                }
+            });
+
+        assert(r.ok, r.errText);
+        assert(lines.length == 4, text(lines));
+        // only relative stdout order is guaranteed: the stderr drain
+        // thread may deliver its line at any position
+        import std.algorithm.searching : canFind;
+        import std.algorithm.searching : countUntil;
+        const size_t iOne = lines.countUntil("one");
+        const size_t iTwo = lines.countUntil("two");
+        const size_t iNone = lines.countUntil("no-newline");
+        assert(iOne < iTwo && iTwo < iNone, text(lines));
+        assert(canFind(lines, "err-one"), text(lines));
+        assert(r.outText == "one\ntwo\nno-newline", r.outText);
+        assert(r.errText == "err-one\n");
+        // streaming, not batched: "two" arrived well after "one"
+        assert(stamps[iTwo] > stamps[iOne] + 300_000, text(stamps)); // usecs
     }
 
     unittest // stdin round trip

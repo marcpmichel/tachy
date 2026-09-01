@@ -120,7 +120,8 @@ void removeBundle(Transport t, in ProjectBundle b)
 string innerTachyCommand(in ProjectBundle b, string hostName, string tasksBaseName,
     bool check, bool verbose, bool color, string reportPath)
 {
-    string cmd = "cd " ~ shQuote(b.projectDir) ~ " && " ~ shQuote(b.tachyPath) ~ " --direct";
+    string cmd = "cd " ~ shQuote(b.projectDir) ~ " && " ~ shQuote(b.tachyPath)
+        ~ " --direct --events";
     if (check)
         cmd ~= " --check";
     if (verbose)
@@ -398,7 +399,7 @@ version (unittest)
         auto cmd = innerTachyCommand(b, "h1", "main.toml", true, false, true,
             buildPath(b.root, "report"));
         assert(canFind(cmd, "cd "));
-        assert(canFind(cmd, "--direct --check --color"));
+        assert(canFind(cmd, "--direct --events --check --color"));
         assert(canFind(cmd, "--direct-report"));
         assert(canFind(cmd, "h1"));
         assert(canFind(cmd, "'main.toml'"));

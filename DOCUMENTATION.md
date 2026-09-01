@@ -115,6 +115,7 @@ tachy [options] <selection> [<tasks.toml>...]
 | `--keep-bundle` | Keep each host's temporary bundle directory after the run (project copy, generated inventory, report) and print its location — for debugging. |
 | `--direct` | Apply tasks files directly in this process, without bundling a project. (This is how the copied binary runs on each host; use it manually for local execution.) |
 | `--direct-report PATH` | With `--direct`: suppress headers/footers and write `ok changed failed` counters to PATH (machine mode). |
+| `--events` | Print one JSON event per line on stdout instead of text — the machine-readable stream (fileStart / job / fileDone objects carrying host, label, status, msg, details and per-job `ms`). With `--direct`: the local run's own events. Without: the raw events streamed live from each host's run (headers/footers suppressed, controller-side failures emitted as events too; `--keep-bundle` notes go to stderr so stdout stays machine-clean). |
 | `--color` | Force colored statuses even when stdout is not a tty (forwarded to the run on each host). |
 | `-h, --help` | Show the help. |
 
@@ -124,8 +125,12 @@ For every selected host (bundled mode, the default) tachy creates
 `/tmp/tachy.XXXXXXXXXX` on the host (respecting `TMPDIR`) containing a
 copy of the project, a copy of the tachy binary, and a generated one-host
 inventory carrying the host's variables; it then executes the copied
-binary there. The bundle is removed when the run finishes — check mode
-deploys and removes a bundle too but manages nothing. A project must be
+binary there. The inner run emits one JSON event per line; the
+controller renders each job line **live, as the job finishes** on the
+host (execution metadata — per-job duration — travels in the events;
+`--events` exposes the same stream for machine consumption). The bundle
+is removed when the run finishes — check mode deploys and removes a
+bundle too but manages nothing. A project must be
 self-contained: includes and `file.src`/`template` paths resolve inside
 the copied project.
 
@@ -410,21 +415,37 @@ remove_home = true               # userdel -r: delete the home directory too
 ### `[services]` — systemd services
 
 Keyed by unit name. Queries `systemctl is-active` / `is-enabled` and acts
-only on mismatch; `restarted`/`reloaded` always act.
+only on mismatch; `restarted`/`reloaded` always act. With `src` or
+`template` the unit file itself is managed first.
 
 ```toml
 [services.nginx]
 state = "started"
 enabled = true
 
-[services.app]
-state = "restarted"              # acts on every run
+[services."my_service"]          # unit file rendered from a template
+state = "started"
+template = "templates/my_service.service.tmpl"
+vars = { service_user = "example" }   # local context (template only)
+
+[services."second_service"]      # unit file copied verbatim
+state = "enabled"
+src = "services/second.service"
 ```
 
 | Attribute | Default | Description |
 |---|---|---|
-| `state` | — | `started`, `stopped`, `restarted` or `reloaded`. |
+| `state` | — | `started`, `stopped`, `restarted`, `reloaded` or `enabled` (ensure boot enablement without touching the running state). |
 | `enabled` | — | Boolean; ensures the unit is (not) enabled at boot. |
+| `src` | — | Manage the unit file: copy this file verbatim (binary-safe, checksum-compared), path relative to the defining tasks file. Mutually exclusive with `template`. |
+| `template` | — | Manage the unit file: render this template with the host's variable scope (like `[files]`'s `template`). |
+| `vars` | — | Table; a local variable context merged over the host scope for the rendering (local values win). Only meaningful with `template`. |
+
+The managed unit file lives at `/etc/systemd/system/<name>` (`.service`
+appended when the name has no suffix). On drift it is written and followed
+by `systemctl daemon-reload`; a running service is **not** restarted —
+use `state = "restarted"` to apply a new unit definition. Check mode
+reports the would-be write without touching the host.
 
 ---
 

@@ -23,14 +23,21 @@ import std.algorithm.comparison : among;
 import std.algorithm.searching : endsWith, startsWith;
 import std.array : join;
 import std.conv : text;
+import std.datetime.stopwatch : StopWatch;
 import std.format : format;
 import std.path : absolutePath, baseName, buildNormalizedPath, buildPath, dirName;
 import std.stdio : File, stderr, stdout, write, writefln, writeln;
 
 import tachy.errors;
+import tachy.events;
 import tachy.inventory;
 import tachy.models;
 import tachy.modules;
+import tachy.project;
+import tachy.transport;
+import tachy.value;
+import tachy.vars;
+
 import tachy.project;
 import tachy.transport;
 import tachy.value;
@@ -47,6 +54,7 @@ struct RunOptions
     bool keepBundle;      // keep the deployed bundle on each host (debugging)
     bool direct;           // apply jobs in this process, no project bundling
     string directReport;   // with --direct: write "ok changed failed" here
+    bool events;           // with --direct: print one JSON event per line
     string[] tasksFiles;
 }
 
@@ -99,18 +107,31 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
 {
     const bool tty = isStdoutTty() || opts.forceColor;
     const bool machine = opts.directReport.length > 0;
+
+    // One consumer for every event the job loop produces: the text
+    // renderer (headers/footers suppressed in machine mode), or the
+    // event serializer for machine consumption over a stream.
+    TextRenderer renderer = TextRenderer((string l) => terminalSink(l), tty, opts.verbose);
+    void consume(JobEvent ev)
+    {
+        if (opts.events)
+        {
+            stdout.writeln(eventLine(ev));
+            stdout.flush();
+            return;
+        }
+        if (machine && ev.kind != JobEvent.Kind.job)
+            return; // machine mode: job lines only, no headers/footers
+        renderer.handle(ev);
+    }
+
     int totalFailed;
 
     foreach (tasksFile; opts.tasksFiles)
     {
         auto loaded = loadTasksFile(tasksFile);
 
-        if (!machine)
-            writefln("== %s | hosts: %s", tasksFile, hosts.mapHosts().join(", "));
-
-        size_t nameWidth = 0;
-        foreach (ref h; hosts)
-            nameWidth = h.name.length > nameWidth ? h.name.length : nameWidth;
+        consume(evFileStart(tasksFile, hosts.mapHosts()));
 
         ulong ok, changed, failed;
         foreach (ref const host; hosts)
@@ -120,8 +141,9 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
                 t = makeTransport(host);
             catch (Exception e)
             {
-                failed++;
-                printTask(tty, nameWidth, host.name, host.name, "failed", e.msg);
+                auto ev = evJob(host.name, tasksFile, host.name, "failed", e.msg);
+                foldCounters(ev, ok, changed, failed);
+                consume(ev);
                 continue;
             }
 
@@ -134,23 +156,23 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
                     auto vars = deepMerge(hostVars, job.overlay);
                     auto params = renderParams(job.params, vars);
                     TaskContext ctx = TaskContext(t, opts.checkMode, host.name, job.tasksFileDir, vars);
+                    StopWatch sw;
+                    sw.start();
                     auto r = runModule(job.moduleName, params, ctx);
-                    if (r.changed)
-                        changed++;
-                    else
-                        ok++;
+                    const ulong ms = sw.peek.total!"msecs";
                     string status = r.changed ? "changed" : "ok";
                     if (r.changed && opts.checkMode)
                         status = "changed (check)";
-                    printTask(tty, nameWidth, host.name, defaultLabel(job.kind, params), status, r.msg);
-                    if (opts.verbose)
-                        foreach (d; r.details)
-                            writeln("    ", d);
+                    auto ev = evJob(host.name, tasksFile, defaultLabel(job.kind, params),
+                        status, r.msg, r.details, ms);
+                    foldCounters(ev, ok, changed, failed);
+                    consume(ev);
                 }
                 catch (Exception e)
                 {
-                    failed++;
-                    printTask(tty, nameWidth, host.name, job.origin, "failed", e.msg);
+                    auto ev = evJob(host.name, tasksFile, job.origin, "failed", e.msg);
+                    foldCounters(ev, ok, changed, failed);
+                    consume(ev);
                     break; // host is done for this tasks file
                 }
             }
@@ -158,15 +180,12 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
 
         if (machine)
             writeDirectReport(opts.directReport, ok, changed, failed);
-        else
-            writefln("-- %s: ok=%d changed=%d failed=%d%s", tasksFile, ok, changed, failed,
-                opts.checkMode ? " (check mode, nothing applied)" : "");
+        consume(evFileDone(tasksFile, ok, changed, failed, opts.checkMode));
         totalFailed += cast(int) failed;
     }
 
     return totalFailed > 0 ? 1 : 0;
 }
-
 private void writeDirectReport(string path, ulong ok, ulong changed, ulong failed)
 {
     try
@@ -191,8 +210,18 @@ private struct DeployedBundle
 private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] hosts)
 {
     const bool tty = isStdoutTty();
+    const bool rawEvents = opts.events; // display the raw event stream
+    TextRenderer renderer = TextRenderer((string l) => terminalSink(l), tty, opts.verbose);
     int totalFailed;
     DeployedBundle[string] deployed; // host \0 project dir -> bundle (reused)
+
+    void display(JobEvent ev)
+    {
+        if (rawEvents)
+            emitRawEvent(ev);
+        else
+            renderer.handle(ev);
+    }
 
     try
     {
@@ -204,11 +233,10 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
             const string projectDir = dirName(absTasks);
             checkProjectContained(loaded, projectDir);
 
-            writefln("== %s | hosts: %s", tasksFile, hosts.mapHosts().join(", "));
+            if (!rawEvents)
+                renderer.handle(evFileStart(tasksFile, hosts.mapHosts()));
 
-            size_t nameWidth = 0;
-            foreach (ref h; hosts)
-                nameWidth = h.name.length > nameWidth ? h.name.length : nameWidth;
+
 
             ulong ok, changed, failed;
             foreach (ref const host; hosts)
@@ -219,7 +247,7 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
                 catch (Exception e)
                 {
                     failed++;
-                    printTask(tty, nameWidth, host.name, host.name, "failed", e.msg);
+                    display(evJob(host.name, tasksFile, host.name, "failed", e.msg));
                     continue;
                 }
 
@@ -239,8 +267,48 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
                     const string cmd = innerTachyCommand(b, host.name, baseName(absTasks),
                         opts.checkMode, opts.verbose, tty, reportPath);
 
-                    auto r = t.run(cmd);
-                    relayOutput(r.outText, r.errText);
+                    // Stream the inner run's events live: each stdout
+                    // line is one JSON event, rendered as it arrives.
+                    // The sink runs on two threads (stdout here, stderr
+                    // on the transport's drain thread); one lock
+                    // serializes it.
+                    Object sinkLock = new Object;
+                    auto r = t.runStreaming(cmd, (string line, bool isErr)
+                    {
+                        synchronized (sinkLock)
+                        {
+                            if (isErr)
+                            {
+                                stderr.writeln(line);
+                                return;
+                            }
+                            if (rawEvents)
+                            {
+                                stdout.writeln(line); // raw passthrough
+                                stdout.flush();
+                                return;
+                            }
+                            JobEvent ev;
+                            try
+                            {
+                                if (parseEventLine(line, ev))
+                                {
+                                    // the controller prints its own
+                                    // header/footer and owns the counters
+                                    if (ev.kind == JobEvent.Kind.job)
+                                        renderer.handle(ev);
+                                    return;
+                                }
+                            }
+                            catch (TachyError e)
+                            {
+                                stderr.writeln("bad event line from ",
+                                    host.name, ": ", e.msg);
+                                return;
+                            }
+                            stdout.writeln(line); // remote noise passes through
+                        }
+                    });
 
                     ulong hOk, hChanged, hFailed;
                     if (readReport(t, reportPath, hOk, hChanged, hFailed))
@@ -257,12 +325,12 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
                 catch (Exception e)
                 {
                     failed++;
-                    printTask(tty, nameWidth, host.name, "project", "failed", e.msg);
+                    display(evJob(host.name, tasksFile, "project", "failed", e.msg));
                 }
             }
 
-            writefln("-- %s: ok=%d changed=%d failed=%d%s", tasksFile, ok, changed, failed,
-                opts.checkMode ? " (check mode, nothing applied)" : "");
+            if (!rawEvents)
+                renderer.handle(evFileDone(tasksFile, ok, changed, failed, opts.checkMode));
             totalFailed += cast(int) failed;
         }
     }
@@ -271,10 +339,15 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
         foreach (ref d; deployed.byValue())
         {
             if (opts.keepBundle)
-                writefln("-- bundle kept on %s at %s (remove it manually)",
-                    d.host, d.bundle.root);
-            else
-                removeBundle(d.transport, d.bundle);
+            {
+                // keep the raw event stream machine-clean
+                if (rawEvents)
+                    stderr.writefln("-- bundle kept on %s at %s (remove it manually)",
+                        d.host, d.bundle.root);
+                else
+                    writefln("-- bundle kept on %s at %s (remove it manually)",
+                        d.host, d.bundle.root);
+            }
         }
     }
 
@@ -304,21 +377,6 @@ private bool readReport(Transport t, string path, out ulong ok, out ulong change
     return parseReport(r.outText, ok, changed, failed);
 }
 
-private void relayOutput(string outText, string errText)
-{
-    if (outText.length)
-    {
-        stdout.write(outText);
-        if (!endsWith(outText, "\n"))
-            writeln();
-    }
-    if (errText.length)
-    {
-        stderr.write(errText);
-        if (!endsWith(errText, "\n"))
-            stderr.writeln();
-    }
-}
 
 // ---------------------------------------------------------------------------
 
@@ -353,33 +411,21 @@ private string defaultLabel(string kind, in Val[string] params) @safe pure
     return kind;
 }
 
-private void printTask(bool tty, size_t nameWidth, string host, string label,
-    string status, string msg)
+/// Terminal event sink: writes each rendered line and flushes, so lines
+/// from a streamed run appear as they happen.
+private void terminalSink(string line)
 {
-    string color;
-    if (tty)
-    {
-        if (status == "failed")
-            color = "\033[31m";
-        else if (status.startsWithChanged())
-            color = "\033[33m";
-        else if (status == "ok")
-            color = "\033[32m";
-    }
-    const string reset = tty ? "\033[0m" : "";
-    write(format("%-*s | ", nameWidth, host));
-    if (color.length)
-        write(color);
-    write(format("%-16s", status));
-    if (color.length)
-        write(reset);
-    writeln("| ", label, ": ", msg);
+    stdout.write(line);
+    stdout.flush();
 }
 
-private bool startsWithChanged(string status) @safe pure
+/// Machine mode: one JSON event per line on stdout, flushed as emitted.
+private void emitRawEvent(JobEvent ev)
 {
-    return status.length >= 7 && status[0 .. 7] == "changed";
+    stdout.writeln(eventLine(ev));
+    stdout.flush();
 }
+
 
 private bool isStdoutTty() @trusted
 {

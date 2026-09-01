@@ -85,4 +85,22 @@ Default section order:
 
 When the user requests a durable behavior change, record it here or in the relevant child AGENTS.md
 
+# Project
 
+- tachy: TOML-driven configuration management (Ansible-like) in D — see `README.md` (tour) and `DOCUMENTATION.md` (full reference); `dub.json` is the build manifest (DMD + dub, sole dependency `toml ~>2.0.1`)
+- CLI shape: `tachy [options] <selection> <tasks.toml>...`; selection mixes host names, `@tag` and `all`; default inventory `inventory.toml`, default tasks file `main.toml` (a directory argument maps to its `main.toml`)
+- `sessions/` holds saved session records (inert artifacts, not inputs to code or docs)
+- TODO.md / DONE.md are the task ledger: pending work arrives as TODO.md entries
+
+# Durable workflow rules
+
+- Task loop: perform the TODO.md entry, then move it to DONE.md as the next numbered item summarising implementation, tests and verification evidence (commands run, outcomes); leave TODO.md with just its header when empty
+- Every user-visible behavior change updates the doc trio together: `--help` text in `source/app.d`, `README.md`, `DOCUMENTATION.md`
+- Unit tests defend the contract (`dub test`); new resource/directive work gets a scripted-transport unittest plus an end-to-end run when feasible
+- End-to-end verification uses the `testing.internal` VM over ssh as root (Debian 12; `/bin/sh` is dash — use `.` not `source`): keep checks read-only or scoped to `/tmp`, and clean the VM and local scratch up afterwards
+- Task files and inventories are strict: unknown keys, undefined variables, duplicate targets, cycles and escaping includes are load-time errors with file context — keep new parsing equally strict
+- Both TOML spellings (sub-table and inline table) must stay equivalent for every keyed directive; multi-line inline tables and unquoted path keys in table headers are accepted by loader preprocessing
+
+# Child DOX Index
+
+- `source/AGENTS.md` — the D implementation tree: CLI, orchestration, inventory/tasks loading, templating, transports, project bundles; it indexes `source/tachy/modules/AGENTS.md` (job modules) itself

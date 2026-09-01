@@ -838,3 +838,55 @@ run = "true"
         msg = e.msg;
     assert(canFind(msg, "'before' must be a table"));
 }
+
+unittest // [services] with src / template / vars (unit file management)
+{
+    import std.algorithm.searching : canFind;
+    auto loaded = loadTasksFile(writeTemp("svc_unit.toml", `
+[services."my_service"]
+state = "started"
+template = "templates/my_service.service.tmpl"
+vars = { service_user = "example" }
+
+[services."second_service"]
+state = "enabled"
+src = "services/second.service"
+`));
+    assert(loaded.jobs.length == 2); // sorted by key: my_service, second_service
+    assert(loaded.jobs[0].params["template"].str_ == "templates/my_service.service.tmpl");
+    assert(loaded.jobs[0].params["vars"].table_["service_user"].str_ == "example");
+    assert(loaded.jobs[1].params["src"].str_ == "services/second.service");
+    assert(loaded.jobs[1].params["state"].str_ == "enabled");
+
+    // load-time validation: src and template are exclusive, vars needs template
+    string msg;
+    try
+    {
+        loadTasksFile(writeTemp("svc_both.toml",
+            "[services.x]\nsrc = \"a\"\ntemplate = \"b\"\n"));
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(canFind(msg, "mutually exclusive"));
+
+    try
+    {
+        loadTasksFile(writeTemp("svc_vars_only.toml",
+            "[services.x]\nstate = \"started\"\nvars = { a = \"b\" }\n"));
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(canFind(msg, "only meaningful with 'template'"));
+
+    try
+    {
+        loadTasksFile(writeTemp("svc_badvars.toml",
+            "[services.x]\nstate = \"started\"\ntemplate = \"t\"\nvars = \"nope\"\n"));
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(canFind(msg, "'vars' must be a table"));
+}
