@@ -29,7 +29,7 @@ import std.algorithm.sorting : sort;
 import std.array : Appender, appender, array;
 import std.conv : text;
 import std.format : format;
-import std.path : buildPath, isAbsolute;
+import std.path : buildPath, dirName, isAbsolute;
 import std.process : Redirect, pipeProcess, wait;
 import std.string : join, strip;
 
@@ -49,12 +49,27 @@ struct ProjectBundle
     string inventoryPath; // root ~ "/inventory.toml": generated inventory
 }
 
+/// One `[import]` entry: a source file or directory (absolute path,
+/// possibly outside the project) copied into the bundle as `dest` —
+/// its base name — next to the project copy, so src/template/run
+/// references resolve on the host.
+struct ImportSpec
+{
+    string src;
+    string dest;
+}
+
+
 /// Deploy a project bundle on the host reached through `t`: copy
 /// `localProjectDir`, the running tachy binary and a generated
-/// one-host inventory into a fresh temporary directory there.
+/// one-host inventory into a fresh temporary directory there, plus
+/// every `imports` source (validated here: it must exist, and its
+/// destination must not clash with project content or another import).
 ProjectBundle deployProject(Transport t, string localProjectDir,
-    string hostName, in Val[string] hostVars)
+    string hostName, in Val[string] hostVars, in ImportSpec[] imports = [])
 {
+    checkImports(localProjectDir, imports);
+
     auto mk = t.run("mktemp -d \"${TMPDIR:-/tmp}/tachy.XXXXXXXXXX\"");
     if (!mk.ok)
         throw new TachyError("cannot create a temporary bundle directory on "
@@ -73,9 +88,10 @@ ProjectBundle deployProject(Transport t, string localProjectDir,
         throw new TachyError("cannot create " ~ b.projectDir ~ " on " ~ hostName
             ~ ": " ~ failText(mkd));
 
-    // Project copy: tar on the controller, untar on the host (stdin).
+    // Project copy (plus imports): one tar on the controller, untar on
+    // the host (stdin).
     auto extract = t.runWithInput("tar -C " ~ shQuote(b.projectDir) ~ " -xf -",
-        tarDirectory(localProjectDir));
+        tarBundle(localProjectDir, imports));
     if (!extract.ok)
         throw new TachyError("cannot copy project '" ~ localProjectDir ~ "' to "
             ~ hostName ~ ": " ~ failText(extract));
@@ -114,16 +130,15 @@ void removeBundle(Transport t, in ProjectBundle b)
 /// The command line running the bundled binary on the host: it runs in
 /// the copied project's directory (so error origins and relative paths
 /// read like project paths, not bundle paths) and applies the tasks
-/// file's basename in `--direct` mode against the generated inventory,
-/// forwarding check mode, verbosity and colors, and reporting its
-/// counters to `reportPath`.
+/// file's basename in `--direct` mode against the generated inventory —
+/// with the `check` command when the controller was in check mode —
+/// forwarding verbosity and colors, and reporting its counters to
+/// `reportPath`.
 string innerTachyCommand(in ProjectBundle b, string hostName, string tasksBaseName,
     bool check, bool verbose, bool color, string reportPath)
 {
     string cmd = "cd " ~ shQuote(b.projectDir) ~ " && " ~ shQuote(b.tachyPath)
-        ~ " --direct --events";
-    if (check)
-        cmd ~= " --check";
+        ~ (check ? " check" : " apply") ~ " --direct --events";
     if (verbose)
         cmd ~= " --verbose";
     if (color)
@@ -262,9 +277,15 @@ private string tomlFloat(double d)
 // Local helpers.
 // ---------------------------------------------------------------------------
 
-private string tarDirectory(string dir)
+private string tarBundle(string dir, in ImportSpec[] imports)
 {
-    auto p = pipeProcess(["tar", "-C", dir, "-cf", "-", "."], Redirect.stdout);
+    // One archive: the whole project, then each import from its own
+    // parent directory under its destination name (multiple -C options
+    // are positional in GNU tar).
+    string[] args = ["tar", "-C", dir, "-cf", "-", "."];
+    foreach (ref const ImportSpec imp; imports)
+        args ~= ["-C", dirName(imp.src), imp.dest];
+    auto p = pipeProcess(args, Redirect.stdout);
     auto app = appender!(ubyte[]);
     auto buf = new ubyte[65536];
     for (;;)
@@ -281,6 +302,29 @@ private string tarDirectory(string dir)
     return cast(string) app.data;
 }
 
+
+/// Validate import sources (controller side): each must exist, and its
+/// destination (the base name) must not collide with project content or
+/// with another import's destination.
+private void checkImports(string localProjectDir, in ImportSpec[] imports) @trusted
+{
+    import std.file : exists;
+
+    bool[string] dests;
+    foreach (ref const ImportSpec imp; imports)
+    {
+        if (!exists(imp.src))
+            throw new TachyError("import '" ~ imp.src ~ "' does not exist");
+        if (dests.get(imp.dest, false))
+            throw new TachyError("import '" ~ imp.src ~ "': '" ~ imp.dest
+                ~ "' is already the destination of another import");
+        dests[imp.dest] = true;
+        if (exists(buildPath(localProjectDir, imp.dest)))
+            throw new TachyError("import '" ~ imp.src ~ "': '" ~ imp.dest
+                ~ "' already exists in the project '" ~ localProjectDir
+                ~ "' (imports may not overwrite project content)");
+    }
+}
 private string failText(in CommandResult r)
 {
     auto m = r.errText.strip;
@@ -392,16 +436,77 @@ version (unittest)
         assert(canFind(inv, `connection = "local"`));
         assert(canFind(inv, `"k" = "v"`));
         assert(canFind(inv, `[hosts."h1"`));
-
-        removeBundle(t, b);
-        assert(!exists(b.root));
-
         auto cmd = innerTachyCommand(b, "h1", "main.toml", true, false, true,
             buildPath(b.root, "report"));
         assert(canFind(cmd, "cd "));
-        assert(canFind(cmd, "--direct --events --check --color"));
+        assert(canFind(cmd, " check --direct --events --color"));
         assert(canFind(cmd, "--direct-report"));
         assert(canFind(cmd, "h1"));
         assert(canFind(cmd, "'main.toml'"));
+        // without check mode the inner run uses the apply command
+        cmd = innerTachyCommand(b, "h1", "main.toml", false, false, false,
+            buildPath(b.root, "report"));
+        assert(canFind(cmd, " apply --direct --events"));
+        assert(!canFind(cmd, " check"));
+        assert(!canFind(cmd, " --check"));
     }
+}
+
+unittest // imports are copied into the bundle; collisions are errors
+{
+    import std.algorithm.searching : canFind;
+    import std.exception : assertThrown;
+    import std.file : exists, mkdirRecurse, readText, rmdirRecurse, tempDir;
+    import std.path : baseName, buildPath;
+
+    auto base = buildPath(tempDir, "tachy_project_import_ut");
+    if (exists(base)) rmdirRecurse(base);
+    mkdirRecurse(buildPath(base, "proj"));
+    mkdirRecurse(buildPath(base, "tasks", "install_gogs"));
+    mkdirRecurse(buildPath(base, "shared"));
+    scope (exit) rmdirRecurse(base);
+    {
+        import std.stdio : File;
+        auto f = File(buildPath(base, "proj", "main.toml"), "w");
+        f.write("[files.\"/tmp/x\"]\n");
+        f.close();
+        f = File(buildPath(base, "tasks", "install_gogs", "setup.sh"), "w");
+        f.write("#!/bin/sh\necho gogs\n");
+        f.close();
+        f = File(buildPath(base, "shared", "data.conf"), "w");
+        f.write("key = value\n");
+        f.close();
+        // collides with the import destination below
+        f = File(buildPath(base, "proj", "clash"), "w");
+        f.write("project content\n");
+        f.close();
+    }
+
+    const string proj = buildPath(base, "proj");
+    const string gogs = buildPath(base, "tasks", "install_gogs");
+    const string sharedDir = buildPath(base, "shared");
+
+    auto t = new LocalTransport;
+    ImportSpec[] imports = [ImportSpec(gogs, baseName(gogs)),
+        ImportSpec(sharedDir, baseName(sharedDir))];
+    auto b = deployProject(t, proj, "h1", null, imports);
+    scope (exit) removeBundle(t, b);
+
+    assert(readText(buildPath(b.projectDir, "install_gogs", "setup.sh"))
+        .canFind("gogs"));
+    assert(readText(buildPath(b.projectDir, "shared", "data.conf"))
+        .canFind("key = value"));
+    assert(exists(buildPath(b.projectDir, "main.toml")));
+
+    // missing source
+    assertThrown!TachyError(deployProject(t, proj, "h1", null,
+        [ImportSpec(buildPath(base, "nope"), "nope")]));
+
+    // destination clashing with project content
+    assertThrown!TachyError(deployProject(t, proj, "h1", null,
+        [ImportSpec(buildPath(base, "tasks"), "clash")]));
+
+    // two imports with the same destination
+    assertThrown!TachyError(deployProject(t, proj, "h1", null,
+        [ImportSpec(gogs, "same"), ImportSpec(sharedDir, "same")]));
 }

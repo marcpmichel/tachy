@@ -14,12 +14,15 @@ module tachy.models;
  *     "/tmp/myfile" = { owner = "root", mode = "0600" }
  *
  * Kinds and their parameters:
- *
  *     [files.PATH]        state (default "file"; also "link"/"absent"),
  *                          content, src, line, block, mode, owner, group
  *     [directories.PATH]  state (default "directory"; also "absent"),
  *                          mode, owner, group
  *     [services.UNIT]     state (started/stopped/restarted/reloaded), enabled
+ *     [compose.DIR]       Docker Compose stacks: file, project, services,
+ *                          state (running/stopped/absent), pull, build,
+ *                          recreate, wait, wait_timeout, timeout,
+ *                          remove_orphans, remove_volumes, remove_images
  *
  * Files compose through includes and applies; each carries its own
  * variables.  Scopes chain: outer vars < directive vars < included file's
@@ -34,9 +37,9 @@ module tachy.models;
  *
  * The per-file execution order is: directories, files, before.packages,
  * packages, after.packages, before.accounts, groups, users,
- * after.accounts, before.services, services, after.services, execute.
- * The `[before.G]`/`[after.G]` hooks (G: packages, accounts, services)
- * are execute-style checks wrapping their group.
+ * after.accounts, before.services, services, after.services, compose,
+ * execute.  The `[before.G]`/`[after.G]` hooks (G: packages, accounts,
+ * services) are execute-style checks wrapping their group.
  *
  * Within one file both directives are processed sorted by path, and their
  * scopes keep flowing forward: a later directive sees the variables every
@@ -55,11 +58,14 @@ module tachy.models;
 import std.algorithm.searching : canFind;
 import std.algorithm.sorting : sort;
 import std.array : array, join;
-import std.path : absolutePath, buildNormalizedPath, buildPath, dirName, isAbsolute;
+import std.file : exists, isDir;
+import std.path : absolutePath, baseName, buildNormalizedPath, buildPath,
+    dirName, isAbsolute;
 import std.string : indexOf;
 
 import tachy.errors;
 import tachy.modules : validateModuleParams;
+import tachy.settings;
 import tachy.value;
 import tachy.vars : deepMerge, resolveEnvVars;
 
@@ -79,19 +85,30 @@ struct LoadedTasks
     Job[] jobs;           // deterministic order; see module docs
     string[] sourceFiles; // every tasks file of the composition, resolved
                           // absolute paths (the entry file first)
+    string[] imports;     // [import] sources, resolved absolute paths,
+                          // deduplicated; bundled mode copies them into
+                          // the bundle (direct runs parse and ignore)
+    string[] deferred;    // composition entries under an [import]
+                          // destination that do not exist locally:
+                          // the on-host inner run composes them (the
+                          // import only lands inside the bundle)
 }
 
 /// Load a tasks file, recursively resolving includes and applies.  The
 /// entry path is used as spelled (error origins read like the command
 /// line); composed files are recorded normalized in `sourceFiles`.
-LoadedTasks loadTasksFile(string path)
+/// `settings` supplies the `[import]` search paths (settings.toml).
+LoadedTasks loadTasksFile(string path, in Settings settings = Settings.init)
 {
     LoadedTasks loaded;
     string[][string] seen; // (module \0 target) -> origins
     string[] active;       // include chain, for cycle detection
-    loadInto(path, null, active, loaded, seen);
+    string[] importLandings; // where each [import] lands in the project
+    const string projectDir = dirName(buildNormalizedPath(absolutePath(path)));
+    loadInto(path, null, projectDir, importLandings, settings, active, loaded, seen);
     return loaded;
 }
+
 
 
 
@@ -99,8 +116,9 @@ LoadedTasks loadTasksFile(string path)
 /// its includes and applies contributed.  The scope grows monotonically
 /// through the composition chain, so a file's own jobs (which run after
 /// its includes) can use variables defined by the files it includes.
-private Val[string] loadInto(string path, Val[string] outerVars, ref string[] active,
-    ref LoadedTasks loaded, ref string[][string] seen)
+private Val[string] loadInto(string path, Val[string] outerVars,
+    string projectDir, ref string[] importLandings, in Settings settings,
+    ref string[] active, ref LoadedTasks loaded, ref string[][string] seen)
 {
     if (canFind(active, path))
         throw new TachyError("composition cycle: " ~ active.join(" -> ") ~ " -> " ~ path);
@@ -109,13 +127,17 @@ private Val[string] loadInto(string path, Val[string] outerVars, ref string[] ac
     auto root = loadToml(path);
     auto t = root.table_;
     checkKeys(t, ["vars", "files", "directories", "packages", "groups", "users",
-        "services", "execute", "before", "after", "includes", "apply"], path);
+        "services", "compose", "execute", "before", "after", "includes", "apply", "import"], path);
 
     auto ownVars = resolveEnvVars(optTable(t, "vars", path), path);
     auto scopeVars = deepMerge(outerVars, ownVars);
+    // Imports are collected for the bundler (see addImports); they do
+    // not participate in the scope or the execution order.  Their
+    // landing directories drive composition deferral below.
+    addImports(loaded, path, projectDir, importLandings, settings, t);
 
-    // Includes are prerequisites: they run before this file's own jobs.
-    processDirective(t, "includes", path, scopeVars, active, loaded, seen);
+    processDirective(t, "includes", path, projectDir, importLandings, settings,
+        scopeVars, active, loaded, seen);
 
     // Directories before files: a file may live inside a directory this
     // same file manages.  [before.<group>]/[after.<group>] hooks wrap
@@ -133,12 +155,41 @@ private Val[string] loadInto(string path, Val[string] outerVars, ref string[] ac
     addHooks(loaded, seen, path, t, "before", "services", scopeVars);
     addJobs(loaded, seen, path, "services", "service", t, scopeVars);
     addHooks(loaded, seen, path, t, "after", "services", scopeVars);
+    // Compose stacks after systemd services: the containers they manage
+    // are services too, and files (which may deploy the compose file
+    // itself) have long since run.  Execute checks come last.
+    addJobs(loaded, seen, path, "compose", "compose", t, scopeVars);
     addJobs(loaded, seen, path, "execute", "execute", t, scopeVars);
 
     // Applies respect the order of execution of the directives: they run
     // after this file's own jobs.
-    processDirective(t, "apply", path, scopeVars, active, loaded, seen);
+    processDirective(t, "apply", path, projectDir, importLandings, settings,
+        scopeVars, active, loaded, seen);
     return scopeVars;
+}
+
+/// Resolve one `[import]` key: as-is when absolute; the defining file's
+/// directory next; then the settings search paths in order (first
+/// existing candidate wins).  Unresolved keys keep the defining-relative
+/// path, so the deploy-time existence check names it.
+private string resolveImportPath(string src, string definingFile,
+    in Settings settings)
+{
+    import std.file : exists;
+
+    if (isAbsolute(src))
+        return src;
+    auto here = buildNormalizedPath(
+        absolutePath(buildPath(dirName(definingFile), src)));
+    if (!settings.importPaths.length || exists(here))
+        return here;
+    foreach (root; settings.importPaths)
+    {
+        auto candidate = buildNormalizedPath(buildPath(root, src));
+        if (exists(candidate))
+            return candidate;
+    }
+    return here;
 }
 
 /// Walk one composition directive (`includes` or `apply`), sorted by path
@@ -146,6 +197,7 @@ private Val[string] loadInto(string path, Val[string] outerVars, ref string[] ac
 /// subtree's resulting scope flows on, so later directives (and the
 /// includer, for includes) see everything it contributed.
 private void processDirective(in Val[string] t, string directive, string path,
+    string projectDir, ref string[] importLandings, in Settings settings,
     ref Val[string] scopeVars, ref string[] active, ref LoadedTasks loaded,
     ref string[][string] seen)
 {
@@ -184,13 +236,80 @@ private void processDirective(in Val[string] t, string directive, string path,
 
         auto resolved = dirPath;
         if (!isAbsolute(resolved))
-            resolved = buildNormalizedPath(buildPath(dirName(path), resolved));
+            resolved = buildNormalizedPath(
+                absolutePath(buildPath(dirName(path), resolved)));
+        // A composition entry inside — or naming — a declared [import]
+        // destination exists only inside the bundle (the import has not
+        // landed here): defer it to the host — the on-host inner run
+        // composes it there, with its binding.  When it is readable
+        // locally after all, compose it normally.
+        if (underImportLanding(resolved, importLandings) && !exists(resolved))
+        {
+            if (!canFind(loaded.deferred, resolved))
+                loaded.deferred ~= resolved;
+            continue;
+        }
+        // A composition entry that names an existing directory names
+        // its entry point, exactly like a directory argument on the
+        // command line.
+        if (exists(resolved) && isDir(resolved))
+            resolved = buildPath(resolved, "main.toml");
         active ~= path;
         auto childScope = loadInto(resolved, deepMerge(scopeVars, binding),
-            active, loaded, seen);
+            projectDir, importLandings, settings, active, loaded, seen);
         active = active[0 .. $ - 1];
         scopeVars = deepMerge(scopeVars, childScope);
     }
+}
+
+/// Collect `[import]` entries: files or directories living outside the
+/// project that bundled mode copies into the bundle next to the project
+/// copy (destination: the path's base name — see tachy.project).  Only
+/// bundled mode acts on them; direct runs (including the on-host inner
+/// run, where the copies already sit inside the project) parse and
+/// ignore them, so no existence check happens here.
+private void addImports(ref LoadedTasks loaded, string path, string projectDir,
+    ref string[] importLandings, in Settings settings, in Val[string] t)
+{
+    if ("import" !in t)
+        return;
+    auto dir = t["import"];
+    if (dir.kind != Val.Kind.table_)
+        throw new TachyError(path ~ ": 'import' must be a table");
+    auto paths = dir.table_.byKey.array;
+    paths.sort();
+    foreach (src; paths)
+    {
+        auto entry = dir.table_[src];
+        if (entry.kind != Val.Kind.table_)
+            throw new TachyError(path ~ ": import.\"" ~ src
+                ~ "\" must be a table");
+        if (entry.table_.length)
+            throw new TachyError(path ~ ": import.\"" ~ src
+                ~ "\": 'import' entries take no parameters (the path is"
+                ~ " copied into the bundle as its base name)");
+        auto resolved = resolveImportPath(src, path, settings);
+        if (!canFind(loaded.imports, resolved))
+        {
+            loaded.imports ~= resolved;
+            // where bundled mode lands this import: the composition
+            // deferral test above matches paths under it
+            const string landing = buildPath(projectDir, baseName(resolved));
+            if (!canFind(importLandings, landing))
+                importLandings ~= landing;
+        }
+    }
+}
+
+/// True when `resolved` falls under a directory a declared [import]
+/// will land in (project root / base name of the import source).
+private bool underImportLanding(string resolved, in string[] importLandings)
+{
+    import std.algorithm.searching : startsWith;
+    foreach (landing; importLandings)
+        if (resolved == landing || startsWith(resolved, landing ~ "/"))
+            return true;
+    return false;
 }
 
 private void addJobs(ref LoadedTasks loaded, ref string[][string] seen,
@@ -207,13 +326,21 @@ private void addJobs(ref LoadedTasks loaded, ref string[][string] seen,
     foreach (string target, const Val entry; secVal.table_)
     {
         auto ctx = path ~ ": " ~ section ~ " \"" ~ target ~ "\"";
+        // The table key injects the target: "path" for files, "dir" for
+        // compose stacks, "name" for everything else.
+        string key, noun;
+        switch (moduleName)
+        {
+            case "file": key = "path"; noun = "path"; break;
+            case "compose": key = "dir"; noun = "directory"; break;
+            default: key = noun = "name"; break;
+        }
         if (!target.length)
-            throw new TachyError(ctx ~ ": empty " ~ (moduleName == "file" ? "path" : "name"));
+            throw new TachyError(ctx ~ ": empty " ~ noun);
         if (entry.kind != Val.Kind.table_)
             throw new TachyError(ctx ~ " must map to a table of parameters");
 
         auto params = dupTable(entry.table_);
-        const string key = moduleName == "file" ? "path" : "name";
         if (key in params)
             throw new TachyError(ctx ~ ": '" ~ key ~ "' is implied by the table key and must not be set");
         params[key] = Val(target);
@@ -231,7 +358,7 @@ private void addJobs(ref LoadedTasks loaded, ref string[][string] seen,
 
         auto dedup = moduleName ~ "\0" ~ target;
         if (auto prev = dedup in seen)
-            throw new TachyError(ctx ~ ": " ~ (moduleName == "file" ? "path" : "name") ~ " '"
+            throw new TachyError(ctx ~ ": " ~ noun ~ " '"
                 ~ target ~ "' is already managed at " ~ (*prev)[0]);
         seen[dedup] = [ctx];
 
@@ -290,6 +417,7 @@ private string kindFor(string section) @safe pure nothrow
         case "groups": return "group";
         case "users": return "user";
         case "services": return "service";
+        case "compose": return "compose";
         case "execute": return "execute";
         case "before.packages": case "after.packages":
         case "before.accounts": case "after.accounts":
@@ -700,6 +828,22 @@ mode = "0600"
     assert(canFind(msg, "nope.env"));
 }
 
+unittest // tasks-file [vars] { age } is rejected: decryption is controller-side
+{
+    import std.algorithm.searching : canFind;
+    string msg;
+    try
+    {
+        loadTasksFile(writeTemp("age_in_tasks.toml",
+            "[vars]\nx = { age = \"secret.age\" }\n"));
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(canFind(msg, "only supported in inventory"), msg);
+    assert(canFind(msg, "vars.x"), msg);
+}
+
 unittest // [before.<group>] / [after.<group>] hooks: ordering
 {
     auto loaded = loadTasksFile(writeTemp("hooks.toml", `
@@ -889,4 +1033,289 @@ src = "services/second.service"
     catch (TachyError e)
         msg = e.msg;
     assert(canFind(msg, "'vars' must be a table"));
+}
+
+unittest // [import]: collection, spellings, errors, direct-mode tolerance
+{
+    import std.algorithm.searching : canFind;
+    import std.path : baseName, isAbsolute;
+
+    // header-style path key and the inline spelling are equivalent
+    auto p = writeTemp("imp_main.toml", `
+[import.tasks/imp_gogs]
+[import]
+"../imp_data" = {}
+`);
+    auto loaded = loadTasksFile(p);
+    assert(loaded.imports.length == 2);
+    // resolved absolute, relative to the defining file's directory
+    foreach (src; loaded.imports)
+    {
+        assert(isAbsolute(src));
+        assert(baseName(src).length);
+    }
+
+    // duplicate identical paths deduplicate
+    p = writeTemp("imp_dup.toml", `
+[import]
+"a_dir" = {}
+[import."a_dir"]
+`);
+    loaded = loadTasksFile(p);
+    assert(loaded.imports.length == 1);
+
+    // no parameters accepted (strict)
+    {
+        string msg;
+        try
+        {
+            loadTasksFile(writeTemp("imp_param.toml",
+                "[import.\"a_dir\"]\ndest = \"x\"\n"));
+            assert(false, "expected TachyError");
+        }
+        catch (TachyError e)
+            msg = e.msg;
+        assert(canFind(msg, "take no parameters"), msg);
+    }
+    // non-table entry and non-table directive
+    assertThrown!TachyError(loadTasksFile(writeTemp("imp_scalar.toml",
+        "[import]\nx = 1\n")));
+    assertThrown!TachyError(loadTasksFile(writeTemp("imp_notable.toml",
+        "import = 1\n")));
+    // imports do not create jobs
+    p = writeTemp("imp_jobs.toml", "[import.\"a_dir\"]\n");
+    assert(loadTasksFile(p).jobs.length == 0);
+}
+
+unittest // composition into an [import] destination: deferral
+{
+    import std.algorithm.searching : canFind;
+    import std.exception : assertThrown;
+    import std.file : mkdirRecurse, rmdirRecurse, tempDir, write;
+
+    // layout: base/proj/main.toml (the project), base/gogs_lib/ (the
+    // import source, a sibling directory outside the project)
+    auto base = buildPath(tempDir, "tachy_import_defer_ut");
+    if (exists(base)) rmdirRecurse(base);
+    mkdirRecurse(buildPath(base, "proj"));
+    mkdirRecurse(buildPath(base, "gogs_lib"));
+    scope (exit) rmdirRecurse(base);
+    write(buildPath(base, "gogs_lib", "setup.toml"), `
+[files."/tmp/defer-owned"]
+content = "from the imported file with {{ flavor }}"
+`);
+    write(buildPath(base, "proj", "main.toml"), `
+[vars]
+flavor = "vanilla"
+
+[import."../gogs_lib"]
+
+[files."/tmp/defer-entry"]
+content = "entry"
+
+[apply."gogs_lib/setup.toml"]
+flavor = "chocolate"
+`);
+
+    // controller-side: gogs_lib/setup.toml does not exist in the
+    // project, so the entry defers instead of failing to load
+    auto loaded = loadTasksFile(buildPath(base, "proj", "main.toml"));
+    assert(loaded.jobs.length == 1);            // only the entry's own job
+    assert(loaded.jobs[0].target == "/tmp/defer-entry");
+    assert(loaded.deferred.length == 1);
+    assert(canFind(loaded.deferred[0], "gogs_lib")
+        && canFind(loaded.deferred[0], "setup.toml"));
+    assert(loaded.sourceFiles.length == 1);     // the deferred file is
+                                                // not read here
+
+    // with the file present under the landing, it composes normally
+    // (that is what the on-host inner run sees)
+    mkdirRecurse(buildPath(base, "proj", "gogs_lib"));
+    write(buildPath(base, "proj", "gogs_lib", "setup.toml"), `
+[files."/tmp/defer-owned"]
+content = "x"
+`);
+    loaded = loadTasksFile(buildPath(base, "proj", "main.toml"));
+    assert(loaded.deferred.length == 0);
+    assert(loaded.jobs.length == 2);            // own job + applied job
+    assert(loaded.jobs[1].target == "/tmp/defer-owned");
+    assert(loaded.jobs[1].overlay["flavor"].str_ == "chocolate");
+    rmdirRecurse(buildPath(base, "proj", "gogs_lib"));
+
+    // missing and NOT under an import landing is still a load error
+    assertThrown!TachyError(loadTasksFile(writeTemp("defer_missing.toml", `
+[apply."nowhere_lib/x.toml"]
+`)));
+}
+
+unittest // [import] search paths: settings.toml resolution order
+{
+    import std.algorithm.searching : canFind;
+    import std.file : mkdirRecurse, rmdirRecurse, tempDir, write;
+    import std.path : buildPath;
+    import tachy.settings : Settings;
+
+    auto base = buildPath(tempDir, "tachy_import_search_ut");
+    if (exists(base)) rmdirRecurse(base);
+    mkdirRecurse(buildPath(base, "proj", "local_lib"));
+    mkdirRecurse(buildPath(base, "libs1", "found1"));
+    mkdirRecurse(buildPath(base, "libs2", "found2"));
+    scope (exit) rmdirRecurse(base);
+    write(buildPath(base, "proj", "main.toml"), `
+[import."local_lib"]
+[import."found1"]
+[import."found2"]
+[import."nowhere"]
+`);
+
+    Settings settings;
+    settings.importPaths ~= buildPath(base, "libs1");
+    settings.importPaths ~= buildPath(base, "libs2");
+
+    auto loaded = loadTasksFile(buildPath(base, "proj", "main.toml"),
+        settings);
+    assert(loaded.imports.length == 4);
+    foreach (src; loaded.imports)
+    {
+        // defining-relative wins even with search paths configured
+        if (canFind(src, "local_lib"))
+            assert(canFind(src, buildPath(base, "proj", "local_lib")), src);
+        else if (canFind(src, "found1"))
+            assert(canFind(src, buildPath(base, "libs1", "found1")), src);
+        else if (canFind(src, "found2"))
+            assert(canFind(src, buildPath(base, "libs2", "found2")), src);
+        else
+            // unresolved: keeps the defining-relative guess
+            assert(canFind(src, buildPath(base, "proj", "nowhere")), src);
+    }
+    // without settings, keys stay defining-relative
+    loaded = loadTasksFile(buildPath(base, "proj", "main.toml"));
+    foreach (src; loaded.imports)
+        assert(canFind(src, buildPath(base, "proj")), src);
+}
+
+unittest // composition entry naming the import landing itself (a dir)
+{
+    import std.algorithm.searching : canFind;
+    import std.file : mkdirRecurse, rmdirRecurse, tempDir, write;
+    import std.path : buildPath;
+
+    // base/proj/main.toml imports ../nvim (a directory of tasks);
+    // [apply."nvim"] names the landing itself
+    auto base = buildPath(tempDir, "tachy_import_dir_ut");
+    if (exists(base)) rmdirRecurse(base);
+    mkdirRecurse(buildPath(base, "proj"));
+    mkdirRecurse(buildPath(base, "nvim"));
+    scope (exit) rmdirRecurse(base);
+    write(buildPath(base, "nvim", "main.toml"), `
+[files."/tmp/direct-owned"]
+content = "from the imported dir entry point"
+`);
+    write(buildPath(base, "proj", "main.toml"), `
+[import."../nvim"]
+
+[files."/tmp/direct-entry"]
+content = "entry"
+
+[apply."nvim"]
+`);
+
+    // controller: the landing itself defers (not only paths under it)
+    auto loaded = loadTasksFile(buildPath(base, "proj", "main.toml"));
+    assert(loaded.jobs.length == 1);
+    assert(loaded.deferred.length == 1);
+    assert(canFind(loaded.deferred[0], "nvim"));
+    assert(canFind(loaded.deferred[0], buildPath(base, "proj")));
+
+    // host view: the landed directory composes through its main.toml
+    // (entry-point convention, like a directory CLI argument)
+    mkdirRecurse(buildPath(base, "proj", "nvim"));
+    write(buildPath(base, "proj", "nvim", "main.toml"), `
+[files."/tmp/direct-owned"]
+content = "x"
+`);
+    loaded = loadTasksFile(buildPath(base, "proj", "main.toml"));
+    assert(loaded.deferred.length == 0);
+    assert(loaded.jobs.length == 2);
+    assert(loaded.jobs[1].target == "/tmp/direct-owned");
+
+    // a plain (non-import) directory entry also uses its main.toml
+    write(buildPath(base, "proj", "main.toml"), `
+[includes."nvim"]
+`);
+    loaded = loadTasksFile(buildPath(base, "proj", "main.toml"));
+    assert(loaded.jobs.length == 1);
+    assert(loaded.jobs[0].target == "/tmp/direct-owned");
+}
+
+unittest // [compose]: wiring, order, injection and validation
+{
+    auto p = writeTemp("compose.toml", `
+[services.app]
+state = "started"
+
+[compose."/srv/app"]
+file = "compose.yml"
+project = "myapp"
+services = ["backend", "db"]
+pull = "always"
+
+[execute."probe"]
+run = "true"
+`);
+    auto loaded = loadTasksFile(p);
+    assert(loaded.jobs.length == 3);
+    assert(loaded.jobs[0].kind == "service");                    // services first
+    assert(loaded.jobs[1].kind == "compose" && loaded.jobs[1].moduleName == "compose");
+    assert(loaded.jobs[1].target == "/srv/app");                 // dir injected
+    assert(loaded.jobs[1].params["dir"].str_ == "/srv/app");
+    assert(loaded.jobs[1].params["file"].str_ == "compose.yml");
+    assert(loaded.jobs[1].params["project"].str_ == "myapp");
+    assert(loaded.jobs[1].params["services"].array_.length == 2);
+    assert(loaded.jobs[1].params["pull"].str_ == "always");
+    assert("state" !in loaded.jobs[1].params);                   // module defaults it
+    assert(loaded.jobs[2].kind == "execute");                    // execute last
+
+    // both spellings are equivalent; duplicates are load-time errors
+    assertThrown!(TachyError)(loadTasksFile(writeTemp("compose_dup.toml",
+        "[compose.\"/srv/app\"]\nfile = \"a.yml\"\n[compose]\n\"/srv/app\" = { file = \"b.yml\" }\n")));
+    // the dir key is implied
+    assertThrown!(TachyError)(loadTasksFile(writeTemp("compose_key.toml",
+        "[compose.\"/srv/app\"]\ndir = \"/elsewhere\"\nfile = \"a.yml\"\n")));
+    // unknown attribute
+    assertThrown!(TachyError)(loadTasksFile(writeTemp("compose_unk.toml",
+        "[compose.\"/srv/app\"]\nfile = \"a.yml\"\nbogus = 1\n")));
+    // file is required
+    assertThrown!(TachyError)(loadTasksFile(writeTemp("compose_nofile.toml",
+        "[compose.\"/srv/app\"]\nproject = \"x\"\n")));
+    // bad state
+    assertThrown!(TachyError)(loadTasksFile(writeTemp("compose_state.toml",
+        "[compose.\"/srv/app\"]\nfile = \"a.yml\"\nstate = \"paused\"\n")));
+    // bad pull policy
+    assertThrown!(TachyError)(loadTasksFile(writeTemp("compose_pull.toml",
+        "[compose.\"/srv/app\"]\nfile = \"a.yml\"\npull = \"sometimes\"\n")));
+    // relative dir
+    assertThrown!(TachyError)(loadTasksFile(writeTemp("compose_rel.toml",
+        "[compose.\"srv/app\"]\nfile = \"a.yml\"\n")));
+    // invalid project name
+    assertThrown!(TachyError)(loadTasksFile(writeTemp("compose_proj.toml",
+        "[compose.\"/srv/app\"]\nfile = \"a.yml\"\nproject = \"MyApp\"\n")));
+    // services must be an array of strings
+    assertThrown!(TachyError)(loadTasksFile(writeTemp("compose_svcs.toml",
+        "[compose.\"/srv/app\"]\nfile = \"a.yml\"\nservices = \"web\"\n")));
+    // remove_volumes only with state = "absent"
+    assertThrown!(TachyError)(loadTasksFile(writeTemp("compose_rv.toml",
+        "[compose.\"/srv/app\"]\nfile = \"a.yml\"\nremove_volumes = true\n")));
+    // remove_orphans only with state = "stopped"
+    assertThrown!(TachyError)(loadTasksFile(writeTemp("compose_ro.toml",
+        "[compose.\"/srv/app\"]\nfile = \"a.yml\"\nremove_orphans = true\n")));
+    // wait only with state = "running"
+    assertThrown!(TachyError)(loadTasksFile(writeTemp("compose_wait.toml",
+        "[compose.\"/srv/app\"]\nfile = \"a.yml\"\nstate = \"stopped\"\nwait = false\n")));
+    // wait_timeout only with wait = true
+    assertThrown!(TachyError)(loadTasksFile(writeTemp("compose_wt.toml",
+        "[compose.\"/srv/app\"]\nfile = \"a.yml\"\nwait = false\nwait_timeout = 10\n")));
+    // non-positive timeout
+    assertThrown!(TachyError)(loadTasksFile(writeTemp("compose_to.toml",
+        "[compose.\"/srv/app\"]\nfile = \"a.yml\"\ntimeout = 0\n")));
 }

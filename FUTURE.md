@@ -1,5 +1,5 @@
 
-- secrets : how to pass secrets ?
+
 
 - tasks : run any arbitrary task with dependencies ?  out of scope ? 
 

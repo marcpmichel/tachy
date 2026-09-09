@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tachy</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header>
+  <div class="brand">tachy <span class="brand-dim">web console</span></div>
+  <div id="inventory" class="inventory"></div>
+</header>
+<div id="inv-error" class="banner hidden"></div>
+<main>
+  <aside>
+    <h2>Projects</h2>
+    <ul id="projects" class="projects"></ul>
+    <p id="projects-empty" class="muted small hidden">
+      No projects configured. Add paths to <code>[webui]</code>
+      <code>projects</code> in settings.toml and restart the server.
+    </p>
+  </aside>
+  <section class="content">
+    <div id="runbar" class="runbar hidden">
+      <div class="runbar-head">
+        <span id="runbar-project" class="project-name"></span>
+        <span id="runbar-kind" class="muted small"></span>
+      </div>
+      <form id="run-form" autocomplete="off">
+        <input id="selection" name="selection" value="all" spellcheck="false"
+               placeholder='hosts and @tags, comma separated — "all"'>
+        <button type="button" id="btn-check" class="btn btn-check">Check</button>
+        <button type="button" id="btn-apply" class="btn btn-apply">Apply</button>
+      </form>
+      <div id="chips" class="chips"></div>
+    </div>
+
+    <h2>Runs</h2>
+    <ul id="runs-list" class="runs"></ul>
+    <p id="runs-empty" class="muted small">No runs yet — pick a project.</p>
+
+    <div id="runview" class="runview hidden">
+      <div class="runview-head">
+        <div class="runview-title">
+          <span id="run-mode" class="badge"></span>
+          <span id="run-selection" class="mono"></span>
+          <span id="run-status" class="badge"></span>
+        </div>
+        <div class="runview-meta">
+          <span id="run-project" class="muted small"></span>
+          <span id="run-started" class="muted small"></span>
+          <label class="small"><input type="checkbox" id="verbose"> verbose</label>
+        </div>
+      </div>
+      <div class="counters">
+        <span class="counter counter-ok">ok <b id="c-ok">0</b></span>
+        <span class="counter counter-changed">changed <b id="c-changed">0</b></span>
+        <span class="counter counter-failed">failed <b id="c-failed">0</b></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>time</th><th>host</th><th>status</th><th>task</th></tr>
+          </thead>
+          <tbody id="events"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>

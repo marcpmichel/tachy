@@ -534,3 +534,483 @@
     arrived live (2-second execute's event exactly 2 s after the
     file's); classic text output unchanged. Help, README and
     DOCUMENTATION updated.
+
+22. secrets: age-encrypted variables — inventory `[vars]` entries of the
+    form `db_password = { age = "secrets/db_password.age" }` are replaced
+    by the decrypted content of the named file; ssh-key-as-identity
+    default; no naming convention for `.age` files.
+   - `resolveEnvVars`/`resolveEnvVal` (vars.d): an age marker is a table
+    of exactly `{ age = "path" }` — combining it with `env`, `default`
+    or `from` is an error (a failed decryption is an error, not an
+    absent value). The path resolves relative to the declaring file;
+    decryption happens where the marker is allowed, and one trailing
+    newline (or CRLF) is stripped, so `echo secret | age -r … > f.age`
+    files work as-is. Plaintext must be valid UTF-8 — binary secrets
+    are rejected with a pointer at the future `secret =` file source.
+   - Controller-side only: `AgeConfig` enables age markers, and only
+    `Inventory.load(path, identity)` enables them (global and per-host
+    vars). Tasks-file `[vars]` (which resolve on the host in bundled
+    runs, where no identity may travel inside a bundle) reject the
+    marker with an error explaining the split. The decrypted value
+    reaches hosts through the generated per-host inventory, exactly
+    like every other resolved inventory var.
+   - Identity resolution (`resolveAgeIdentity`): `--identity PATH`
+    (new long-only option), then the `AGE_IDENTITY` environment
+    variable (an existing file path, or raw key material), then
+    `~/.ssh/id_ed25519` — age accepts ed25519 ssh keys natively, so the
+    controller's deployment key doubles as the decryption key
+    (encrypt with `age -R ~/.ssh/id_ed25519.pub`). No identity → an
+    error naming the three options.
+   - `defaultAgeDecrypt` runs `age --decrypt` with key material fed to
+    `/dev/stdin` (never written to disk; verified against age 1.3.1)
+    and relays age's stderr on failure; the decrypt step is a swappable
+    module-level hook (`ageDecrypt`) so the unittest suite needs no age
+    binary. age is a controller-only dependency.
+   - Unittests: vars.d (resolution, newline/CRLF stripping, nesting,
+    every identity variant including material-vs-path and the ssh
+    default via HOME, missing identity, wrong-identity failure relay,
+    binary rejection, combination and type errors, tasks-file
+    rejection), inventory.d (global+host resolution with context,
+    failing decryption), models.d (rejection). E2E on the Debian 12 VM
+    with real age 1.3.1: all four identity variants delivered the
+    decrypted secret into a managed file over ssh (--identity,
+    AGE_IDENTITY as path, AGE_IDENTITY as key material via stdin,
+    default ssh key), mode enforced, idempotent rerun, and a
+    wrong-identity run failing at load time with age's message before
+    any host was contacted. CLI help, README (new "Secrets (age)"
+    section) and DOCUMENTATION updated; source/AGENTS.md DOX pass.
+
+   - Follow-up from `export AGE_IDENTITY=key.txt`: a relative AGE_IDENTITY
+    resolves against the controller's cwd (works when running from the
+    directory holding the key); a value that is neither an existing file
+    nor recognizable key material (AGE-SECRET-KEY-1... or an ssh private
+    key block — `isKeyMaterial`) is now a clear load-time error instead
+    of being fed to age as material and failing with age's cryptic
+    "unknown identity type". Unittest added; both cwd cases verified
+    live.
+
+23. add a command as the first argument to the binary: apply (perform
+    the task, e.g. `tachy apply @web req/web`), check (check mode,
+    replacing the `-c` option, e.g. `tachy check @web req/web`),
+    generate (`tachy generate key key.txt`, `tachy generate task
+    main.toml`) and help (the general help).
+   - `app.d`: after option parsing the first positional is the command
+    word (`parseCommand`, unit-tested — an unknown word is an error
+    listing the four commands; `--check`/`-c` is gone from getopt and a
+    unittest now asserts it is rejected). `apply`/`check` share the run
+    path and differ only in check mode; options may appear before or
+    after the command (getopt permutes). `generate` and `help` need no
+    selection. The inner binary in bundles now runs `tachy apply|check
+    --direct --events ...` (`innerTachyCommand`, unittest updated).
+   - New `generate.d`: `generate key <path>` runs `age-keygen -o` (mode
+    0600, refuses to overwrite, public key relayed, clear error when
+    age-keygen is missing); `generate task <path>` writes a commented
+    sample tasks file (loadable as-is — asserted through
+    `loadTasksFile` in the unittest) and never overwrites. The sample
+    uses `{{ admin }}`/`{{ inventory_hostname }}` templating in content
+    so it runs unprivileged (no chown).
+   - Follow-up found by the E2E: `runBundled` never called
+    `removeBundle`, so every bundled run leaked its
+    /tmp/tachy.XXXXXXXXXX bundle (16 stale dirs on the VM); the
+    finally block now removes bundles unless `--keep-bundle`, as the
+    docs always promised. Verified: 0 leftovers after VM runs, and
+    `--keep-bundle` still keeps.
+   - Verification: `dub build`, `dub test` (14 modules); locally —
+    no-args/help/`help` identical, unknown command message, `-c`
+    rejected, missing-selection error, generate arg/overwrite errors,
+    bundled apply → changed, idempotent rerun → ok, check, drift
+    repair, and a full age round-trip from `generate key` (secret
+    encrypted to the printed public key, decrypted into managed content
+    via `--identity` and `AGE_IDENTITY`); on the Debian VM over ssh
+    (root@testing.internal) — apply/idempotent/check/drift through the
+    ssh transport with the inner binary running the apply/check command
+    words, no leftover bundles, VM and scratch cleaned. Help, README,
+    DOCUMENTATION and the DOX chain (root CLI shape, source layering +
+    module count, modules check-mode wording) updated.
+
+24. add an [import] directive, valid only in bundled mode, that copies
+    designated files or folders into the bundle before deployment
+    (ex: `[import.tasks/install_gogs]` → `project/install_gogs`), so
+    tasks external to the local project directory can be used on the
+    remote target.
+   - `models.d` (`addImports`): `[import]` entries are paths (both
+    spellings; header path keys like `[import.tasks/install_gogs]` come
+    free from quotePathKeys), resolved absolute like every path —
+    `buildNormalizedPath(absolutePath(...))` relative to the defining
+    tasks file — collected into `LoadedTasks.imports`, deduplicated.
+    Entries take no parameters (strict: an unknown key is an error);
+    imports are not jobs, not scope, not composition (an `[includes]`
+    pointing at an imported path still errors as escaping the project).
+   - `project.d` (`ImportSpec`, `checkImports`, `tarBundle`): sources
+    are validated on the controller at deploy time — must exist, and the
+    destination (the path's base name, per the TODO's example) may not
+    collide with project content or another import (imports never
+    overwrite anything). One tar archive carries the project plus each
+    import from its absolute parent dir (successive tar -C options
+    chain, so the -C arguments must be absolute — found live).
+   - `runner.d`: bundled mode maps `loaded.imports` to ImportSpecs and
+    deploys them with the bundle; the per-(host, project) bundle cache
+    key now includes the import set signature. Direct runs (including
+    the on-host inner run, where the copies already sit inside the
+    project) parse and ignore the directive.
+   - Unittests: models.d (header + inline spellings, dedupe, parameter/
+    non-table errors, absolute resolution, no jobs created), project.d
+    (import dir + file copied under base names, missing source,
+    project-content collision, duplicate destinations — over the local
+    transport). E2E locally: imported dir with a template and a script,
+    template rendered from the imported copy, execute running it,
+    idempotent rerun, check mode, both error messages, and `--direct`
+    accepting-and-ignoring the directive (fails later on the missing
+    template, as documented). E2E on the Debian VM over ssh
+    (root@testing.internal): `src` copy from the imported directory,
+    execute with `{{ gogs_port }}` templating asserting hostname+port,
+    idempotent second run, check mode, no leftover bundles, VM and
+    scratch cleaned. Help, README (directives table + self-containment
+    wording), DOCUMENTATION (new "[import] — external files in the
+    bundle" section) and source/AGENTS.md layering updated.
+
+25. fix [import] + composition: an [includes]/[apply] entry whose path
+    falls under a declared [import] destination failed controller-side
+    validation ("cannot read ..."), because the imported tree only
+    exists inside the bundle.
+   - `models.d`: import landings (project root / base name of each
+    import source) are accumulated through the load; `processDirective`
+    now resolves entries absolute (the second relative-path trap: landings
+    are absolute, so a cwd-relative match could never hit) and defers an
+    entry that is under a landing and missing locally — recorded in
+    `LoadedTasks.deferred`, not read, not in `sourceFiles`. When the
+    file is readable locally it composes normally (exactly what the
+    on-host inner run sees, where the import has landed).
+   - Bundled mode therefore composes the deferred file on the host,
+    with its directive binding, in its directive position (apply after
+    own jobs); controller-side validation cannot see inside a deferred
+    subtree — the on-host load catches errors there, failing only that
+    host. A manual `--direct` run without a bundle skips deferred
+    entries with one stderr warning each (`runner.d`, stderr so
+    `--events` stdout stays machine-clean); the inner run never warns
+    because its copies exist.
+   - Unittest in models.d: deferral (entry job only, deferred recorded,
+    file not read), local-presence composition (jobs + binding
+    `flavor = "chocolate"` flowing), and missing-not-under-a-landing
+    still a load error. E2E locally and on the Debian VM over ssh
+    (root@testing.internal) with the reported shape —
+    `[import."../tasks/install_gogs"]` + `[apply."install_gogs/gogs.toml"]`:
+    entry jobs then the applied file's jobs, `{{ gogs_user }}` binding
+    and `{{ inventory_hostname }}` rendered per host, execute check
+    passing, idempotent rerun, check mode, drift repair inside the
+    applied file, `--direct` skip warning, no leftover bundles, VM and
+    scratch cleaned. Help, README ([import] row), DOCUMENTATION
+    ("Composing imported tasks files" paragraph) and source/AGENTS.md
+    updated.
+
+26. add an optional settings.toml, read once at the start of every
+    apply/check, holding the paths to look for [import] entries in
+    (and, later, other settings).
+   - New `settings.d` (`Settings`, `loadSettings`): discovery, first
+    found wins — `--settings PATH` (new long-only option; must exist),
+    the `TACHY_SETTINGS` variable (must exist), `./settings.toml`, then
+    `$XDG_CONFIG_HOME/tachy/settings.toml` (default
+    `~/.config/tachy/settings.toml`); with none found, settings are
+    empty. The file is strict like every other: unknown keys, non-table
+    `[imports]`, non-array/string `paths` are load-time errors with
+    file context. Entries are `~`-expanded and resolve against the
+    settings file's own directory when relative (never the cwd), so a
+    settings file works from anywhere.
+   - `models.d` (`resolveImportPath`, threaded through `loadTasksFile`
+    as an optional parameter): an `[import]` key resolves as-is when
+    absolute, as before relative to the defining file when it exists
+    there, then through the search paths in order (first existing
+    match); unresolved keys keep the defining-relative path, so the
+    deploy-time existence check names it. Landings (and therefore
+    composition deferral) key off the base name, so search-path
+    resolution stays symmetric between controller and host — settings
+    are a controller-side concern only.
+   - `runner.d` loads settings once per run (both modes) and passes
+    them to `loadTasksFile`; `generate.d` grew `tachy generate settings
+    <path>` (commented sample, never overwrites, loadable as-is).
+   - Unittests: settings.d (all four discovery routes plus absence,
+    explicit/env-missing errors, tilde expansion, relative-to-file
+    resolution, every parse error, empty [imports]), models.d
+    (search-path resolution order: defining-relative wins, first
+    existing search match next, unresolved keeps the guess, no-settings
+    unchanged), generate.d (sample loads through loadSettings, no
+    overwrite). E2E locally: cwd settings, TACHY_SETTINGS, --settings
+    and XDG (absolute path — relative entries correctly anchor to the
+    settings file's directory, verified failing then passing), search-
+    path import driving a deferred [apply] with rendered bindings,
+    idempotence, bad --settings error; on the Debian VM over ssh
+    (root@testing.internal): settings on the controller, search-path
+    import + deferred apply + execute check over ssh, idempotent,
+    check mode, no leftover bundles, VM and scratch cleaned. Help,
+    README (settings section, [import] row, invocations, layout),
+    DOCUMENTATION (options row, Settings section, [import] cross-refs)
+    and source/AGENTS.md layering (settings.d, 15 modules) updated.
+
+27. fix: an imported task could still not be applied —
+    `[apply."neovim"]` (naming the import destination itself) failed
+    with "cannot read '.../neovim'".
+   - Two gaps found. (1) `underImportLanding` matched only paths
+    strictly under the landing, never the landing itself, so an entry
+    naming the imported directory never deferred and the controller
+    tried to read it. (2) Even deferred, the host would loadToml a
+    directory: composition entries had no directory convention.
+   - `models.d` (`processDirective`): the landing test now includes
+    equality, and a composition entry that resolves to an existing
+    directory names its `main.toml` — the same entry-point convention
+    as a directory argument on the command line, for plain includes
+    too, not just imports. (Also: `std.file.isDir` throws on missing
+    paths in Phobos — guarded with `exists`.)
+   - Follow-up found while verifying the reporter's `check` invocation:
+    check mode on a not-yet-existing `[directories]` target with
+    mode/owner failed the host instead of reporting a would-be change
+    (`applyAttrs` probed the suppressed creation). It now folds the
+    attrs into the reported creation in check mode (filemod.d,
+    regression unittest for directory and file).
+   - Unittests in models.d (landing-itself deferral, host-side compose
+    through the directory's main.toml, plain non-import directory
+    include). E2E with the reporter's exact shape — mytasks/main.toml
+    with `[import."neovim"]` (resolved through settings search paths)
+    + `[apply."neovim"]` where neovim/ is a directory holding
+    main.toml: locally and over ssh on the Debian VM, `tachy check`
+    (before creation: directory+file reported as changed (check)),
+    `tachy apply` (jobs of the imported main.toml run with bindings and
+    `{{ inventory_hostname }}`), check after, idempotent rerun, no
+    leftover bundles, VM and scratch cleaned. Help, README
+    (composition bullet, [import] row) and DOCUMENTATION (composition
+    section, "Composing imported tasks files") updated.
+
+28. include a webserver (the webui command-line option) that starts a
+    local webserver that acts as a graphical version of the cli: the
+    interface displays a list of projects/tasks folders and actions
+    ("apply" and "check") can be performed on them with a nice display
+    of the progress (events from the remote executor instance).
+    [Notes: no existing webserver framework (no vibe.d), no existing
+    web-application framework (no react), no asset compilation (no
+    scss/typescript) — tiny ad-hoc frameworks instead; the web
+    application files are embedded in the binary using D's
+    `import("file.ext)` — everything in one binary.]
+   - New `web.d` (the 16th module) — a few hundred lines of
+     `std.socket`: a tiny ad-hoc HTTP framework (thread per
+     connection, `Connection: close`, request/head/body parsing with
+     caps, a Router with `:param` segments, streamed responses) plus
+     the `WebApp`: routes `/`+`/app.js`+`/app.css` (embedded assets),
+     `GET /api/state` (projects from settings, inventory hosts/tags —
+     reloaded per call, load errors reported as a field —, run
+     history), `POST /api/run` (flat-string JSON, strict validation:
+     unknown/missing fields, unknown project, mode, selection sanity)
+     and `GET /api/events/<id>` (SSE). Each run is this binary spawned
+     through `LocalTransport.runStreaming` as
+     `exec tachy <mode> --events -i <inv> [<opts>] <selection>
+     <project>`; its NDJSON lines are parsed (`parseEventLine`) and
+     relayed as SSE records (`{"ts",...,"ev":{...}}`), with stderr and
+     non-event stdout as `log` records and a final `{"done","exit"}`;
+     per-run registry (mutex + condition), server-side counter
+     folding, replay via `Last-Event-ID`, 15 s keepalives, `event:
+     end` frame so browsers do not reconnect to finished runs forever.
+   - The web application (`source/tachy/webui/`: index.html, app.js,
+     app.css — plain ES2020/CSS, a ~40-line `h()` dom helper is the
+     whole "framework") embedded at compile time via
+     `import("tachy/webui/...")` (`stringImportPaths` in dub.json).
+     Projects sidebar (missing paths struck through), selection input
+     with host/@tag chips, Check/Apply buttons, live events table
+     (coloured statuses, per-job ms, file dividers/footers with
+     counters, log lines), a verbose toggle (detail rows always in the
+     DOM, CSS-unhidden), runs history with replay.
+   - `--events` (bundled, no `--direct`) is now self-describing: the
+     controller emits its fileStart/fileDone events into the stream
+     (display() routes them through the raw serializer), and machine
+     mode (`--direct-report`) filters non-job events in the events
+     branch too — the inner run no longer duplicates the header/footer
+     events it used to leak into the raw stream.
+   - settings.toml gains `[webui] projects = [...]` (a directory is a
+     project entered through its main.toml, a file is the entry point
+     itself; resolved like imports paths; existence reported per
+     project, not a load error); `tachy generate settings` sample
+     updated. CLI: `tachy webui [--address ADDR] [--port PORT]` (new
+     options; 127.0.0.1:8080 defaults, port 0 picks a free one); no
+     positional arguments.
+   - Unittests: web.d (parseHead incl. malformed inputs, router
+     literals/params/404/405, parseStringObject happy/escape/error
+     paths with jsonEscStr round-trip, Run folding + wire records +
+     done-last, sseFrame, and a loopback server over an ephemeral
+     port driving GET/POST/SSE/404/400 end-to-end), settings.d
+     ([webui] resolution: relative-to-file, ~, absolute, alongside
+     [imports], every wrong shape), app.d (webui command word, option
+     registration incl. --address/--port, updated unknown-command
+     message), generate.d (sample loads with empty webuiProjects).
+   - E2E local: server on 18080; assets served; state (projects,
+     hosts, tags); check run streamed (statuses ok/changed (check),
+     counters, check-suffix footer); apply run creating the managed
+     file; idempotent rerun (ok=3 changed=0); drift repaired through
+     the browser; load-error project surfacing as a log line + exit 1;
+     replay of a finished run; every error path (unknown run 404,
+     unknown project/bad JSON/non-string/missing/unknown field/bad
+     mode/dash selection 400, unknown resource 404, wrong method 405);
+     `--events` CLI stream verified single-header/single-footer.
+     Browser-verified with a real headless Chromium: page renders,
+     chips toggle, runs stream in live, counters fold, verbose toggle
+     unhides detail rows, failed runs replayable.
+   - E2E on the Debian VM over ssh (root@testing.internal): webui
+     server on the controller, project applied to the ssh host —
+     events from the remote executor arrived over SSE (host "testing",
+     `{{ inventory_hostname }}` rendered on the VM, directory+file
+     created, execute check ok), idempotent rerun, check mode, VM file
+     verified, VM and local scratch cleaned up.
+   - Docs: --help (webui command, Web UI section, --address/--port,
+     --events wording), README (feature bullet, example, CLI block,
+     settings [webui] projects, Web UI section), DOCUMENTATION
+     (command/options tables, Settings [webui] row, new "Web UI"
+     section). DOX: root AGENTS.md command list, source/AGENTS.md
+     layering (web.d + embedded webui/ assets), module count 16.
+
+29. add a [compose] directive to be able to manage docker containers
+   via a compose file
+   - `[compose]` is keyed by the stack's project directory (the table key
+     injects `dir`, like `path` for files): `file` (required; relative
+     resolves inside `dir`), `state` = running (default) | stopped |
+     absent, `project` (default: compose's own derivation, lowercased dir
+     basename sanitized to [a-z0-9_-], always passed as `-p`), `services`
+     subset (default: every service the file enables), `pull` = missing |
+     always | never, `build` / `recreate` = auto | always | never, `wait`
+     (default true) + `wait_timeout`, `timeout`, `remove_orphans`
+     (stopped), `remove_volumes` / `remove_images` (absent). Unknown keys,
+     bad enums, relative dirs, invalid project names and contradictory
+     combinations are load-time errors with file context; templated values
+     are re-checked at run time.
+   - `source/tachy/modules/composemod.d` (new): idempotence is probe-then-
+     act, all read-only — `docker compose config --services` / `--hash`
+     for the model and canonical hashes, `docker ps --filter label=...`
+     with a service/names/state/config-hash template for the project's
+     containers, `docker inspect` for runtime/health ("none" when no
+     healthcheck). `running` acts (`up --detach` with the policy flags,
+     `--wait` + re-probe to confirm) only on drift: missing/stopped
+     container, config-hash mismatch, unhealthy container. `stopped` runs
+     `compose stop`; `remove_orphans` drops containers whose service left
+     the model via `docker rm -f`. `absent` probes labels (containers,
+     networks, volumes with remove_volumes) and runs
+     `down --remove-orphans [-v] [--rmi all]` only when something exists —
+     the compose file is not needed for an already-absent project. Check
+     mode reports would-be actions; probes always run.
+   - Wiring: `modules/package.d` (registry, static validation), `models.d`
+     (section allowed, jobs run after `[after.services]` and before
+     `execute`, `dir` injection, kind "compose", duplicate-directory
+     detection, module doc + order list), `runner.d` (`defaultLabel` maps
+     compose to the `dir` param).
+   - Tests: `dub test` — 17 modules pass; new composemod unittests with
+     the scripted fake transport (idempotence, hash drift, unhealthy
+     container, policy-flag command construction, services subset,
+     stopped + orphans, absent with/without leftovers, check mode, every
+     error path) and a models.d wiring/validation unittest.
+   - E2E on the Debian VM over ssh (root@testing.internal) with real
+     docker-ce + compose plugin v5.5.1 (installed, then purged): check
+     before deploy (truthful compose-file-missing failure), apply → both
+     services running + healthcheck healthy + named volume, idempotent
+     rerun ("2 service(s) up to date"), compose.yml edit → config-hash
+     drift → `up --detach --wait --wait-timeout` recreated both containers
+     (new command confirmed running), stopped (containers/volume
+     preserved, idempotent), injected orphan container removed via
+     `docker rm -f` while managed ones kept (this caught and fixed a real
+     parse bug: containers without the config-hash label print 3 fields),
+     absent with remove_volumes + remove_images (containers, networks,
+     volumes and the alpine image all gone, idempotent "already absent").
+     VM (docker purged, /tmp scratch removed) and local scratch cleaned.
+   - Docs: --help ([compose] block, execution order), README (intro,
+     features, tasks-file table, directive bullet, execution order,
+     module tree, limitations), DOCUMENTATION (order list, new
+     "[compose] — Docker Compose stacks" section). DOX:
+     modules/AGENTS.md (module list, path/dir/name injection, 17
+     modules), source/AGENTS.md (17 modules); root AGENTS.md unchanged
+     (no directive enumeration there).
+
+30. implement the "webdoc" cli-command: generate the html documentation
+    (one file per section) with a left menu to select each section,
+    served by the internal web server, re-using the webui's ad-hoc
+    framework.
+   - New `webdoc.d` (the 18th module): `tachy webdoc [--address ADDR]
+     [--port PORT]` serves the DOCUMENTATION.md embedded at compile
+     time (`import("DOCUMENTATION.md")` via the new `.` entry in
+     dub.json stringImportPaths — the site always documents the binary
+     being run). Read-only, no positional arguments, localhost by
+     default, same shared options as the webui.
+   - Splitting: `##` headings become menu groups (each group's own
+     page holds its intro), `###` become pages; sections come out in
+     reading order numbered as emitted ("1-purpose",
+     "9-directives", ...), a group's page always preceding its
+     subsections. The split is two-pass — all page titles and in-page
+     headings are registered as anchors first, then bodies render —
+     so internal `#anchor` links rewrite to `/doc/<page>#<anchor>`
+     even when they point forward (a group's table linking to its own
+     later subsections); both the hyphenated and the compact GitHub
+     spellings resolve (`#settings-settingstoml`,
+     `#settingssettingstoml`). Unknown section addresses get a styled
+     404 page.
+   - Markdown subset renderer (what the file uses, nothing more):
+     fenced code blocks, pipe tables (`\|` escapes), bullet lists
+     with wrapped items, paragraphs, inline code/bold/italic/links
+     with code spans shielded from the other rules. Styling is
+     `webdoc/doc.css`, embedded like the webui assets (the CSS
+     started life in a `q{}` token string, which cannot lex `#hex`/
+     `NNpx`). The HTTP layer is web.d's, now shared: Request/
+     Response/Router/asset/bindListener/serveForever are public.
+   - Fixed along the way: the interrupted draft's compile errors
+     (never-built code), the per-### duplicate-section bug (pending
+     headings were never cleared), and one real webui bug — `--port
+     0` is documented as "picks a free port" but both commands
+     rejected it; the validation now allows 0 and the banner reports
+     the bound port (webui and webdoc).
+   - Unittests in webdoc.d: slug/anchor rules against the file's real
+     spellings, inline and block rendering (escape shielding,
+     tables/lists/fences), section splitting (reading order, group
+     pages, anchors), site dispatch/menu/404, and the real embedded
+     file — every section reachable from the menu and every internal
+     link resolving. app.d gained the command-word tests (six words,
+     error listing).
+   - E2E local: server on a fixed port; `/` renders the first group
+     page with all 22 sections in the menu; group, subsection and
+     table/code pages verified over HTTP; every internal link on every
+     page rewritten (zero plain `href="#..."` remain); 404 page,
+     favicon, POST→405; browser-verified with headless Chromium — menu
+     clicks navigate (active state follows), tables/code render, and
+     computed styles prove the layout (280px #fafafa menu, #1a73e8
+     active/h1 border, #f7f7f9 code blocks, 23 inline CSS rules
+     parsed). `--port 0` picks a free port on both webdoc and webui.
+   - Docs: --help (webdoc command, Web docs section, examples,
+     --address/--port wording), README (feature bullet, example, CLI
+     block, Web docs section), DOCUMENTATION (command table row,
+     option rows, "Web docs (tachy webdoc)" section — the new section
+     itself served and cross-linked as proof). DOX: root AGENTS.md
+     command list, source/AGENTS.md layering (web.d shared-layer
+     wording, webdoc.d, 18 modules).
+
+31. add a "man" command  (i.e. `tachy man`):
+    * copy everything that is actually outputed by the help command there and give it the format of a unix man page.
+
+  change the output of the help command  (i.e. `tachy help`):
+    * Keep only the first sections: project-line, command-line, commands and options
+   - app.d: new `man` command word (Cmd.man, parseCommand case, main
+     dispatch; the unknown-command error lists it). printHelp's
+     monolithic string split into shared text blocks (helpHead,
+     commandEntries, optionEntries, plus man-only reference bodies);
+     helpText() composes the short form (project line, usage lines,
+     Commands, Options, one pointer line to "tachy man"), manText()
+     the full manual: TACHY(1) banners padded to exactly 80 columns,
+     NAME/SYNOPSIS/DESCRIPTION/COMMANDS/OPTIONS/EXAMPLES/PROJECTS/
+     WEB UI/WEB DOCS/INVENTORY FILE/TASKS FILE/COMPOSITION/VARIABLES/
+     EXECUTION ORDER sections, bodies indented four spaces. One
+     source of truth: commands and options blocks are shared between
+     help and man, so they cannot drift. `--help`, no-args and getopt
+     errors print the short form; `tachy man` prints all 259 lines.
+   - Unittests: command-word tests extended to the seven words and the
+     error listing; new help/man contract test — help carries exactly
+     the four short sections (deep-reference markers asserted absent,
+     pointer present), man carries all fourteen section headers, the
+     TACHY(1) banner and the shared commands/options blocks verbatim.
+   - Verified: dub test (19 modules pass); `tachy help`, `--help` and
+     no-args byte-identical; `tachy man` first/last lines exactly 80
+     columns, 259 lines; `tachy frobnicate` names all seven commands,
+     exit 1.
+   - Docs trio: --help text (the split itself), README (invocation
+     list, CLI reference block = the new short help plus a pointer
+     paragraph), DOCUMENTATION.md (man row in the command table, help
+     row reworded, new "### man" section). DOX: root AGENTS.md CLI
+     shape, source/AGENTS.md app.d layering bullet.

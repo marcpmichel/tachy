@@ -34,11 +34,7 @@ import tachy.inventory;
 import tachy.models;
 import tachy.modules;
 import tachy.project;
-import tachy.transport;
-import tachy.value;
-import tachy.vars;
-
-import tachy.project;
+import tachy.settings;
 import tachy.transport;
 import tachy.value;
 import tachy.vars;
@@ -55,8 +51,13 @@ struct RunOptions
     bool direct;           // apply jobs in this process, no project bundling
     string directReport;   // with --direct: write "ok changed failed" here
     bool events;           // with --direct: print one JSON event per line
+    string identity;       // age identity for { age = ... } inventory vars
+    string settings;       // optional settings file (default: discovered)
+    string webAddress = "127.0.0.1"; // webui/webdoc: bind address
+    int webPort = 8080;    // webui/webdoc: listen port
     string[] tasksFiles;
 }
+
 
 /// Interpret the positional tasks-file arguments: a directory names a
 /// project whose entry file is "main.toml"; anything else is used as
@@ -81,7 +82,7 @@ int runTachy(const RunOptions opts)
     if (opts.direct && opts.listHosts)
         throw new TachyError("--list-hosts cannot be combined with --direct");
 
-    auto inventory = Inventory.load(opts.inventoryPath);
+    auto inventory = Inventory.load(opts.inventoryPath, opts.identity);
     auto hosts = inventory.select(opts.selection);
     if (hosts.length == 0)
         throw new TachyError(text("selection '", opts.selection, "' matched no hosts"));
@@ -110,26 +111,39 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
 
     // One consumer for every event the job loop produces: the text
     // renderer (headers/footers suppressed in machine mode), or the
-    // event serializer for machine consumption over a stream.
+    // event serializer for machine consumption over a stream.  Machine
+    // mode (--direct-report, how the bundled inner run executes) emits
+    // job events only: the controller owns the header/footer events,
+    // so the raw --events stream is not doubled.
     TextRenderer renderer = TextRenderer((string l) => terminalSink(l), tty, opts.verbose);
     void consume(JobEvent ev)
     {
+        if (machine && ev.kind != JobEvent.Kind.job)
+            return; // machine mode: job events only, no headers/footers
         if (opts.events)
         {
             stdout.writeln(eventLine(ev));
             stdout.flush();
             return;
         }
-        if (machine && ev.kind != JobEvent.Kind.job)
-            return; // machine mode: job lines only, no headers/footers
         renderer.handle(ev);
     }
 
     int totalFailed;
 
+    const Settings settings = loadSettings(opts.settings);
     foreach (tasksFile; opts.tasksFiles)
     {
-        auto loaded = loadTasksFile(tasksFile);
+        auto loaded = loadTasksFile(tasksFile, settings);
+
+        // Composition entries under an [import] destination that do
+        // not exist locally: without a bundle there is nothing to
+        // compose them from, so --direct skips them (bundled mode
+        // composes them on the host, where the import has landed).
+        // stderr keeps stdout machine-clean in --events mode.
+        foreach (d; loaded.deferred)
+            stderr.writeln("-- skipped (under an [import] destination,"
+                ~ " no bundle with --direct): ", d);
 
         consume(evFileStart(tasksFile, hosts.mapHosts()));
 
@@ -225,17 +239,27 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
 
     try
     {
+        const Settings settings = loadSettings(opts.settings);
         foreach (tasksFile; opts.tasksFiles)
         {
-            auto loaded = loadTasksFile(tasksFile); // validate on the controller
+            auto loaded = loadTasksFile(tasksFile, settings); // validate on the controller
 
             const string absTasks = buildNormalizedPath(absolutePath(tasksFile));
             const string projectDir = dirName(absTasks);
             checkProjectContained(loaded, projectDir);
 
-            if (!rawEvents)
-                renderer.handle(evFileStart(tasksFile, hosts.mapHosts()));
+            // [import] sources land in the bundle next to the project
+            // copy, under their base name (bundled mode only).
+            ImportSpec[] imports;
+            foreach (src; loaded.imports)
+                imports ~= ImportSpec(src, baseName(src));
 
+
+            // display() routes through the raw-event serializer in
+            // --events mode, so the machine stream is self-describing:
+            // fileStart and fileDone wrap the job events of each file
+            // (the webui consumes exactly this).
+            display(evFileStart(tasksFile, hosts.mapHosts()));
 
 
             ulong ok, changed, failed;
@@ -253,13 +277,18 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
 
                 try
                 {
-                    const string key = host.name ~ "\0" ~ projectDir;
+                    // The cache key covers the import set: two entry
+                    // files sharing a project but importing differently
+                    // must not reuse one bundle.
+                    const string key = host.name ~ "\0" ~ projectDir
+                        ~ "\0" ~ importsSignature(imports);
                     ProjectBundle b;
                     if (auto d = key in deployed)
                         b = (*d).bundle;
                     else
                     {
-                        b = deployProject(t, projectDir, host.name, inventory.varsFor(host.name));
+                        b = deployProject(t, projectDir, host.name,
+                            inventory.varsFor(host.name), imports);
                         deployed[key] = DeployedBundle(host.name, t, b);
                     }
 
@@ -329,8 +358,7 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
                 }
             }
 
-            if (!rawEvents)
-                renderer.handle(evFileDone(tasksFile, ok, changed, failed, opts.checkMode));
+            display(evFileDone(tasksFile, ok, changed, failed, opts.checkMode));
             totalFailed += cast(int) failed;
         }
     }
@@ -348,10 +376,23 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
                     writefln("-- bundle kept on %s at %s (remove it manually)",
                         d.host, d.bundle.root);
             }
+            else
+                removeBundle(d.transport, d.bundle); // best-effort
         }
     }
 
     return totalFailed > 0 ? 1 : 0;
+}
+
+
+/// Cache-key signature of a bundle's import set (sources are resolved
+/// absolute and collected in deterministic order).
+private string importsSignature(in ImportSpec[] imports) @safe pure
+{
+    string s;
+    foreach (ref const i; imports)
+        s ~= i.src ~ "\0" ~ i.dest ~ "\n";
+    return s;
 }
 
 /// A project must be self-contained: every file of the composition has
@@ -402,9 +443,10 @@ private string describeHost(in HostConfig h) @safe pure
 
 private string defaultLabel(string kind, in Val[string] params) @safe pure
 {
-    // files and directories key their params by "path", everything else
-    // by the injected "name".
-    const string key = kind.among!("file", "directory") ? "path" : "name";
+    // files and directories key their params by "path", compose by the
+    // injected "dir", everything else by the injected "name".
+    const string key = kind.among!("file", "directory") ? "path"
+        : kind == "compose" ? "dir" : "name";
     auto pv = key in params;
     if (pv !is null && (*pv).kind == Val.Kind.string_)
         return kind ~ " " ~ (*pv).str_;

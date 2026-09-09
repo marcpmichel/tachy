@@ -8,11 +8,13 @@ module tachy.modules;
  * mutating anything.
  */
 public import tachy.modules.accounts : runGroupModule, runUserModule;
+public import tachy.modules.composemod : runComposeModule;
 public import tachy.modules.executemod : runExecuteModule;
 public import tachy.modules.filemod : runFileModule;
 public import tachy.modules.packagemod : runPackageModule;
 public import tachy.modules.servicemod : runServiceModule;
 
+import tachy.modules.composemod : validateComposeParams;
 import tachy.modules.executemod : parseExitStatus, parseOutput;
 import tachy.modules.packagemod : validatePackageKey;
 
@@ -36,7 +38,7 @@ struct TaskResult
     string[] details;  // commands executed + change details (shown with -v)
 }
 
-private immutable string[] allModules = ["file", "service", "execute", "group", "user", "package"];
+private immutable string[] allModules = ["file", "service", "execute", "group", "user", "package", "compose"];
 
 /// Registered module names.
 string[] moduleNames() @safe pure nothrow
@@ -96,6 +98,15 @@ void validateModuleParams(string moduleName, in Val[string] params, string conte
                         ~ (*p).typeName());
             break;
         }
+        case "compose":
+        {
+            checkKeys(params, ["dir", "file", "project", "services", "state", "pull",
+                "build", "recreate", "wait", "wait_timeout", "timeout",
+                "remove_orphans", "remove_volumes", "remove_images"],
+                context ~ " (compose)");
+            validateComposeParams(params, context ~ " (compose)");
+            break;
+        }
         case "service":
         {
             checkKeys(params, ["name", "state", "enabled", "src", "template", "vars"],
@@ -149,6 +160,7 @@ TaskResult runModule(string moduleName, Val[string] params, TaskContext ctx)
         case "group": return runGroupModule(params, ctx);
         case "user": return runUserModule(params, ctx);
         case "package": return runPackageModule(params, ctx);
+        case "compose": return runComposeModule(params, ctx);
         default:
             throw new TachyError("unknown module '" ~ moduleName ~ "'");
     }
@@ -232,4 +244,42 @@ private string intText(int v) @safe pure
 {
     import std.conv : text;
     return text(v);
+}
+
+// ---------------------------------------------------------------------------
+// Tests: dispatch must cover every registered module name.
+// ---------------------------------------------------------------------------
+
+version (unittest)
+{
+    import std.algorithm.searching : canFind;
+    import tachy.modules.fake : FakeTransport;
+    import tachy.transport : CommandResult;
+
+    unittest // runModule dispatches every name moduleNames() registers
+    {
+        auto t = new FakeTransport;
+        TaskContext ctx = TaskContext(t, false, "fakehost", "/tmp");
+        foreach (m; moduleNames())
+        {
+            Val[string] noParams;
+            try
+                runModule(m, noParams, ctx);
+            catch (TachyError e)
+                assert(!canFind(e.msg, "unknown module"),
+                    m ~ " is registered but runModule does not dispatch it: " ~ e.msg);
+        }
+    }
+
+    unittest // "package" reaches its executor through runModule
+    {
+        auto t = new FakeTransport;
+        t.replies ~= [CommandResult(1, "", ""), CommandResult(0, "", "")];
+        TaskContext ctx = TaskContext(t, false, "fakehost", "/tmp");
+        Val[string] p;
+        p["name"] = Val("apt:vim");
+        auto r = runModule("package", p, ctx);
+        assert(r.changed, r.msg);
+        assert(canFind(t.commands[1], "apt-get install -y 'vim'"), t.commands[1]);
+    }
 }

@@ -333,7 +333,13 @@ private void applyAttrs(Transport t, TaskContext ctx, string path,
         return;
     auto st = statPath(t, path);
     if (st.kind == StatKind.nonexistent)
-        throw new TachyError("file: '" ~ path ~ "' does not exist"); // caller bug
+    {
+        // In check mode creation was suppressed, so there is nothing
+        // to probe: the attrs fold into the would-be creation.
+        if (!ctx.checkMode)
+            throw new TachyError("file: '" ~ path ~ "' does not exist"); // caller bug
+        return;
+    }
 
     if (mode >= 0 && (st.mode & octal!7777) != mode)
     {
@@ -811,4 +817,43 @@ unittest // error cases
         p["mode"] = Val("0999");
         assertThrown!(TachyError)(runFileModule(p, ctx));
     }
+
 }
+
+unittest // check mode before creation: attrs on a suppressed creation
+{
+    import std.file : mkdirRecurse, rmdirRecurse, tempDir;
+    import std.path : buildPath;
+
+    auto dir = buildPath(tempDir, "tachy_filemod_chk_ut");
+    if (exists(dir)) rmdirRecurse(dir);
+    mkdirRecurse(dir);
+    scope (exit) rmdirRecurse(dir);
+
+    auto t = new LocalTransport;
+    TaskContext ctx = TaskContext(t, true, "h", dir, null); // check mode
+    const string sub = buildPath(dir, "never");
+
+    // a directory that would be created with a mode: reported as a
+    // would-be change, not a probe failure
+    {
+        Val[string] p;
+        p["path"] = Val(sub);
+        p["state"] = Val("directory");
+        p["mode"] = Val("0750");
+        auto r = runFileModule(p, ctx);
+        assert(r.changed, r.msg);
+        assert(r.msg.canFind("created directory"), r.msg);
+    }
+    // same for a file with content + owner attrs
+    {
+        Val[string] p;
+        p["path"] = Val(buildPath(dir, "never-file"));
+        p["content"] = Val("x");
+        p["mode"] = Val("0600");
+        auto r = runFileModule(p, ctx);
+        assert(r.changed && r.msg.canFind("created file"), r.msg);
+    }
+    assert(!exists(sub));
+}
+

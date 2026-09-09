@@ -12,8 +12,8 @@ Core ideas:
 - **Idempotent "ensure" jobs.** Every managed resource is a table entry
   keyed by its target (a path, a package name, a user…). tachy inspects the
   current state first and only acts — and reports `changed` — when it
-  differs. Check mode (`-c`) reports would-be changes without touching
-  anything.
+  differs. Check mode (`tachy check`) reports would-be changes without
+  touching anything.
 - **One binary, no agent.** For every selected host, tachy copies the
   project directory — and itself — to a temporary directory on the host and
   runs the copy there, over SSH (or locally). The remote host needs nothing
@@ -72,7 +72,7 @@ output = { contains = "hello" }
 Run it against a tag:
 
 ```sh
-$ tachy '@web'
+$ tachy apply '@web'
 == main.toml | hosts: web1, web2
 web1 | changed         | directory /srv/www: created directory; owner root -> www-data
 web1 | changed         | file /srv/www/index.html: created file
@@ -90,8 +90,20 @@ A second run prints `ok=6 changed=0 failed=0` — nothing left to do.
 ## Command line
 
 ```
-tachy [options] <selection> [<tasks.toml>...]
+tachy <command> [options] <selection> [<tasks.toml>...]
 ```
+
+- The first argument is a **command** word:
+
+  | Command | Description |
+  |---|---|
+  | `apply` | Apply the tasks files to the selected hosts. |
+  | `check` | Check mode: report the changes that would be made, apply nothing. Execute jobs still run — they are checks by nature. |
+  | `generate` | Create something new — see [generate](#generate). |
+  | `webui` | Start a local web server, a graphical version of the CLI — see [Web UI](#web-ui-tachy-webui). |
+  | `webdoc` | Serve this documentation as a browsable web site — see [Web docs](#web-docs-tachy-webdoc). |
+  | `man` | Print the full built-in manual, unix man-page style — see [man](#man). |
+  | `help` | Show the short help: project and usage lines, commands, options (same as `--help`). |
 
 - `<selection>` is a comma-separated list of host names and `@tag`
   selectors; the special selector `all` matches every host.
@@ -101,23 +113,84 @@ tachy [options] <selection> [<tasks.toml>...]
   current directory is used. Either way, the entry file's parent directory
   is the project that gets copied to each host.
 - Exit code is `0` when everything succeeded, `1` when anything failed
-  (unknown option, load error, unreachable host, failed job…). A failing
-  host is dropped for the rest of its tasks file; other hosts continue.
+  (unknown option or command, load error, unreachable host, failed
+  job…). A failing host is dropped for the rest of its tasks file; other
+  hosts continue.
+
+Example: `tachy apply @web req/web`, `tachy check all`,
+`tachy generate key key.txt`.
 
 ### Options
 
 | Option | Description |
 |---|---|
 | `-i, --inventory PATH` | Inventory file (default: `inventory.toml`). |
-| `-c, --check` | Check mode: report the changes that would be made, apply nothing. Execute jobs still run — they are checks by nature. |
 | `-v, --verbose` | Show executed commands and change details under each job line. |
 | `--list-hosts` | List the hosts matching the selection, then exit. |
 | `--keep-bundle` | Keep each host's temporary bundle directory after the run (project copy, generated inventory, report) and print its location — for debugging. |
 | `--direct` | Apply tasks files directly in this process, without bundling a project. (This is how the copied binary runs on each host; use it manually for local execution.) |
 | `--direct-report PATH` | With `--direct`: suppress headers/footers and write `ok changed failed` counters to PATH (machine mode). |
-| `--events` | Print one JSON event per line on stdout instead of text — the machine-readable stream (fileStart / job / fileDone objects carrying host, label, status, msg, details and per-job `ms`). With `--direct`: the local run's own events. Without: the raw events streamed live from each host's run (headers/footers suppressed, controller-side failures emitted as events too; `--keep-bundle` notes go to stderr so stdout stays machine-clean). |
-| `--color` | Force colored statuses even when stdout is not a tty (forwarded to the run on each host). |
-| `-h, --help` | Show the help. |
+| `--events` | Print one JSON event per line on stdout instead of text — the machine-readable stream (fileStart / job / fileDone objects carrying host, label, status, msg, details and per-job `ms`). With `--direct`: the local run's own events. Without: the raw events streamed live from each host's run, wrapped in the controller's fileStart/fileDone events (so the stream is self-describing: one header and one footer with counters per tasks file; the `webui` consumes exactly this); controller-side failures are emitted as events too, and `--keep-bundle` notes go to stderr so stdout stays machine-clean. |
+| `--identity PATH` | Age identity for `{ age = ... }` inventory vars. Resolution order: `--identity`, then `AGE_IDENTITY` (existing file path, or raw key material fed to age on stdin), then `~/.ssh/id_ed25519`. Requires the `age` binary on the controller. |
+| `--address ADDR` | `webui`/`webdoc` only: address to bind (default `127.0.0.1`; an IP — `0.0.0.0` listens on every interface). The webui executes real runs: anyone who can reach the port can run tachy. |
+| `--port PORT` | `webui`/`webdoc` only: port to listen on (default `8080`; `0` picks a free port). |
+
+
+### generate
+
+`tachy generate <what> <path>` creates scaffolding on the controller; it
+never contacts a host and never overwrites an existing file.
+
+- `tachy generate key <path>` — a new age key pair: the `age-keygen`
+  binary writes the identity to `<path>` (mode 0600; it refuses to
+  overwrite) and tachy relays the public key. The identity decrypts
+  `{ age = ... }` inventory vars (pass it with `--identity <path>` or
+  `AGE_IDENTITY`); encrypt secrets with the printed public key:
+  `age -r <pubkey> -o secret.age`. Requires `age-keygen` (it ships with
+  the age package) on the controller.
+- `tachy generate task <path>` — a commented sample tasks file exercising
+  the common directives (`[vars]`, `[directories]`, `[files]`,
+  `[execute]`, composition hints), loadable as-is.
+- `tachy generate settings <path>` — a commented sample settings file
+  (see [settings](#settingssettingstoml)).
+
+### man
+
+`tachy man` prints the complete built-in manual on stdout, formatted
+like a unix man page — `NAME`, `SYNOPSIS`, `DESCRIPTION`, `COMMANDS`,
+`OPTIONS`, then the reference sections (selection syntax, projects,
+the web UI and web docs, the inventory and tasks file reference,
+composition, variables, execution order), with the `TACHY(1)` banner
+top and bottom. Pipe it through `less` to page through it.
+
+`tachy help` (and `--help`, and no arguments at all) prints only the
+short form: the project line, the usage lines, the commands and the
+options, plus a pointer to `man`. Everything the help used to carry
+beyond that now lives here and in `tachy man`.
+
+### Settings (settings.toml)
+
+Optional; read once at the start of every `apply`/`check` (and once
+when the webui server starts). Discovery, first found wins:
+`--settings PATH`, the `TACHY_SETTINGS` variable, `./settings.toml`,
+then `$XDG_CONFIG_HOME/tachy/settings.toml` (default
+`~/.config/tachy/settings.toml`). An explicit `--settings` path or
+`TACHY_SETTINGS` that does not exist is an error; with no file found
+anywhere, settings are empty. Unknown keys in the file are load-time
+errors (strict). Today it holds two things:
+
+| Section | Keys | Meaning |
+|---|---|---|
+| `[imports]` | `paths` | Array of directories searched, in order, for `[import]` keys that do not resolve relative to their defining tasks file (first existing match wins; unresolved keys keep the defining-relative path, which the deploy-time existence check reports). Entries are `~`-expanded; relative entries resolve against the settings file's directory, never the cwd. |
+| `[webui]` | `projects` | Array of project paths offered by [`tachy webui`](#web-ui-tachy-webui) in the browser. A directory is a project whose entry point is its `main.toml`; a plain file is used as the entry point directly. Entries resolve like `imports.paths` (`~`-expanded, relative to the settings file); existence is not required at load time — the interface reports missing paths per project. |
+
+```toml
+[imports]
+paths = ["libs", "~/.config/tachy/imports"]
+
+[webui]
+projects = ["~/Code/site"]
+```
 
 ### What a run does
 
@@ -132,7 +205,69 @@ host (execution metadata — per-job duration — travels in the events;
 is removed when the run finishes — check mode deploys and removes a
 bundle too but manages nothing. A project must be
 self-contained: includes and `file.src`/`template` paths resolve inside
-the copied project.
+the copied project — `[import]` is the sanctioned way to pull external
+files into the bundle.
+
+### Web UI (tachy webui)
+
+`tachy webui [--address ADDR] [--port PORT]` starts a local web server
+(default `http://127.0.0.1:8080`) that is a graphical version of the
+CLI:
+
+- **Projects**: the `[webui]` `projects` list of settings.toml becomes
+  a clickable sidebar (a directory is a project entered through its
+  `main.toml`; missing paths show struck through). Settings are read
+  once when the server starts — restart it after editing them.
+- **Runs**: pick a host selection (the inventory's hosts and `@tag`s
+  are offered as toggleable chips; free text works too) and press
+  **Check** or **Apply**. Each run is this very binary spawned as
+  `tachy <mode> --events -i <inventory> [options] <selection>
+  <project>` — bundled mode, exactly the equivalent CLI invocation,
+  bundles cleaned up after each run.
+- **Live progress**: the page subscribes to the run over Server-Sent
+  Events (`GET /api/events/<id>`) and shows each job line as the
+  remote executor on the host finishes the job — the same NDJSON event
+  stream `--events` prints, wrapped with a server timestamp. Headers,
+  footers and ok/changed/failed counters come from the events
+  themselves; child stderr and non-event stdout show as log lines (so
+  load errors stay visible); past runs stay listed and replayable; a
+  verbose toggle unhides the per-job detail lines.
+- **API**: `GET /api/state` (projects, hosts, tags, runs), `POST
+  /api/run` (flat string fields `project`, `selection`, `mode`),
+  `GET /api/events/<id>` (SSE, resumable through `Last-Event-ID`).
+  Everything is strict like the rest of tachy: unknown projects,
+  fields or modes are 400s with a message.
+
+The browser application — plain HTML, CSS and JavaScript, no framework
+and no asset pipeline — is embedded in the binary at compile time with
+D's `import("...")` (`source/tachy/webui/`): one binary, no external
+files. The webserver itself is a few hundred lines of `std.socket`
+(one thread per connection, no framework either). The server executes
+real runs and binds to localhost only by default: anyone who can reach
+the port can run tachy.
+
+### Web docs (tachy webdoc)
+
+`tachy webdoc [--address ADDR] [--port PORT]` serves this documentation
+as a small web site (default `http://127.0.0.1:8080`) — the same
+ad-hoc web server as the webui, read-only:
+
+- **One page per section**: `##` groups become menu groups (their page
+  holds the group's intro), each `###` becomes a page inside its group;
+  the left menu lists them in reading order.
+- **Internal links work across pages**: `#anchor` links are resolved
+  against every heading and rewritten to the page holding their
+  target (both the hyphenated and the compact spelling, e.g.
+  `#settings-settingstoml` and `#settingssettingstoml`).
+- **Always current**: the pages are generated from the
+  `DOCUMENTATION.md` embedded in the binary at compile time — the site
+  documents exactly the binary being run, with no file to discover.
+  The markdown renderer covers what the file uses: headings, fenced
+  code blocks, pipe tables, bullet lists, paragraphs and inline
+  code/bold/italic/links.
+
+The command takes no arguments; unknown section addresses return a
+404 page.
 
 ---
 
@@ -167,12 +302,13 @@ Job execution order within one file is fixed:
 
 **directories, files, `[before.packages]`, packages, `[after.packages]`,
 [before.accounts], groups, users, `[after.accounts]`, [before.services],
-services, `[after.services]`, execute** — by key within each kind — with
-`[includes]` running before all of them and `[apply]` after. Directories
-precede files so a file can live in a directory the same file manages;
-packages follow files so an apt repository config can be laid down first;
-groups precede users so a user's primary group can be ensured in the same
-file.
+services, `[after.services]`, compose, execute** — by key within each
+kind — with `[includes]` running before all of them and `[apply]` after.
+Directories precede files so a file can live in a directory the same file
+manages (including the compose file a `[compose]` entry uses); packages
+follow files so an apt repository config can be laid down first; groups
+precede users so a user's primary group can be ensured in the same file;
+compose follows services and precedes the execute checks.
 
 ### `[before.G]` / `[after.G]` — hooks
 
@@ -218,7 +354,7 @@ secret_var = { env = "SECRET_VAR", from = ".env" }  # from a dotenv file
 
 | Entry | Description |
 |---|---|
-| scalar / table / array | Value(s), available as `{{ name }}`, `{{ table.key }}`. Variables may reference other variables; cycles are errors. |
+| `{ age = "path" }` | Inventory vars only: replaced by the age-decrypted content of `path` (relative to the inventory; one trailing newline stripped). Decrypted on the controller with the identity from `--identity PATH`, `AGE_IDENTITY` (path or key material — stdin, never on disk) or `~/.ssh/id_ed25519`; cannot combine with `env`/`default`/`from`; plaintext must be valid UTF-8. |
 | `{ env = "NAME" }` | Replaced by the environment variable `NAME`. Unset without a `default` is an error; set-but-empty resolves to the empty string. |
 | `{ env = "NAME", from = "path" }` | Same, but the value is looked up in the dotenv file at `path` (relative to the declaring file) instead of the process environment; the environment is not consulted. `KEY=VALUE` lines, `#` comments, blank lines, optional `export ` prefix, single-line quoted values (double quotes process `\n \t \r \f \b \" \' \\`, single quotes are literal); empty values count, later keys win, malformed lines are errors naming file and line. `default` covers a key the file does not define; in bundled runs the file is read on the host, so it must live inside the project. |
 
@@ -236,7 +372,11 @@ difference is timing:
   execution order).
 
 Both are processed sorted by path; scopes chain and flow forward through
-the composition. Composition cycles are detected and reported.
+the composition. Composition cycles are detected and reported. An
+entry naming an existing directory uses its `main.toml` — the same
+entry-point convention as a directory argument on the command line
+(`[apply."neovim"]` composing an imported `neovim/` directory is the
+common case).
 
 ```toml
 [includes."tasks/base.toml"]       # bindings as the entry's keys
@@ -253,6 +393,51 @@ vars = { keep = 14 }
 |---|---|
 | `var = "value"` (entry keys) | The binding for the composed file. |
 | `vars = { ... }` sub-table | Same binding, grouped. Mixing both for one variable is an ambiguity error. |
+
+### `[import]` — external files in the bundle
+
+Bundled mode only. An `[import]` entry names a file or directory
+outside the project (absolute, or relative to the defining tasks file,
+like every path) that is copied into the bundle next to the project
+copy under its **base name** — so `src`, `template` and `run`
+references resolve on the host:
+
+```toml
+[import."../shared/install_gogs"]   # lands at project/install_gogs
+
+[files."/opt/gogs/setup.sh"]
+src = "install_gogs/setup.sh"       # reads the imported copy
+mode = "0755"
+```
+
+Entries take no parameters (an empty table). A key that does not
+resolve relative to its defining file is searched in the
+[settings](#settingssettingstoml) `[imports]` paths. Sources are validated on
+the controller at deploy time (existence, and a destination that does
+not collide with project content or another import — imports never
+overwrite anything). Direct runs (`--direct`, including the on-host
+inner run, where the copies already sit inside the project) parse and
+ignore the directive.
+
+**Composing imported tasks files.** An `[includes]`/`[apply]` entry
+whose path falls under — or names — a declared import's destination
+does not exist on the controller — so it *defers*: the controller
+skips it at load time, and the on-host inner run composes it there,
+with its variable binding, in its directive position (a directory
+entry resolves to its `main.toml`, as everywhere). If the file is readable locally
+after all, it composes normally:
+
+```toml
+[import."../tasks/install_gogs"]    # lands at project/install_gogs
+
+[apply."install_gogs/gogs.toml"]    # deferred: composed on the host
+gogs_user = "deployer"              # bindings flow into it
+```
+
+Consequences: controller-side validation cannot see inside a deferred
+subtree (the on-host load catches errors there, failing only that
+host), and a manual `--direct` run without a bundle skips deferred
+entries with a warning on stderr.
 
 ---
 
@@ -446,6 +631,72 @@ appended when the name has no suffix). On drift it is written and followed
 by `systemctl daemon-reload`; a running service is **not** restarted —
 use `state = "restarted"` to apply a new unit definition. Check mode
 reports the would-be write without touching the host.
+
+---
+
+### `[compose]` — Docker Compose stacks
+
+Keyed by the stack's project directory (absolute). The key injects `dir`;
+`file` names the compose file — relative means inside `dir`, so the
+natural pairing is a `[files]` entry deploying `<dir>/<file>` first
+(files run long before compose). The host needs the `docker` CLI with
+the compose plugin and a reachable container engine.
+
+```toml
+[compose."/srv/app"]
+file = "compose.yml"                # required; relative: inside dir
+project = "myapp"                   # default: lowercased basename of dir
+services = ["backend", "db"]        # default: every service the file enables
+state = "running"                   # running (default) | stopped | absent
+
+pull = "missing"                    # missing (default) | always | never
+build = "auto"                      # auto (default) | always | never
+recreate = "auto"                   # auto (default) | always | never
+wait = true                         # wait for running/healthy after up
+wait_timeout = 300                  # cap for that wait, in seconds
+timeout = 30                        # stop/shutdown timeout, in seconds
+
+remove_orphans = true               # stopped: drop containers whose
+                                    # service left the compose model
+remove_volumes = true               # absent: also remove named volumes
+remove_images = true                # absent: also remove service images
+```
+
+| Attribute | Default | Description |
+|---|---|---|
+| `file` | required | The compose file. Absolute, or relative to `dir` (`dir/file`). |
+| `state` | `running` | `running` runs `compose up --detach`; `stopped` runs `compose stop`; `absent` runs `compose down`. |
+| `project` | derived | Project name passed as `-p`; the default is what compose itself derives: the lowercased `dir` basename, everything outside `[a-z0-9_-]` removed. An explicit name must match `[a-z0-9][a-z0-9_-]*`. |
+| `services` | all | Subset of the file's services (unknown names are errors). Empty or absent means every service the selected file enables (compose excludes profile-gated services). |
+| `pull` | `missing` | `--pull` policy for `up`: `missing`, `always` or `never`. |
+| `build` | `auto` | `always` adds `--build`, `never` adds `--no-build`. |
+| `recreate` | `auto` | `always` adds `--force-recreate`, `never` adds `--no-recreate`. |
+| `wait` | `true` | Add `--wait` to `up`, so it returns only once every selected service runs (and passes its healthcheck). |
+| `wait_timeout` | — | `--wait-timeout`, in seconds. Only meaningful with `wait = true` / `state = "running"`. |
+| `timeout` | — | `-t`, the stop/shutdown timeout in seconds, passed to `up`, `stop` and `down`. |
+| `remove_orphans` | `false` | With `state = "stopped"`: remove containers of the project whose service is no longer in the compose model, through the container engine (`docker rm -f`). |
+| `remove_volumes` | `false` | With `state = "absent"`: also remove the project's named volumes (`down --volumes`). |
+| `remove_images` | `false` | With `state = "absent"`: also remove the services' images (`down --rmi all`). |
+
+Idempotence is probe-then-act, read-only:
+
+- `running`: for every selected service, a container that is running,
+  healthy (when its service defines a healthcheck — no healthcheck means
+  running is all that can hold) and whose `com.docker.compose.config-hash`
+  label equals the canonical `docker compose config --hash` value. Any
+  drift — missing or stopped container, stale config hash, unhealthy
+  container — triggers one `up --detach` with the policy flags above,
+  after which the probe is re-run and any remaining drift fails the host.
+- `stopped`: acts only when a selected service still has a running
+  container. Containers, networks and volumes are preserved.
+- `absent`: probes the container engine for anything carrying the
+  project's label (containers, networks, and — with `remove_volumes` —
+  named volumes) and is a no-op when nothing exists; the compose file is
+  only read when something actually has to go.
+
+Check mode reports the would-be `up`/`stop`/`down` without running it.
+The probes themselves always run, so a missing compose file or an
+unreachable engine is reported even in check mode.
 
 ---
 

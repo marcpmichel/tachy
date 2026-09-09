@@ -25,7 +25,7 @@ import std.string : join;
 
 import tachy.errors;
 import tachy.value;
-import tachy.vars : deepMerge, resolveEnvVars;
+import tachy.vars : AgeConfig, deepMerge, resolveEnvVars;
 
 struct HostConfig
 {
@@ -44,7 +44,7 @@ class Inventory
     private HostConfig[string] hosts_;
     private Val[string] globalVars_;
 
-    static Inventory load(string path)
+    static Inventory load(string path, string ageIdentity = null)
     {
         auto root = loadToml(path);
         auto t = root.table_;
@@ -75,14 +75,16 @@ class Inventory
             if (h.connection != "ssh" && h.connection != "local")
                 throw new TachyError(ctx ~ ": 'connection' must be \"ssh\" or \"local\", not \"" ~ h.connection ~ "\"");
             h.tags = optStringArray(ht, "tags", ctx);
-            h.vars = resolveEnvVars(optTable(ht, "vars", ctx), ctx);
+            h.vars = resolveEnvVars(optTable(ht, "vars", ctx), ctx,
+                AgeConfig(true, ageIdentity));
             inv.hosts_[hname] = h;
         }
         if (inv.hosts_.length == 0)
             throw new TachyError(path ~ ": [hosts] defines no hosts");
 
         if ("vars" in t)
-            inv.globalVars_ = resolveEnvVars(optTable(t, "vars", path), path);
+            inv.globalVars_ = resolveEnvVars(optTable(t, "vars", path), path,
+                AgeConfig(true, ageIdentity));
 
         return inv;
     }
@@ -296,6 +298,58 @@ empty = { env = "TACHY_UT_EMPTY", from = "inv.env" }
     catch (TachyError e)
         msg = e.msg;
     assert(canFind(msg, "cannot read dotenv file"));
+}
+
+unittest // [vars] entries may be age-encrypted: { age } (controller side)
+{
+    import std.algorithm.searching : canFind;
+    import std.file : tempDir;
+    import std.path : buildPath;
+    import tachy.vars : AgeIdentity, ageDecrypt;
+
+
+    writeTemp("db.age", "ciphertext\n");
+    writeTemp("age_id.txt", "# identity\n");
+
+    auto saved = ageDecrypt;
+    scope (exit) ageDecrypt = saved;
+    ageDecrypt = (string agePath, in AgeIdentity identity, string where)
+    {
+        return "inventory-secret\n";
+    };
+
+    auto inv = Inventory.load(writeTemp("agevars.toml", `
+[vars]
+db_password = { age = "db.age" }
+
+[hosts.web1]
+[hosts.web1.vars]
+token = { age = "db.age" }
+plain = "literal"
+`), buildPath(tempDir, "tachy_inventory_ut", "age_id.txt"));
+
+    auto vars = inv.varsFor("web1");
+    assert(vars["db_password"].str_ == "inventory-secret"); // global
+    assert(vars["token"].str_ == "inventory-secret");       // host var
+    assert(vars["plain"].str_ == "literal");
+
+    // a failing decryption is a load-time error with context
+    ageDecrypt = (string agePath, in AgeIdentity identity, string where)
+    {
+        throw new TachyError("no identity matched");
+    };
+    string msg;
+    try
+    {
+        Inventory.load(writeTemp("agevars_bad.toml",
+            "[vars]\nx = { age = \"db.age\" }\n[hosts.a]\n"),
+            buildPath(tempDir, "tachy_inventory_ut", "age_id.txt"));
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(canFind(msg, "vars.x"), msg);
+    assert(canFind(msg, "no identity matched"), msg);
 }
 
 unittest // validation errors

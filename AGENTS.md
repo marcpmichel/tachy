@@ -87,8 +87,18 @@ When the user requests a durable behavior change, record it here or in the relev
 
 # Project
 
-- tachy: TOML-driven configuration management (Ansible-like) in D — see `README.md` (tour) and `DOCUMENTATION.md` (full reference); `dub.json` is the build manifest (DMD + dub, sole dependency `toml ~>2.0.1`)
-- CLI shape: `tachy [options] <selection> <tasks.toml>...`; selection mixes host names, `@tag` and `all`; default inventory `inventory.toml`, default tasks file `main.toml` (a directory argument maps to its `main.toml`)
+- tachy: TOML-driven configuration management (Ansible-like) in D — see `README.md` (tour) and `DOCUMENTATION.md` (full reference); `dub.json` is the build manifest (DMD + dub, sole dependency `toml ~>2.0.1`, `stringImportPaths` embeds the webui assets, the webdoc stylesheet and the root `DOCUMENTATION.md`)
+- CLI shape: `tachy <command> [options] <selection> [<tasks.toml>...]`;
+ command is one of `apply`, `check` (check mode; the old `-c` option is
+ gone), `generate` (`generate key <path>`, `generate task <path>`),
+ `webui` (local web console; no selection — projects come from
+ settings.toml `[webui]` projects, runs start from the browser),
+ `webdoc` (serves the compiled-in DOCUMENTATION.md as a multi-page
+ site; no selection, read-only), `man` (prints the full built-in
+ manual, unix man-page style) or
+ `help` (short form only: usage lines, commands, options); selection mixes host names, `@tag` and `all`; default inventory
+ `inventory.toml`, default tasks file `main.toml` (a directory argument
+ maps to its `main.toml`)
 - `sessions/` holds saved session records (inert artifacts, not inputs to code or docs)
 - TODO.md / DONE.md are the task ledger: pending work arrives as TODO.md entries
 

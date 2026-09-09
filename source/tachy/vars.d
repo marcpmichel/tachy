@@ -17,33 +17,116 @@ import std.string : indexOf, strip;
 
 import tachy.errors;
 import tachy.value;
-/// Resolve `{ env = "NAME", default = "...", from = "..." }` variable
-/// entries, replacing them with the variable's value.  Without `from`
-/// the value comes from the environment of the current process; with
-/// `from` it is looked up in that dotenv file instead (paths relative
-/// to the file declaring the vars).  Called when a `[vars]` table is
-/// consumed: inventory tables resolve in the controller's environment,
+/// Age decryption configuration for `{ age = ... }` variable markers:
+/// whether they are allowed here, and an explicit identity path
+/// (`--identity`).  Only inventory vars enable them — decryption must
+/// happen on the controller, because the identity must never travel
+/// inside a bundle.
+struct AgeConfig
+{
+    bool enabled;
+    string identity; // explicit identity file, or null for auto-detection
+}
+
+/// An age identity: a file path (age key or ssh private key — age
+/// accepts the latter natively), or raw key material (fed to age on
+/// stdin, never written to disk).
+struct AgeIdentity
+{
+    string path;
+    string material;
+
+    static AgeIdentity fromPath(string p)
+    {
+        AgeIdentity id;
+        id.path = p;
+        return id;
+    }
+
+    static AgeIdentity fromMaterial(string m)
+    {
+        AgeIdentity id;
+        id.material = m;
+        return id;
+    }
+}
+
+/// Decryption hook — the default runs the age binary; unittests replace
+/// it so the suite does not depend on age being installed.
+string delegate(string agePath, in AgeIdentity identity, string where) ageDecrypt =
+    (string agePath, in AgeIdentity identity, string where) =>
+        defaultAgeDecrypt(agePath, identity, where);
+
+/// Resolve `{ env = "NAME", default = "...", from = "..." }` and
+/// `{ age = "file.age" }` variable entries, replacing them with their
+/// value.  Without `from` an env marker reads the environment of the
+/// current process; with `from` it reads that dotenv file instead;
+/// an age marker decrypts the named file (paths relative to the file
+/// declaring the vars).  Called when a `[vars]` table is consumed:
+/// inventory tables resolve on the controller (age markers enabled),
 /// tasks-file tables in the environment of the process that loads them
-/// (the host, in bundled mode).  Nested tables are walked; scalars and
-/// arrays pass through.  A marker naming a variable that has no value
-/// and no default is a hard error; a set-but-empty value, from the
-/// environment or from a dotenv file, resolves to the empty string
-/// (the default only covers a missing value).
-Val[string] resolveEnvVars(in Val[string] vars, string context) @trusted
+/// (the host, in bundled mode — age markers are rejected there).
+/// Nested tables are walked; scalars and arrays pass through.  A marker
+/// naming a variable that has no value and no default is a hard error;
+/// a set-but-empty value, from the environment or from a dotenv file,
+/// resolves to the empty string (the default only covers a missing
+/// value).
+Val[string] resolveEnvVars(in Val[string] vars, string context,
+    in AgeConfig age = AgeConfig.init) @trusted
 {
     Val[string] r;
     string[string][string] dotenvCache; // resolved path -> parsed entries
     foreach (string k, const Val v; vars)
-        r[k] = resolveEnvVal(v, context ~ ": vars." ~ k, context, dotenvCache);
+        r[k] = resolveEnvVal(v, context ~ ": vars." ~ k, context, dotenvCache, age);
     return r;
 }
 
 private Val resolveEnvVal(in Val v, string where, string context,
-    ref string[string][string] dotenvCache) @trusted
+    ref string[string][string] dotenvCache, in AgeConfig age) @trusted
 {
     import std.process : environment;
     if (v.kind != Val.Kind.table_)
         return cast(Val) v;
+
+    // An age marker is a table of exactly { age = "path" } — it cannot
+    // combine with the env/default/from family (it is self-contained:
+    // a failed decryption is an error, not an absent value).
+    if (auto a = "age" in v.table_)
+    {
+        if (v.table_.length != 1)
+            throw new TachyError(where
+                ~ ": 'age' cannot be combined with 'env', 'default' or 'from'");
+        if ((*a).kind != Val.Kind.string_)
+            throw new TachyError(where ~ ": 'age' must be a string, not a "
+                ~ (*a).typeName());
+        if (!age.enabled)
+            throw new TachyError(where ~ ": 'age' markers are only supported"
+                ~ " in inventory [vars] — they are decrypted on the controller"
+                ~ " (tasks-file [vars] resolve on the host in bundled runs)");
+        const string agePath = resolveDotenvPath((*a).str_, context);
+        const AgeIdentity identity = resolveAgeIdentity(age.identity, where);
+        string value;
+        try
+            value = ageDecrypt(agePath, identity, where);
+        catch (TachyError e)
+            throw new TachyError(where ~ ": " ~ e.msg);
+        try
+        {
+            import std.utf : validate;
+            validate(value);
+        }
+        catch (Exception)
+            throw new TachyError(where ~ ": decrypted content of '" ~ agePath
+                ~ "' is not valid UTF-8 (binary secrets are not supported"
+                ~ " in variables)");
+        // Secret files are usually created with one trailing newline;
+        // strip it (and a CR before it) so templates see the secret.
+        if (value.length && value[$ - 1] == '\n')
+            value = value[0 .. $ - 1];
+        if (value.length && value[$ - 1] == '\r')
+            value = value[0 .. $ - 1];
+        return Val(value);
+    }
 
     // An env marker is a table whose keys are "env" plus any of
     // "default" and "from".  Tables with other keys are plain nested
@@ -59,7 +142,7 @@ private Val resolveEnvVal(in Val v, string where, string context,
         r.kind = Val.Kind.table_;
         foreach (string k, const Val entry; v.table_)
             r.table_[k] = resolveEnvVal(entry, where ~ "." ~ k, context,
-                dotenvCache);
+                dotenvCache, age);
         return r;
     }
 
@@ -133,10 +216,111 @@ private bool dotenvLookup(string path, string key, string where,
     dotenvCache[path] = entries;
     if (auto hit = key in entries)
     {
+
         value = *hit;
         return true;
     }
     return false;
+}
+
+/// Identity for `{ age = ... }` markers, in order: the explicit
+/// `--identity` path, then the AGE_IDENTITY environment variable (an
+/// existing file path, or raw key material), then the controller's
+/// default ssh key — age accepts ed25519 ssh private keys natively.
+/// Anything else is an error naming the three options.
+private AgeIdentity resolveAgeIdentity(string explicitIdentity, string where) @trusted
+{
+    import std.file : exists;
+    import std.path : buildPath;
+    import std.process : environment;
+    if (explicitIdentity.length)
+    {
+        if (!exists(explicitIdentity))
+            throw new TachyError(where ~ ": age identity '" ~ explicitIdentity
+                ~ "' does not exist");
+        return AgeIdentity.fromPath(explicitIdentity);
+    }
+    const string envId = environment.get("AGE_IDENTITY");
+    if (envId.length)
+    {
+        if (exists(envId))
+            return AgeIdentity.fromPath(envId);
+        if (isKeyMaterial(envId))
+            return AgeIdentity.fromMaterial(envId);
+        throw new TachyError(where ~ ": AGE_IDENTITY '" ~ envId
+            ~ "' is neither an existing file (relative to the current"
+            ~ " directory) nor age key material (AGE-SECRET-KEY-1... or"
+            ~ " an ssh private key block)");
+    }
+    const string home = environment.get("HOME");
+    if (home.length)
+    {
+        const string sshKey = buildPath(home, ".ssh", "id_ed25519");
+        if (exists(sshKey))
+            return AgeIdentity.fromPath(sshKey); // age accepts ssh keys natively
+    }
+    throw new TachyError(where ~ ": no age identity available: pass"
+        ~ " --identity PATH, set AGE_IDENTITY to a path or key material,"
+        ~ " or provide ~/.ssh/id_ed25519");
+}
+
+/// Recognize raw age key material: an `AGE-SECRET-KEY-1...` secret key
+/// or an ssh private key block.  Anything else that is not an existing
+/// path is a configuration error, not material to hand to age.
+private bool isKeyMaterial(string s) @safe pure
+{
+    import std.algorithm.searching : canFind, startsWith;
+    return s.startsWith("AGE-SECRET-KEY-1") || canFind(s, "PRIVATE KEY");
+}
+
+/// Run `age --decrypt` on `agePath`.  Key material (AGE_IDENTITY) is
+/// fed to `/dev/stdin` — it is never written to disk.  stderr is
+/// drained after stdout (age's error output is one short line).
+private string defaultAgeDecrypt(string agePath, in AgeIdentity identity,
+    string where) @trusted
+{
+    import std.array : appender;
+    import std.conv : text;
+    import std.process : Redirect, pipeProcess, wait;
+    import std.string : strip;
+
+    const string idArg = identity.path.length ? identity.path : "/dev/stdin";
+    auto p = pipeProcess(["age", "--decrypt", "-i", idArg, agePath],
+        Redirect.stdin | Redirect.stdout | Redirect.stderr);
+    if (identity.material.length)
+    {
+        p.stdin.rawWrite(cast(const(ubyte)[]) identity.material);
+        p.stdin.flush();
+    }
+    p.stdin.close(); // age sees EOF on the identity stream
+
+    auto outApp = appender!(ubyte[]);
+    auto buf = new ubyte[65536];
+    for (;;)
+    {
+        auto n = p.stdout.rawRead(buf).length;
+        if (n == 0) break;
+        outApp.put(buf[0 .. n]);
+    }
+    string errText;
+    {
+        auto ebuf = new ubyte[4096];
+        for (;;)
+        {
+            auto n = p.stderr.rawRead(ebuf).length;
+            if (n == 0) break;
+            errText ~= cast(string) ebuf[0 .. n];
+        }
+    }
+    const int status = wait(p.pid);
+    if (status != 0)
+    {
+        auto m = errText.strip;
+        if (!m.length)
+            m = "age exit status " ~ text(status);
+        throw new TachyError("cannot decrypt '" ~ agePath ~ "': " ~ m);
+    }
+    return cast(string) outApp.data;
 }
 
 /// Parse dotenv content: `KEY=VALUE` lines, `# comments`, blank lines,
@@ -782,4 +966,222 @@ unittest // renderParams deep rendering
     assert(r["path"].str_ == "/srv/example");
     assert(r["opts"].table_["title"].str_ == "example page");
     assert(r["port"].integer_ == 80);
+}
+
+unittest // { age = "..." } markers: resolution, stripping, combinations
+{
+    import std.algorithm.searching : canFind;
+    import std.file : exists, mkdirRecurse, rmdirRecurse, tempDir, write;
+    import std.path : buildPath;
+    import std.process : environment;
+
+    auto dir = buildPath(tempDir, "tachy_vars_age_ut");
+    if (exists(dir)) rmdirRecurse(dir);
+    mkdirRecurse(buildPath(dir, "secrets"));
+    scope (exit) if (exists(dir)) rmdirRecurse(dir);
+    write(buildPath(dir, "secrets", "db_password.age"), "ciphertext");
+    write(buildPath(dir, "secrets", "binary.age"), "bytes");
+    write(buildPath(dir, "id.txt"), "# identity\n");
+    const string ctx = buildPath(dir, "inventory.toml");
+
+    // fake decryptor: records what it was asked, returns canned content
+    string lastAgePath, lastIdPath, lastMaterial;
+    auto saved = ageDecrypt;
+    scope (exit) ageDecrypt = saved;
+    ageDecrypt = (string agePath, in AgeIdentity identity, string where)
+    {
+        lastAgePath = agePath;
+        lastIdPath = identity.path;
+        lastMaterial = identity.material;
+        if (canFind(agePath, "no-key-matched"))
+            throw new TachyError("cannot decrypt '" ~ agePath
+                ~ "': no identity matched any of the recipients");
+        if (canFind(agePath, "binary"))
+            return "\xFF\xFE\x00not utf8";
+        if (canFind(agePath, "crlf"))
+            return "secret\r\n";
+        return "s3cret\n";
+    };
+
+    Val mkAge(string path)
+    {
+        return tbl(table("age", Val(path)));
+    }
+
+    const string savedHome = environment.get("HOME");
+    const string savedEnvId = environment.get("AGE_IDENTITY");
+    scope (exit)
+    {
+        environment["HOME"] = savedHome;
+        environment.remove("AGE_IDENTITY");
+        if (savedEnvId !is null && savedEnvId.length)
+            environment["AGE_IDENTITY"] = savedEnvId;
+    }
+    environment["HOME"] = dir; // no ~/.ssh/id_ed25519 there
+    environment.remove("AGE_IDENTITY");
+
+    // resolution with an explicit identity; one trailing newline stripped
+    {
+        Val[string] vars;
+        vars["db_password"] = mkAge("secrets/db_password.age");
+        vars["nested"] = tbl(table("inner", mkAge("secrets/db_password.age")));
+        auto r = resolveEnvVars(vars, ctx, AgeConfig(true, buildPath(dir, "id.txt")));
+        assert(r["db_password"].str_ == "s3cret");
+        assert(r["nested"].table_["inner"].str_ == "s3cret");
+        assert(lastAgePath == buildPath(dir, "secrets", "db_password.age"), lastAgePath);
+        assert(lastIdPath == buildPath(dir, "id.txt"));
+    }
+
+    // CRLF also stripped
+    {
+        Val[string] vars;
+        vars["x"] = mkAge("secrets/crlf.age");
+        auto r = resolveEnvVars(vars, ctx, AgeConfig(true, buildPath(dir, "id.txt")));
+        assert(r["x"].str_ == "secret");
+    }
+
+    // AGE_IDENTITY: an existing path is used as a path...
+    {
+        environment["AGE_IDENTITY"] = buildPath(dir, "id.txt");
+        Val[string] vars;
+        vars["x"] = mkAge("secrets/db_password.age");
+        auto r = resolveEnvVars(vars, ctx, AgeConfig(true, null));
+        assert(r["x"].str_ == "s3cret" && lastIdPath == buildPath(dir, "id.txt"));
+    }
+    // ...and non-path material is passed as material (never on disk)
+    {
+        environment["AGE_IDENTITY"] = "AGE-SECRET-KEY-1MATERIAL";
+        Val[string] vars;
+        vars["x"] = mkAge("secrets/db_password.age");
+        auto r = resolveEnvVars(vars, ctx, AgeConfig(true, null));
+        assert(r["x"].str_ == "s3cret");
+        assert(lastMaterial == "AGE-SECRET-KEY-1MATERIAL" && lastIdPath.length == 0);
+    }
+    // an AGE_IDENTITY that is neither a path nor material is a clear error
+    {
+        environment["AGE_IDENTITY"] = "definitely-not-a-file.txt";
+        Val[string] vars;
+        vars["x"] = mkAge("secrets/db_password.age");
+        string msg;
+        try
+        {
+            resolveEnvVars(vars, ctx, AgeConfig(true, null));
+            assert(false, "expected TachyError");
+        }
+        catch (TachyError e)
+            msg = e.msg;
+        assert(canFind(msg, "AGE_IDENTITY 'definitely-not-a-file.txt'"), msg);
+        assert(canFind(msg, "neither an existing file"), msg);
+    }
+    // default: ~/.ssh/id_ed25519
+    {
+        environment.remove("AGE_IDENTITY");
+        mkdirRecurse(buildPath(dir, ".ssh"));
+        write(buildPath(dir, ".ssh", "id_ed25519"), "-----BEGIN OPENSSH PRIVATE KEY-----\n");
+        Val[string] vars;
+        vars["x"] = mkAge("secrets/db_password.age");
+        auto r = resolveEnvVars(vars, ctx, AgeConfig(true, null));
+        assert(r["x"].str_ == "s3cret");
+        assert(lastIdPath == buildPath(dir, ".ssh", "id_ed25519"), lastIdPath);
+    }
+    // none available: error naming the three options
+    {
+        environment.remove("AGE_IDENTITY");
+        environment["HOME"] = buildPath(dir, "empty-home");
+        mkdirRecurse(buildPath(dir, "empty-home"));
+        Val[string] vars;
+        vars["x"] = mkAge("secrets/db_password.age");
+        string msg;
+        try
+        {
+            resolveEnvVars(vars, ctx, AgeConfig(true, null));
+            assert(false, "expected TachyError");
+        }
+        catch (TachyError e)
+            msg = e.msg;
+        assert(canFind(msg, "no age identity available"), msg);
+        assert(canFind(msg, "--identity"), msg);
+    }
+
+    // not allowed outside inventories (tasks files)
+    {
+        Val[string] vars;
+        vars["x"] = mkAge("secrets/db_password.age");
+        string msg;
+        try
+        {
+            resolveEnvVars(vars, "tasks.toml");
+            assert(false, "expected TachyError");
+        }
+        catch (TachyError e)
+            msg = e.msg;
+        assert(canFind(msg, "only supported in inventory"), msg);
+    }
+
+    // decrypt failure relays age's message with context
+    {
+        Val[string] vars;
+        vars["x"] = mkAge("secrets/no-key-matched.age");
+        string msg;
+        try
+        {
+            resolveEnvVars(vars, ctx, AgeConfig(true, buildPath(dir, "id.txt")));
+            assert(false, "expected TachyError");
+        }
+        catch (TachyError e)
+            msg = e.msg;
+        assert(canFind(msg, "vars.x"), msg);
+        assert(canFind(msg, "no-key-matched.age"), msg);
+        assert(canFind(msg, "no identity matched"), msg);
+    }
+
+    // binary plaintext is rejected
+    {
+        Val[string] vars;
+        vars["x"] = mkAge("secrets/binary.age");
+        string msg;
+        try
+        {
+            resolveEnvVars(vars, ctx, AgeConfig(true, buildPath(dir, "id.txt")));
+            assert(false, "expected TachyError");
+        }
+        catch (TachyError e)
+            msg = e.msg;
+        assert(canFind(msg, "not valid UTF-8"), msg);
+        assert(canFind(msg, "binary secrets"), msg);
+    }
+
+    // combinations are errors, and type checks
+    {
+        foreach (extraKey; ["env", "default", "from"])
+        {
+            Val m;
+            m.kind = Val.Kind.table_;
+            m.table_["age"] = Val("secrets/db_password.age");
+            m.table_[extraKey] = Val("x");
+            Val[string] vars;
+            vars["x"] = m;
+            string msg;
+            try
+            {
+                resolveEnvVars(vars, ctx, AgeConfig(true, buildPath(dir, "id.txt")));
+                assert(false, "expected TachyError");
+            }
+            catch (TachyError e)
+                msg = e.msg;
+            assert(canFind(msg, "'age' cannot be combined"), msg);
+        }
+        // non-string age is a type error
+        Val[string] bad;
+        bad["x"] = tbl(table("age", Val(1L)));
+        string msg;
+        try
+        {
+            resolveEnvVars(bad, ctx, AgeConfig(true, buildPath(dir, "id.txt")));
+            assert(false, "expected TachyError");
+        }
+        catch (TachyError e)
+            msg = e.msg;
+        assert(canFind(msg, "'age' must be a string"), msg);
+    }
 }
