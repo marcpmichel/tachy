@@ -1014,3 +1014,286 @@
      paragraph), DOCUMENTATION.md (man row in the command table, help
      row reworded, new "### man" section). DOX: root AGENTS.md CLI
      shape, source/AGENTS.md app.d layering bullet.
+
+32. move away from TOML to a custom format — first step: language grammar + name
+   (requested directly in chat; no TODO.md entry)
+
+   - New root `LANGUAGE.md`: spec draft for **Pravic** (from Ursula K. Le
+     Guin's The Dispossessed — the constructed language of Anarres, same
+     Hainish cycle as ansible; runners-up ekumen/hain/kesh noted),
+     `.pravic` extension proposed. Directives become independent
+     statements: plural directives get a group form (`vars { ... }`) and
+     a single form (`var X = "v"`, `file /path { ... }`); singular-named
+     directives (execute, compose, apply, import, before, after) keep
+     their name, always keyed; webui/settings imports are group-only.
+     Value layer stays TOML 1.0 lexical rules (datetimes still
+     rejected); multi-line blocks and unquoted path keys become native
+     (joinInlineTables/quotePathKeys die with the migration).
+   - Grammar written as a PEG (ordered choice, `!KeyChar` keyword
+     guards) covering every directive of tasks/inventory/settings files,
+     with directive inventory table and README/DOCUMENTATION examples
+     rewritten. Open points recorded: statement order vs fixed job
+     order (recommend keeping fixed order first), duplicate-statement
+     merging, file discovery/coexistence, parser implementation
+     (recursive descent or pegged feeding existing Val trees).
+   - Verification: throwaway Python recursive-descent transcription of
+     the grammar (/tmp/pravic_check.py, deleted after) — 30 positive
+     cases, 22 negative cases (keyword boundary `varsite`, TOML header
+     leftovers, datetimes, missing same-line commas, unterminated
+     blocks...) and all 7 ```pravic blocks from LANGUAGE.md itself:
+     ALL PASS.
+   - No behavior change (no code touched); docs trio untouched by
+     design. DOX: root AGENTS.md Project bullet added.
+
+33. Pravic spec iteration 2: source order, drop TOML, directive cuts
+   (requested directly in chat)
+
+   - LANGUAGE.md: jobs run in statement order — the fixed per-file
+     order and key sorting are gone, so the guarantees they hid are now
+     the author's (directory before file, group before user, checks sit
+     between statements); `before`/`after` hooks and `apply` dropped
+     (meaningless without fixed groups); `includes` group form dropped
+     — only `include "path" { bindings }`, composing at its position;
+     `execute` renamed `check`; TOML support dropped entirely — one
+     hard cutover, no dual-format reader (project pre-production).
+   - Grammar keyword sets now: GroupKeyword = vars files directories
+     packages groups users services hosts imports webui;
+     SingleKeyword = var file directory package group user service
+     host include check compose import. Directive inventory table
+     rewritten natively (no TOML column); examples updated (check
+     between jobs, deferred include under an import); open points
+     trimmed to duplicate-statement merging, file names, and the
+     one-cutover implementation plan.
+   - Verification: throwaway checker rewritten (/tmp/pravic_check.py,
+     deleted after) — 33 positives, 27 negatives (new rejections:
+     `includes { }`, `apply "x" { }`, `before packages { }`,
+     `after services { }`, `execute "x" { }`, `check { }` without
+     key) and all 7 ```pravic blocks from LANGUAGE.md: ALL PASS.
+   - No behavior change (no code touched); docs trio untouched by
+     design. DOX: root AGENTS.md LANGUAGE.md bullet updated.
+
+34. implement Pravic, drop TOML completely (requested directly in chat)
+
+   - Parser: `source/tachy/value.d` rewritten around a hand-written
+     recursive-descent parser of LANGUAGE.md's grammar (chosen over
+     `pegged` for `file: line N:` errors and zero dependencies —
+     the toml dependency is deleted from dub.json). `loadPractic`
+     returns ordered `PracticStmt[]` (canonical kinds, group form
+     expanded per entry in source order, `var`→`vars` etc.); `Val`
+     trees and the validated accessors unchanged; duplicate directive
+     keys within a file are parse errors naming both lines;
+     `joinInlineTables`/`quotePathKeys` deleted (multi-line blocks and
+     unquoted path keys are native). Fixed along the way: D floats
+     default-init to NaN (`double v = 0;` in parseNumber), const(Val)
+     casts, the ML-string quote-run rule.
+   - Engine: `models.d` walks statements in source order — jobs run in
+     statement order (no fixed order, no sorting), `include` composes
+     at its position with bindings (vars/import statements are
+     file-wide pre-passes; deferral under import landings preserved);
+     hooks (`[before]`/`[after]`), `[apply]` and the `[includes]`
+     table are gone; `execute` renamed `check` (module
+     executemod.d → checkmod.d, registry, dispatch, kind strings,
+     error contexts). inventory.d/settings.d consume statements
+     (hosts/vars; imports/webui with per-file-kind strictness).
+     project.d serializes the generated one-host inventory as Pravic
+     (`hostInventoryPravic`, round-trip tested) into
+     inventory.pravic; runner/app defaults renamed (main.pravic,
+     inventory.pravic, settings.pravic discovery); generate.d
+     scaffolds Pravic samples; webdoc slugs (settings-settingspravic).
+   - Docs trio + LANGUAGE.md: app.d help/man rewritten for Pravic
+     (statement-form reference, source-order EXECUTION ORDER section);
+     DOCUMENTATION.md fully converted (directive sections retitled
+     var/file/directory/package/group/user/service/compose/check,
+     hooks section deleted, include/import rewritten); README.md
+     converted (subagent, every fenced block validated by loading it
+     through the real binary); LANGUAGE.md status → implemented.
+     Restored two regressions found during smoke: getopt lost
+     `--events`/`--keep-bundle`/`--settings` registrations and
+     parseCommand lost `generate`/`webui` (caught by the README
+     agent's validation; the app.d unittests don't run in the
+     library test config).
+   - Verified: dub test --force 19/19 modules; local bundled-mode
+     smoke (source order directory→include→file→checks, include
+     bindings, idempotence, check mode, TOML file rejected with
+     `unknown directive`); webdoc serves the converted docs (Settings
+     page 200, pravic blocks render); webui serves 200 with
+     settings.pravic banner; E2E on testing.internal as a local host:
+     directory/include-with-binding/template/{{ inventory_hostname }}/
+     external import landed under its base name/src from it/two
+     checks/second run ok=7 changed=0 — VM and scratch cleaned up.
+   - DOX: root AGENTS.md (Pravic-driven, zero deps, CLI defaults,
+     LANGUAGE.md implemented, TOML-spellings rule → Pravic
+     equivalence rule), source/AGENTS.md (value.d parser, models.d
+     source order, project.d Pravic serialization, settings.pravic,
+     19 modules), modules/AGENTS.md (checkmod, check wording).
+
+35. Pravic: an instruction with no attributes may omit the empty braces
+
+   - Requested directly in chat: `directory /tmp/two {}` parseable as
+     `directory /tmp/two`, `import "../task2" {}` as `import "../task2"`.
+   - Parser (`source/tachy/value.d`): after a single-form key — and,
+     symmetrically, after a group-form entry key — the block is
+     optional; an end of line/EOF at statement level (`,`, `}` or a
+     newline inside a block) yields the empty table, exactly as `{ }`
+     always did. Only an EMPTY block is omittable: anything after the
+     key that is neither `{` nor `=` stays a load-time error
+     ("expected '{', '=' or end of line" / "... or a separator"), and
+     group keywords (`vars`, `hosts`, ...) still require their block.
+     Equivalence contract kept: `directories { /tmp/two }` and
+     `directory /tmp/two` are the same statement.
+   - Tests: value.d — new unittest (braceless statements and group
+     entries, trailing comment, EOF without newline) and strictness rows
+     (`directory /tmp/two mode = "0755"`, `vars { a b }`); models.d —
+     braceless `import tasks/imp_gogs` collects like the braced form.
+   - Docs: LANGUAGE.md (design bullet, new `EndOfEntry`/`Eq` grammar
+     productions, prose note, import inventory row, example), the doc
+     trio (app.d man: `group epices` shown braceless, forms sentence,
+     `import` example; README import row + language paragraph;
+     DOCUMENTATION.md language note + both import examples), and the
+     generate settings hint now spells `import "name"` without braces.
+   - DOX: root AGENTS.md Pravic equivalence bullet records the
+     omittable empty block.
+   - Verified: `dub test` 19/19 modules passed; local `--direct` smoke
+     (braceless directory/group/check parse and run); E2E on
+     testing.internal as root in bundled mode — braceless
+     `import ../gogsdata` copied under its base name, `src` from it
+     landed (mode 0755, content intact), braceless `directory` created,
+     reapply ok=3 changed=0 — VM and local scratch cleaned up.
+
+36. embed app.d help/man text blocks as compile-time imports (TODO 1)
+
+   - The 14 text enums in `source/app.d` (helpHead, commandEntries,
+     optionEntries, helpTail, manDescription, manExamples, projectsBody,
+     webuiBody, webdocBody, inventoryBody, tasksBody, compositionBody,
+     variablesBody, orderBody) are now raw files under
+     `source/assets/<name>.txt`, embedded at compile time as
+     `private immutable string X = import("assets/X.txt");` (immutable
+     module storage — one copy — instead of per-use enum literals; the
+     string quotes live unescaped in the files). `commandsBlock`/
+     `optionsBlock` stay as derived one-line concatenations;
+     `helpText`/`manText` and every consumer unchanged. No dub.json
+     change: `source` was already a stringImportPath (webui assets).
+   - No behavior change: `tachy help` (3153 bytes) and `tachy man`
+     (14100 bytes) byte-identical to before (diff-verified in steps —
+     two transcription slips in orderBody.txt caught by the diff and
+     fixed). `dub test` 19/19 modules passed.
+   - DOX: source/AGENTS.md app.d bullet (assets/*.txt embedded via
+     import()); root AGENTS.md dub.json bullet lists the new text
+     assets. TODO.md entry 1 removed.
+
+37. webdoc dark mode: one stylesheet for webdoc and webui (TODO 2)
+
+   - `source/tachy/webdoc/doc.css` deleted; `webdoc.d` now embeds the
+     console's own `webui/app.css` (`pageCss = import("tachy/webui/app.css")`)
+     and tags its pages `<body class="webdoc">`.  app.css gained a
+     webdoc section (menu, doc main, headings, code, pre, tables,
+     blockquote) written against the existing `:root` tokens and scoped
+     under `body.webdoc`/`#menu`, so the docs get the console's dark
+     theme and the console is untouched (its rules never match
+     `.webdoc` pages and vice versa: no `#menu` in the webui DOM).
+   - Verified: dub test 19/19; served both sites and asserted computed
+     styles in a browser — webdoc: body #0d1117/#e6edf3, menu
+     #161b22 + 280px, main display block/max-width 860px (grid
+     override), h1 accent underline, td 1px --border, th --bg-raised,
+     pre --bg-panel, active link accent; webui regression: main still
+     grid 280px/1fr, aside border, uppercase h2, buttons, no #menu.
+     Screenshots captured for both.
+   - Docs: webdocBody (help/man) + README web docs bullet +
+     DOCUMENTATION.md Web docs section note the shared stylesheet and
+     dark theme.  DOX: source/AGENTS.md webdoc bullet, root AGENTS.md
+     dub.json bullet (webdoc stylesheet → shared app.css).  TODO 2
+     removed.
+
+38. tests in a dedicated tests/ directory, run by silly (TODO 3)
+
+   - dub.json now has two configurations: `application`
+    (targetType executable) and `unittest` (library, sourcePaths
+    [source, tests], silly ~>1.2.0-dev.2 as its ONLY dependency — the
+    runtime binary stays dependency-free; dub.selections.json pins
+    silly).  main in app.d is guarded `version (unittest) {} else`
+    so the silly runner owns main under `dub test` (app.d itself
+    still compiles into the test build; `Cmd`, `helpText`,
+    `manText`, `parseOptions`, `commandEntries`, `optionEntries`
+    lost their `private` for tests/app.d).
+   - Every module's in-file `version (unittest)` blocks moved to
+    `tests/<module>.d` (`module tachy.tests.<name>`); fixtures moved
+    with them (writeTemp-style helpers, FakeTransport — the old
+    `tachy/modules/fake.d` is now `tests/fake.d`,
+    `tachy.tests.fake`).  Test-only internals widened to
+    `package(tachy)` (which covers tachy.tests.*): web.d
+    (Run, runJson, parseHead, splitPath, jsonEscStr, jstr,
+    parseStringObject, jsonBody, errorJson, sseFrame, ChunkSink,
+    sendAll), webdoc.d (splitSections, inlineMd, slugify, compactOf,
+    layout, DocSite, docSource, menuHtml, MdRenderer), generate.d
+    (generateTask).
+   - The extraction was scripted (drop version wrappers, de-indent
+    outside raw strings); braces in four files were mangled by a
+    string-blind repair pass and events/vars/web regenerated
+    faithfully from the git index; value.d's TOML-era index version
+    was useless, so its suite was rebuilt from session reads — two
+    parser suites (value kinds, multi-line strings) rewritten
+    against the same contract, noted in tests/value.d's header.
+   - Tests now RUN, where the old library-config runner silently
+    skipped app.d's unittests (DONE 34) — three stale assertions
+    fixed (TOML-era needles, man's indented bodies checked per line,
+    value-taking options given values in the registration loop), and
+    one real bug surfaced and fixed: `--keep-bundle` was documented
+    but never registered in parseOptions (`tachy --keep-bundle`
+    died with "Unrecognized option" — the exact regression its doc
+    comment warns about).  filemod's shared scratch dir became
+    thread-unique (silly runs threaded by default).
+   - Verified: `dub test` 123 passed / 0 failed, three threaded runs
+    + one `-- --threads 1`; `dub build` produces the executable
+    again (the configuration initially and silently built a library
+    — targetType executable added); help 3153 bytes and man md5
+    unchanged; E2E on testing.internal: `--keep-bundle apply` kept
+    the bundle ("bundle kept on vm at /tmp/tachy.XXXX", removed
+    afterwards with the target dir).
+   - DOX: source/AGENTS.md Work Guidance + Verification bullets
+    (tests/ layout, parallel-safe convention); root AGENTS.md dub.json
+    bullet (zero runtime deps; silly test-only).  TODO 3 removed.
+
+39. generate a syntax coloring for the pravic language: only
+    vim/neovim format for now (the TODO.md entry)
+
+   - New `syntax/` directory with `pravic.vim`, a Vim/Neovim syntax
+     file for Pravic built on LANGUAGE.md's grammar: all 22 directive
+     keywords with the parser's own `!KeyChar` boundary guard (a
+     `\ze` guard set — `vars-foo`, `varsite`, `var:foo` never light
+     up as keywords), bare keys/targets (a bare token followed by
+     `=`, `{`, `,`, `}` or `#` — or end of line, which is what makes
+     braceless statements like `directory /tmp/two` keys; the grammar
+     has no bare values), the TOML 1.0 value layer (four string kinds
+     with escapes and `{{ ... }}` templates contained in strings,
+     signed dec/hex/octal/binary integers with underscores, floats
+     with frac/exp plus inf/nan, booleans), `=`/`{}[]` punctuation
+     and `#` comments with TODO/FIXME. Install instructions are in
+     the file header (copy to ~/.vim/syntax/, Neovim
+     ~/.config/nvim/syntax/, plus one autocmd).
+   - Definition order is part of the contract: same-position ties go
+     to the later item and `syn keyword` beats matches, so pravicKey
+     is defined first and keywords last — `8080`, `true` and `inf`
+     win their ties against the key match, and `vars { var = 1 }`
+     colors `var` as a keyword (documented, grammar-legal edge).
+   - Verified headless in both vim 9.2 and nvim 0.12.4: 102 synID
+     assertions (`vim -Nu NONE -es` / `nvim --headless`) over a
+     sample exercising every construct — keywords in both forms,
+     guard negatives, every number form, all four string kinds,
+     escapes `\t`/`\"`/`\u0041`, templates at start/middle/end,
+     trailing and full-line comments, braceless statements, path and
+     colon keys, multi-line strings — 102/102 in each editor. The
+     link chain was dumped separately: every pravic* group resolves
+     through `hi def link` to its standard group with colors under
+     `syntax enable` + colorscheme default. TOhtml and pty screen
+     capture stay partial under -u NONE (vim headless cterm→CSS
+     quirk) — not counted as proof.
+   - Docs: README "Editor syntax" section; DOCUMENTATION.md new
+     "## Editor syntax" section (webdoc serves it as its own page).
+     The doc trio's app.d --help/man half was deliberately not
+     touched: no CLI behavior changed, the syntax file is a repo
+     artifact, not part of the binary's interface. LANGUAGE.md
+     untouched (it specifies the language, not tooling).
+   - DOX: new `syntax/AGENTS.md` (lockstep-with-LANGUAGE.md contract,
+     the ordering rule, no-other-formats rule, empty-by-policy
+     Verification section); root AGENTS.md Project bullet + Child
+     DOX Index entry. TODO.md entry removed.

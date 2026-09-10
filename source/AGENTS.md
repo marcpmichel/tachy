@@ -15,21 +15,32 @@ This doc owns the source tree's structure and conventions;
 - Layering, top-down:
   - `app.d` — CLI surface only (command word: apply/check/generate/
     webui/webdoc/man/help; `help` prints the short form, `man` the
-    full manual, man-page style — shared text blocks, one source);
-    delegates to `runner.d`, `generate.d`,
+    full manual, man-page style — the text blocks live in
+    `assets/*.txt` and are embedded with `import()`, one source for
+    both outputs); delegates to `runner.d`, `generate.d`,
     `web.d` and `webdoc.d`
   - `runner.d` — per-host orchestration; direct mode and bundled mode (default: the tasks file's parent directory is the project, copied with the tachy binary to each host and run there with `--direct --events`); the job loop produces `JobEvent`s consumed by one renderer
-  - `models.d` — tasks-file composition (`[includes]` before own jobs, `[apply]` after), the fixed per-file job order, duplicate-target and cycle detection, `[before.G]`/`[after.G]` hooks, `[import]` collection with settings search paths (bundled-mode external files; composition entries under an import landing missing locally defer to the host)
+  - `models.d` — tasks-file composition: Pravic statements in source
+    order (`include` composes its file at the statement's position;
+    vars/import statements are file-wide, not jobs), duplicate-target
+    and cycle detection, `import` collection with settings search
+    paths (bundled-mode external files; includes under an import
+    landing missing locally defer to the host)
   - `events.d` — execution events (producer/consumer split): `JobEvent` + builders, `foldCounters`, `TextRenderer` (the one renderer for both modes), NDJSON `eventLine`/`parseEventLine` for the stream between inner runs and the controller
   - `vars.d` — variable scopes, `{ env, default, from }` resolution (environment or dotenv file), `{ age }` secret markers (controller-side age decryption, inventory vars only), `{{ expr }}` templating
-  - `value.d` — `Val` trees, `loadToml` plus its preprocessing passes (`joinInlineTables`, `quotePathKeys`), validated accessors
+  - `value.d` — `Val` trees, the Pravic parser (`loadPractic` →
+    ordered statements, `file: line N:` errors, duplicate-key
+    detection) and the validated accessors; the grammar is specified
+    in the root `LANGUAGE.md`
   - `transport.d` — `local` and `ssh` transports (abstract class; `runStreaming` delivers output lines live — POSIX `read`, not buffered `rawRead`, so streams are not batched), `shQuote`, stat helpers
-  - `project.d` — project bundles (project copy plus `[import]` sources under their base name), generated one-host inventory, Val → TOML serialization
+  - `project.d` — project bundles (project copy plus `import` sources
+    under their base name), generated one-host inventory, Val → Pravic
+    serialization
   - `generate.d` — the `generate` command: age key pairs (`age-keygen`),
     sample tasks/settings files (controller-side scaffolding)
-  - `settings.d` — the optional settings.toml (discovery: `--settings`,
-    `TACHY_SETTINGS`, ./settings.toml, XDG; `[imports]` search paths
-    and `[webui]` projects, strict validation)
+  - `settings.d` — the optional settings.pravic (discovery: `--settings`,
+    `TACHY_SETTINGS`, ./settings.pravic, XDG; `imports` search paths
+    and `webui` projects, strict validation)
   - `web.d` — the `webui` command AND the shared ad-hoc HTTP layer:
     a tiny server (thread per connection, `Connection: close`, a
     Router with `:param` segments — `Request`/`Response`/`Router`/
@@ -48,25 +59,27 @@ This doc owns the source tree's structure and conventions;
     holds the intro), `###` become pages; a two-pass split registers
     every anchor first so internal links rewrite across pages; a
     small markdown-subset renderer (fences, pipe tables, bullet
-    lists, inline code/bold/italic/links) with `webdoc/doc.css`
-    embedded like the webui assets; read-only, same
-    `--address`/`--port` as the webui
+    lists, inline code/bold/italic/links), styled by the webui's own
+    `app.css` (one stylesheet for both sites; the doc rules scope
+    under `body.webdoc`, so the docs share the console's dark theme);
+    read-only, same `--address`/`--port` as the webui
 - Errors carry file context (`"<file>: <section> \"<key>\": ...`) and are raised at load time wherever possible, before any host is contacted
 - The event stream (`eventLine`/`parseEventLine`) is the internal protocol between inner runs and the controller (and the webui, which spawns `--events` runs); changes must round-trip and keep `--direct` and bundled output identical — byte-compare both before/after any renderer or event change
 - Deterministic everywhere: job lists sorted by key, directives processed sorted by path, hosts in selection order; per-host failure isolation (a failing host is dropped, others continue, exit 1)
 - Anything user-visible ships with its three doc updates (`--help` in `app.d`, `README.md`, `DOCUMENTATION.md`) and unit tests
 
-# Work Guidance
+- Follow the existing file's style: module doc comment stating purpose and semantics, private helpers below; the module's unit tests live in `tests/<module>.d` (module `tachy.tests.<name>`, fixtures local to the test file) — production modules carry no unittests
 
-- Follow the existing file's style: module doc comment stating purpose and semantics, private helpers below, `version (unittest)` blocks with local `writeTemp`-style fixtures at the end
 - `@trusted` only where the boundary demands it (file/process IO wrappers); keep pure/@safe elsewhere
 - No new abstractions around `Val`/`Job` — extend the existing accessors (`optString`, `optTable`, `checkKeys`) and registries instead
-- `loadToml` may only gain preprocessing that is exactly equivalent to valid TOML (see `joinInlineTables`, `quotePathKeys`); anything ambiguous is left for the parser to reject
+- the Pravic parser follows the root `LANGUAGE.md` grammar exactly; one
+  statement per line, `file: line N:` error context, and duplicate
+  directive keys within a file are parse errors (composition-wide
+  duplicate targets stay loader errors)
 - Linux/amd64 only for bundled mode (the controller copies its own executable); hosts need GNU coreutils + tar
 
-# Verification
+- `dub build` compiles; `dub test` runs the test suite in `tests/` through the silly runner (must pass). The runner is threaded by default: tests must be parallel-safe — unique scratch directories, no cross-test shared state (see `freshDir` in `tests/filemod.d`)
 
-- `dub build` compiles; `dub test` runs all module unittests (must pass, 18 modules)
 
 # Child DOX Index
 

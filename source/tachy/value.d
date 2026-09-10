@@ -1,15 +1,29 @@
 module tachy.value;
 
 /**
- * Runtime value used throughout tachy: a simplified TOML value.
+ * Runtime value used throughout tachy: a simplified structured-data value.
  *
- * All configuration files (inventory, requirements, tasks) are parsed with the
- * TOML library and immediately converted to `Val` trees, so that the rest of
- * the code never depends on the TOML library's types.  Datetime values are
- * rejected: they have no use in configuration management here.
+ * Configuration files (inventory, tasks, settings) are written in Pravic —
+ * tachy's own configuration language, specified in `LANGUAGE.md` — and
+ * parsed into `Val` trees plus an ordered statement list, so the rest of
+ * the code never sees the parser's own types.  Datetime values do not
+ * exist in Pravic; there is no use for them in configuration management.
+ *
+ * A file is a sequence of statements, one per line:
+ *
+ *     vars { A = "x", port = 8080 }     # group form (plural directives)
+ *     var A = "x"                       # single form
+ *     file /etc/app.conf { mode = "0644" }
+ *     check "name is unique" { run = "true" }
+ *
+ * Group-form blocks expand to one statement per entry, in source order;
+ * a single-form statement names its key inline.  The canonical `kind` is
+ * the plural directive ("vars", "files", ...) or the directive itself
+ * ("include", "check", "compose", "import").  Values are strings,
+ * integers, floats, booleans, arrays and tables; block entries may be
+ * separated by commas and/or newlines (trailing commas allowed).
  */
-import toml : parseTOML, TOMLDocument, TOMLValue, TOML_TYPE, TOMLException;
-
+import std.array : Appender;
 import tachy.errors;
 
 struct Val
@@ -26,10 +40,10 @@ struct Val
     Val[] array_;
     Val[string] table_;
 
-    this(string v) { kind = Kind.string_; str_ = v; }
-    this(long v) { kind = Kind.integer_; integer_ = v; }
-    this(double v) { kind = Kind.float_; float_ = v; }
-    this(bool v) { kind = Kind.boolean_; boolean_ = v; }
+    this(string v) @safe pure nothrow { kind = Kind.string_; str_ = v; }
+    this(long v) @safe pure nothrow { kind = Kind.integer_; integer_ = v; }
+    this(double v) @safe pure nothrow { kind = Kind.float_; float_ = v; }
+    this(bool v) @safe pure nothrow { kind = Kind.boolean_; boolean_ = v; }
 
     /// How this value substitutes into a `{{ ... }}` template.
     string scalarToString() const
@@ -89,353 +103,822 @@ struct Val
     }
 }
 
-/// Convert a parsed TOML value into a `Val` tree.
-Val toVal(in TOMLValue v)
+/// One top-level statement, in source order.  Group-form blocks expand
+/// to one statement per entry (the entry's line is kept).
+struct PracticStmt
 {
-    switch (v.type)
-    {
-        case TOML_TYPE.STRING: return Val(v.str);
-        case TOML_TYPE.INTEGER: return Val(v.integer);
-        case TOML_TYPE.FLOAT: return Val(v.floating);
-        case TOML_TYPE.TRUE:
-        case TOML_TYPE.FALSE: return Val(v.boolean);
-        case TOML_TYPE.ARRAY:
-        {
-            Val r;
-            r.kind = Val.Kind.array_;
-            foreach (const TOMLValue e; v.array)
-                r.array_ ~= toVal(e);
-            return r;
-        }
-        case TOML_TYPE.TABLE:
-        {
-            Val r;
-            r.kind = Val.Kind.table_;
-            foreach (string k, const TOMLValue e; v.table)
-                r.table_[k] = toVal(e);
-            return r;
-        }
-        default:
-            throw new TachyError("datetime values are not supported in tachy configuration files");
-    }
+    string kind;   // canonical directive: "vars", "files", ..., "include", "check", "compose", "import", "hosts", "imports", "webui"
+    string key;    // the entry's key (target, variable, path, ...)
+    Val value;     // the entry's value: parameter table (block) or scalar (`= value`)
+    size_t line;   // 1-based source line of the entry, for error context
 }
 
-/// Parse a TOML file into a `Val` table, wrapping errors with the file path.
-/// Multi-line inline tables are accepted (see `joinInlineTables`) and so
-/// are unquoted path keys in table headers (see `quotePathKeys`).
-Val loadToml(string path)
+/// A parsed Pravic file: its statements, in source order.
+struct PracticDoc
+{
+    PracticStmt[] stmts;
+}
+
+/// Parse a Pravic file.  Errors carry the file path and line:
+/// `"<file>: line N: ..."`.  Duplicate keys (within a block, or the same
+/// directive key stated twice) are load-time errors naming both lines.
+PracticDoc loadPractic(string path)
 {
     import std.file : readText;
     string src;
     try src = readText(path);
     catch (Exception e)
         throw new TachyError("cannot read '" ~ path ~ "': " ~ e.msg);
-
-    try src = joinInlineTables(src);
-    catch (TachyError e)
-        throw new TachyError(path ~ ": " ~ e.msg);
-    src = quotePathKeys(src);
-
-    TOMLDocument doc;
-    try doc = parseTOML(src);
-    catch (TOMLException e)
-        throw new TachyError(path ~ ": " ~ e.msg);
-
-    Val root;
-    root.kind = Val.Kind.table_;
-    foreach (string k, const TOMLValue e; doc.table)
-        root.table_[k] = toVal(e);
-    return root;
+    return parsePractic(src, path);
 }
 
-/// TOML 1.0 forbids newlines inside inline tables, so the multi-line
-/// spelling of a keyed entry (`"name" = {` ... `}` across lines) would
-/// be rejected by the parser even though it is exactly equivalent to
-/// the sub-table spelling.  This pass rewrites newlines (and comments)
-/// inside unclosed inline tables into spaces, making the two spellings
-/// interchangeable.  It is aware of strings (so braces and `#` inside
-/// them are ignored) and reports an unterminated inline table with the
-/// line where it was opened.
-string joinInlineTables(string src) @safe pure
+// ---------------------------------------------------------------------------
+// The parser: a hand-written recursive descent implementing LANGUAGE.md's
+// grammar one production at a time.  One statement per line; inside braces
+// and brackets newlines are transparent and entries separate by commas
+// and/or newlines; unquoted keys are opaque strings (no dotted paths).
+// ---------------------------------------------------------------------------
+
+private struct Parser
 {
-    import std.algorithm.searching : canFind;
-    import std.array : appender;
-    import std.conv : text;
-    auto app = appender!string;
-    int depth;
-    size_t openedAtLine = 1;
+    string src;
+    string path;
+    size_t i;
     size_t line = 1;
-    size_t i = 0;
-    char prev; // last significant character emitted
-    while (i < src.length)
+
+    private TachyError fail(string msg) @safe pure
     {
-        const char c = src[i];
-
-        // Strings are copied verbatim (braces and '#' inside do not count).
-        if (c == '"' || c == '\'')
-        {
-            const size_t start = i;
-            i = skipTomlString(src, i);
-            app.put(src[start .. i]);
-            line += canFind(src[start .. i], '\n') ? 1 : 0;
-            prev = src[i - 1];
-            continue;
-        }
-
-        // Comments run to the end of the line; inside an inline table
-        // they disappear along with the newline.
-        if (c == '#')
-        {
-            size_t e = i;
-            while (e < src.length && src[e] != '\n')
-                e++;
-            if (depth == 0)
-            {
-                app.put(src[i .. e]);
-                prev = '#';
-            }
-            i = e;
-            continue;
-        }
-
-        if (c == '{')
-        {
-            if (depth == 0)
-                openedAtLine = line;
-            depth++;
-        }
-        else if (c == '}')
-            depth--;
-        else if (c == '\n' && depth > 0)
-        {
-            // Join the lines: inline-table pairs are separated by a
-            // comma, so insert one only where a separator is needed
-            // (after a complete value, before another key — not right
-            // after '{', ',', '=' or right before the closing '}').
-            line++;
-            i++;
-            size_t n = i;
-            while (n < src.length && (src[n] == ' ' || src[n] == '\t' || src[n] == '\r'))
-                n++;
-            const bool afterValue = prev && prev != '{' && prev != ',' && prev != '=' && prev != '[';
-            const bool beforeKey = n < src.length && src[n] != '}';
-            app.put(afterValue && beforeKey ? ", " : " ");
-            continue;
-        }
-
-        if (c == '\n')
-            line++;
-        if (c != ' ' && c != '\t' && c != '\r')
-            prev = c;
-        app.put(c);
-        i++;
+        import std.conv : text;
+        return new TachyError(path ~ ": line " ~ text(line) ~ ": " ~ msg);
     }
 
-    if (depth > 0)
-        throw new TachyError("unterminated inline table (missing '}') opened around line "
-            ~ text(openedAtLine));
-    return app.data;
-}
+    private bool atEnd() @safe pure nothrow const { return i >= src.length; }
 
-/// Return the index just past the TOML string starting at `i`.
-private size_t skipTomlString(string src, size_t i) @safe pure
-{
-    import std.algorithm.searching : startsWith;
-    if (src[i .. $].startsWith(`"""`))
+    private char cur() @safe pure const
     {
-        i += 3;
-        while (i < src.length)
+        return i < src.length ? src[i] : '\0';
+    }
+
+    private char charAfter(size_t n) @safe pure const
+    {
+        return i + n < src.length ? src[i + n] : '\0';
+    }
+
+    private bool lookingAt(string lit) @safe pure const
+    {
+        return src.length - i >= lit.length && src[i .. i + lit.length] == lit;
+    }
+
+    private void advance(size_t n = 1) @safe pure nothrow
+    {
+        foreach (size_t k; 0 .. n)
         {
-            if (src[i .. $].startsWith(`"""`))
-                return i + 3;
+            if (i < src.length && src[i] == '\n')
+                line++;
+            i++;
+        }
+    }
+
+    /// Horizontal whitespace and comments; never crosses a newline.
+    private void hs() @safe pure
+    {
+        while (!atEnd())
+        {
+            if (src[i] == ' ' || src[i] == '\t' || src[i] == '\r')
+                i++;
+            else if (src[i] == '#')
+            {
+                while (!atEnd() && src[i] != '\n')
+                    i++;
+            }
+            else
+                break;
+        }
+    }
+
+    /// Full skip: blank/comment lines and horizontal whitespace.
+    private void ws() @safe pure
+    {
+        while (!atEnd())
+        {
+            hs();
+            if (!atEnd() && src[i] == '\n')
+                advance();
+            else
+                break;
+        }
+    }
+
+    private void expect(char c, string what) @safe pure
+    {
+        if (cur() != c)
+            throw fail("expected '" ~ c ~ "' " ~ what);
+        advance();
+    }
+
+    // -- statements -----------------------------------------------------------
+
+    /// The statement keywords, split by form.  A keyword must be followed
+    /// by a character that cannot continue a key, so `varsite` is an
+    /// unknown directive, not `var site`, and long/short spellings never
+    /// collide.  Order within a set does not matter (the guard decides).
+    private static immutable string[] groupKeywords =
+        ["vars", "files", "directories", "packages", "groups",
+         "users", "services", "hosts", "imports", "webui"];
+    private static immutable string[] singleKeywords =
+        ["var", "file", "directory", "package", "group", "user",
+         "service", "host", "include", "check", "compose", "import"];
+
+    /// Canonical directive names for the single-form keywords (group-form
+    /// keywords are their own canonical name).
+    private static string canonical(string kw) @safe pure nothrow
+    {
+        switch (kw)
+        {
+            case "var": return "vars";
+            case "file": return "files";
+            case "directory": return "directories";
+            case "package": return "packages";
+            case "group": return "groups";
+            case "user": return "users";
+            case "service": return "services";
+            case "host": return "hosts";
+            default: return kw; // include, check, compose, import
+        }
+    }
+
+    private bool isKeyChar(char c) @safe pure nothrow const
+    {
+        if (c <= ' ' || c == 0x7F)
+            return false; // whitespace and control characters
+        foreach (bad; "\"'{}[]=,#\\")
+            if (c == bad)
+                return false;
+        return true;
+    }
+
+    private PracticStmt[] parseFile() @safe pure
+    {
+        PracticStmt[] stmts;
+        size_t[string] firstSeen;
+        ws();
+        while (!atEnd())
+        {
+            hs();
+            if (atEnd())
+                break;
+            auto fresh = parseStatement();
+            foreach (ref s; fresh)
+            {
+                const string dedup = s.kind ~ '\0' ~ s.key;
+                if (auto first = dedup in firstSeen)
+                    throw new TachyError(path ~ ": line " ~ toText(s.line)
+                        ~ ": duplicate " ~ s.kind ~ " \"" ~ s.key
+                        ~ "\" (first stated at line " ~ toText(*first) ~ ")");
+                firstSeen[dedup] = s.line;
+                stmts ~= s;
+            }
+            // A statement ends at the end of its line; blank and comment
+            // lines may follow before the next one.
+            size_t newlines;
+            hs();
+            while (!atEnd() && src[i] == '\n')
+            {
+                advance();
+                newlines++;
+                hs();
+            }
+            if (atEnd())
+                break;
+            if (newlines == 0)
+                throw fail("expected end of line after statement");
+        }
+        return stmts;
+    }
+
+    /// Group-form statements expand to one statement per block entry.
+    private PracticStmt[] parseStatement() @safe pure
+    {
+        const size_t stmtLine = line;
+        foreach (immutable kw; groupKeywords)
+            if (lookingAt(kw) && !isKeyChar(charAfter(kw.length)))
+                return expandGroup(kw);
+        foreach (immutable kw; singleKeywords)
+            if (lookingAt(kw) && !isKeyChar(charAfter(kw.length)))
+                return [parseSingle(kw, stmtLine)];
+
+        // Not a known directive: name the word for a useful error.
+        size_t e = i;
+        while (e < src.length && src[e] != '\n' && src[e] != '{' && src[e] != '=')
+            e++;
+        import std.string : strip;
+        const string word = src[i .. e].strip();
+        throw fail("unknown directive '" ~ word ~ "'");
+    }
+
+    private PracticStmt[] expandGroup(string kw) @safe pure
+    {
+        advance(kw.length);
+        hs();
+        if (cur() != '{')
+            throw fail("directive '" ~ kw ~ "' opens a block: expected '{'");
+        PracticStmt[] out_;
+        foreach (ref entry; parseBlockEntries())
+        {
+            PracticStmt s;
+            s.kind = kw;
+            s.key = entry.key;
+            s.value = entry.value;
+            s.line = entry.line;
+            out_ ~= s;
+        }
+        return out_;
+    }
+
+    private PracticStmt parseSingle(string kw, size_t stmtLine) @safe pure
+    {
+        advance(kw.length);
+        hs();
+        const size_t keyLine = line;
+        const string key = parseKey("a key after '" ~ kw ~ "'");
+        hs();
+        Val value;
+        if (cur() == '{')
+            value = tableOf(parseBlockEntries());
+        else if (cur() == '=')
+        {
+            advance();
+            ws();
+            value = parseValue();
+        }
+        else if (cur() == '\n' || atEnd())
+            // No attributes: an instruction whose block would be empty
+            // may omit the braces (`directory /tmp/two`).
+            value = emptyTable();
+        else
+            throw fail("expected '{', '=' or end of line after '"
+                ~ kw ~ " " ~ key ~ "'");
+
+        PracticStmt s;
+        s.kind = canonical(kw);
+        s.key = key;
+        s.value = value;
+        s.line = keyLine;
+        return s;
+    }
+
+    // -- blocks and entries ----------------------------------------------------
+
+    private struct Entry
+    {
+        string key;
+        Val value;
+        size_t line;
+    }
+
+    /// `{ entries }` in source order.  Entries separate by commas and/or
+    /// newlines; a trailing comma is allowed; the block may span lines.
+    private Entry[] parseBlockEntries() @safe pure
+    {
+        expect('{', "to open a block");
+        Entry[] entries;
+        ws();
+        while (true)
+        {
+            if (atEnd())
+                throw fail("unterminated block (missing '}')");
+            if (cur() == '}')
+            {
+                advance();
+                return entries;
+            }
+            Entry e;
+            e.line = line;
+            e.key = parseKey("a key");
+            hs();
+            if (cur() == '{')
+                e.value = tableOf(parseBlockEntries());
+            else if (cur() == '=')
+            {
+                advance();
+                ws();
+                e.value = parseValue();
+            }
+            else if (cur() == '}' || cur() == ',' || cur() == '\n' || atEnd())
+                // Same rule as statements: an entry with no attributes
+                // may omit the braces (`hosts { web1 }`).
+                e.value = emptyTable();
+            else
+                throw fail("expected '{', '=' or a separator after key '"
+                    ~ e.key ~ "'");
+            foreach (const ref prev; entries)
+                if (prev.key == e.key)
+                    throw new TachyError(path ~ ": line " ~ toText(e.line)
+                        ~ ": duplicate key '" ~ e.key ~ "' in this block"
+                        ~ " (first set at line " ~ toText(prev.line) ~ ")");
+            entries ~= e;
+
+            // Separator: a comma and/or at least one newline; a trailing
+            // separator before '}' is fine.
+            size_t newlines;
+            hs();
+            while (!atEnd() && src[i] == '\n')
+            {
+                advance();
+                newlines++;
+                hs();
+            }
+            bool comma = false;
+            if (cur() == ',')
+            {
+                advance();
+                comma = true;
+                hs();
+                while (!atEnd() && src[i] == '\n')
+                {
+                    advance();
+                    newlines++;
+                    hs();
+                }
+            }
+            if (cur() == '}')
+                continue; // closing handled at the loop top
+            if (atEnd())
+                throw fail("unterminated block (missing '}')");
+            if (!comma && newlines == 0)
+                throw fail("expected ',' or a newline between entries after '"
+                    ~ e.key ~ "'");
+        }
+    }
+
+    private Val tableOf(in Entry[] entries) @trusted pure
+    {
+        Val r;
+        r.kind = Val.Kind.table_;
+        foreach (const ref e; entries)
+            r.table_[e.key] = cast(Val) e.value;
+        return r;
+    }
+
+    private static Val emptyTable() @safe pure nothrow
+    {
+        Val r;
+        r.kind = Val.Kind.table_;
+        return r;
+    }
+
+    // -- keys --------------------------------------------------------------------
+
+    /// Quoted (single-line) or bare key.  Bare keys are opaque: any
+    /// characters except whitespace, structural punctuation, quotes, `#`,
+    /// `\` and control characters — `/etc/nginx.conf` and `apt:nginx`
+    /// need no quotes.
+    private string parseKey(string what) @safe pure
+    {
+        if (cur() == '"')
+            return parseBasicString();
+        if (cur() == '\'')
+            return parseLiteralString();
+        size_t e = i;
+        while (e < src.length && isKeyChar(src[e]))
+            e++;
+        if (e == i)
+            throw fail("expected " ~ what);
+        const string key = src[i .. e];
+        i = e;
+        return key;
+    }
+
+    // -- values --------------------------------------------------------------------
+
+    private Val parseValue() @safe pure
+    {
+        switch (cur())
+        {
+            case '"':
+                if (lookingAt(`"""`))
+                    return Val(parseMultilineBasic());
+                return Val(parseBasicString());
+            case '\'':
+                if (lookingAt("'''"))
+                    return Val(parseMultilineLiteral());
+                return Val(parseLiteralString());
+            case '[':
+                return parseArray();
+            case '{':
+                return tableOf(parseBlockEntries());
+            case 't':
+            case 'f':
+                return parseBoolean();
+            case '+':
+            case '-':
+            case '0': .. case '9':
+                return parseNumber();
+            default:
+                throw fail("expected a value");
+        }
+    }
+
+    private Val parseBoolean() @safe pure
+    {
+        if (lookingAt("true"))
+        {
+            advance(4);
+            return Val(true);
+        }
+        if (lookingAt("false"))
+        {
+            advance(5);
+            return Val(false);
+        }
+        throw fail("expected a value");
+    }
+
+    private Val parseNumber() @safe pure
+    {
+        const size_t start = i;
+        bool neg;
+        if (cur() == '+' || cur() == '-')
+        {
+            neg = cur() == '-';
+            advance();
+        }
+        // Special floats.
+        if ((lookingAt("inf") || lookingAt("nan")) && !isKeyChar(charAfter(3)))
+        {
+            const bool isInf = src[i] == 'i';
+            advance(3);
+            if (isInf)
+                return Val(neg ? -double.infinity : double.infinity);
+            return Val(neg ? -double.nan : double.nan);
+        }
+        // Radix prefixes are integers.
+        if (src.length - i >= 2 && cur() == '0'
+                && (src[i + 1] == 'x' || src[i + 1] == 'o' || src[i + 1] == 'b'))
+        {
+            const char radix = src[i + 1];
+            advance(2);
+            long v;
+            size_t digits;
+            while (!atEnd() && (isRadixDigit(src[i], radix) || src[i] == '_'))
+            {
+                if (src[i] != '_')
+                {
+                    v = v * radixValue(radix) + digitValue(src[i]);
+                    digits++;
+                }
+                advance();
+            }
+            if (digits == 0)
+                throw fail("expected digits after the number prefix");
+            if (!atEnd() && isKeyChar(src[i]))
+                throw fail("invalid characters in number '" ~ src[start .. i] ~ "'");
+            return Val(neg ? -v : v);
+        }
+        // Decimal digits (with underscores) — integer or float.
+        long mant;
+        size_t digits;
+        while (!atEnd() && (src[i] >= '0' && src[i] <= '9' || src[i] == '_'))
+        {
+            if (src[i] != '_')
+            {
+                mant = mant * 10 + (src[i] - '0');
+                digits++;
+            }
+            advance();
+        }
+        if (digits == 0)
+            throw fail("expected a value");
+        const bool frac = cur() == '.';
+        const bool exp = cur() == 'e' || cur() == 'E';
+        if (!frac && !exp)
+        {
+            const size_t firstDigit = start + ((src[start] == '+' || src[start] == '-') ? 1 : 0);
+            if (digits > 1 && src[firstDigit] == '0')
+                throw fail("integers may not have leading zeros");
+            if (!atEnd() && isKeyChar(src[i]))
+                throw fail("invalid characters in number '" ~ src[start .. i] ~ "'");
+            return Val(neg ? -mant : mant);
+        }
+        // Float: rescan from the start so the value builds exactly.
+        double v = 0;
+        size_t j = start;
+        if (src[j] == '+' || src[j] == '-')
+            j++;
+        for (; j < src.length && (src[j] >= '0' && src[j] <= '9' || src[j] == '_'); j++)
+            if (src[j] != '_')
+                v = v * 10 + (src[j] - '0');
+        if (j < src.length && src[j] == '.')
+        {
+            j++;
+            double scale = 0.1;
+            for (; j < src.length && (src[j] >= '0' && src[j] <= '9' || src[j] == '_'); j++)
+            {
+                if (src[j] != '_')
+                {
+                    v += (src[j] - '0') * scale;
+                    scale /= 10;
+                }
+            }
+            if (scale == 0.1)
+                throw fail("a fractional part needs digits after '.'");
+        }
+        if (j < src.length && (src[j] == 'e' || src[j] == 'E'))
+        {
+            j++;
+            bool eneg;
+            if (j < src.length && (src[j] == '+' || src[j] == '-'))
+            {
+                eneg = src[j] == '-';
+                j++;
+            }
+            long ep;
+            size_t ed;
+            for (; j < src.length && src[j] >= '0' && src[j] <= '9'; j++)
+            {
+                ep = ep * 10 + (src[j] - '0');
+                ed++;
+            }
+            if (ed == 0)
+                throw fail("an exponent needs digits");
+            import std.math : pow;
+            v *= pow(10.0, cast(double) (eneg ? -ep : ep));
+        }
+        if (j < src.length && isKeyChar(src[j]))
+            throw fail("invalid characters in number '" ~ src[start .. j] ~ "'");
+        i = j;
+        return Val(neg ? -v : v);
+    }
+
+
+    private static bool isRadixDigit(char c, char radix) @safe pure nothrow
+    {
+        switch (radix)
+        {
+            case 'x': return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F';
+            case 'o': return c >= '0' && c <= '7';
+            case 'b': return c == '0' || c == '1';
+            default: assert(0);
+        }
+    }
+
+    private static long radixValue(char radix) @safe pure nothrow
+    {
+        return radix == 'x' ? 16 : radix == 'o' ? 8 : 2;
+    }
+
+    private static long digitValue(char c) @safe pure nothrow
+    {
+        if (c <= '9')
+            return c - '0';
+        if (c <= 'F')
+            return c - 'A' + 10;
+        return c - 'a' + 10;
+    }
+
+    private Val parseArray() @safe pure
+    {
+        expect('[', "to open an array");
+        Val r;
+        r.kind = Val.Kind.array_;
+        ws();
+        if (cur() == ']')
+        {
+            advance();
+            return r;
+        }
+        while (true)
+        {
+            ws();
+            r.array_ ~= parseValue();
+            ws();
+            if (cur() == ',')
+            {
+                advance();
+                ws();
+                if (cur() == ']') // trailing comma
+                    break;
+                continue;
+            }
+            if (cur() == ']')
+                break;
+            throw fail("expected ',' or ']' between array elements");
+        }
+        if (atEnd() || cur() != ']')
+            throw fail("unterminated array (missing ']')");
+        advance();
+        return r;
+    }
+
+    // -- strings ---------------------------------------------------------------------
+
+    private string parseBasicString() @safe pure
+    {
+        expect('"', "to open a string");
+        import std.array : appender;
+        auto app = appender!string;
+        while (true)
+        {
+            if (atEnd() || src[i] == '\n')
+                throw fail("unterminated string");
+            if (src[i] == '"')
+            {
+                advance();
+                return app.data;
+            }
             if (src[i] == '\\')
-                i++; // skip the escaped character (including \")
-            i++;
-        }
-        return i; // unterminated: the parser reports it
-    }
-    if (src[i .. $].startsWith("'''"))
-    {
-        i += 3;
-        while (i < src.length && !src[i .. $].startsWith("'''"))
-            i++;
-        return i < src.length ? i + 3 : i;
-    }
-
-    const char quote = src[i];
-    i++;
-    while (i < src.length)
-    {
-        if (quote == '"' && src[i] == '\\')
-        {
-            i += 2;
-            continue;
-        }
-        if (src[i] == quote)
-            return i + 1;
-        if (src[i] == '\n')
-            return i; // unterminated single-line string: parser reports
-        i++;
-    }
-    return i;
-}
-
-/// TOML bare keys may only contain letters, digits, `_` and `-`, so a
-/// path target written the natural way — `[files./tmp/myfile.txt]` —
-/// is formally invalid.  This pass rewrites table headers, wrapping
-/// the key in double quotes: `[files./tmp/myfile.txt]` becomes
-/// `[files."/tmp/myfile.txt"]`, exactly equivalent to the documented
-/// spellings.  The first segment that is neither a bare key nor
-/// already quoted is taken as the start of the key: it and everything
-/// up to the end of the header merge into one quoted key, because the
-/// dots inside a path belong to the path.  Segments that would need
-/// escaping (embedded quotes, backslashes, whitespace, control
-/// characters) are left untouched, so genuinely broken headers still
-/// get the parser's own error.  Only `[header]` and `[[header]]` lines
-/// are considered; comments, strings and everything else are copied
-/// verbatim.
-string quotePathKeys(string src) @safe pure
-{
-    import std.array : appender;
-    auto app = appender!string;
-    size_t i = 0;
-    bool lineStart = true; // only whitespace emitted on this line so far
-    while (i < src.length)
-    {
-        const char c = src[i];
-        if (c == '\n')
-        {
-            app.put(c);
-            i++;
-            lineStart = true;
-            continue;
-        }
-        if (lineStart && (c == ' ' || c == '\t' || c == '\r'))
-        {
-            app.put(c);
-            i++;
-            continue;
-        }
-        if (lineStart && c == '[')
-        {
-            const size_t openLen = (i + 1 < src.length && src[i + 1] == '[') ? 2 : 1;
-            size_t j = i + openLen;
-            while (j < src.length && src[j] != ']' && src[j] != '\n')
             {
-                if (src[j] == '"' || src[j] == '\'')
-                    j = skipTomlString(src, j);
-                else
+                advance();
+                parseEscape(app);
+                continue;
+            }
+            app.put(src[i]);
+            advance();
+        }
+    }
+
+    private string parseLiteralString() @safe pure
+    {
+        expect('\'', "to open a string");
+        size_t e = i;
+        while (e < src.length && src[e] != '\'' && src[e] != '\n')
+            e++;
+        if (e == src.length || src[e] != '\'')
+            throw fail("unterminated string");
+        const string s = src[i .. e];
+        advance(e - i + 1);
+        return s;
+    }
+
+    private string parseMultilineBasic() @safe pure
+    {
+        advance(3);
+        // A newline immediately after the opening quotes is trimmed.
+        if (cur() == '\r')
+            advance();
+        if (cur() == '\n')
+            advance();
+        import std.array : appender;
+        auto app = appender!string;
+        while (true)
+        {
+            if (atEnd())
+                throw fail("unterminated multi-line string");
+            if (src[i] == '"')
+            {
+                // TOML rule: a run of quotes closes at its last trio; one
+                // or two extra quotes before it belong to the content.
+                size_t run = 0;
+                while (i + run < src.length && src[i + run] == '"')
+                    run++;
+                if (run < 3)
+                {
+                    foreach (size_t k; 0 .. run)
+                        app.put('"');
+                    advance(run);
+                    continue;
+                }
+                if (run > 5)
+                    throw fail("too many consecutive '\"' — escape them");
+                foreach (size_t k; 0 .. run - 3)
+                    app.put('"');
+                advance(run);
+                return app.data;
+            }
+            if (src[i] == '\\')
+            {
+                // A backslash at end of line trims all whitespace up to
+                // the next non-whitespace character.
+                size_t j = i + 1;
+                while (j < src.length && (src[j] == ' ' || src[j] == '\t' || src[j] == '\r'))
                     j++;
-            }
-            if (j < src.length && src[j] == ']')
-            {
-                app.put(src[i .. i + openLen]);
-                app.put(quoteHeaderKeys(src[i + openLen .. j]));
-                app.put(']');
-                i = j + 1;
-                lineStart = false;
+                if (j < src.length && src[j] == '\n')
+                {
+                    j++;
+                    while (j < src.length && (src[j] == ' ' || src[j] == '\t'
+                            || src[j] == '\r' || src[j] == '\n'))
+                        j++;
+                    line += countNewlines(src[i .. j]);
+                    i = j;
+                    continue;
+                }
+                advance();
+                parseEscape(app);
                 continue;
             }
-            // No closing ']' on the line: not a table header; the
-            // parser reports it.
+            app.put(src[i]);
+            advance();
         }
-        if (c == '"' || c == '\'')
-        {
-            // Strings (including multi-line ones) are copied verbatim;
-            // a header-looking line inside them must not be touched.
-            const size_t start = i;
-            i = skipTomlString(src, i);
-            app.put(src[start .. i]);
-            lineStart = false;
-            continue;
-        }
-        lineStart = false;
-        app.put(c);
-        i++;
     }
-    return app.data;
-}
 
-/// Rewrite one table-header key path: bare and already-quoted segments
-/// pass through, the first non-bare unquoted segment starts a single
-/// merged, double-quoted key running to the end of the header.
-private string quoteHeaderKeys(string content) @safe pure
-{
-    import std.array : join;
-    import std.string : strip;
-
-    // Split on unquoted dots, remembering each segment's raw extent so
-    // the merge can take everything from a segment's start to the end.
-    size_t[] starts, ends;
+    private string parseMultilineLiteral() @safe pure
     {
-        size_t segStart = 0;
-        size_t i = 0;
-        while (i < content.length)
+        advance(3);
+        if (cur() == '\r')
+            advance();
+        if (cur() == '\n')
+            advance();
+        size_t e = i;
+        while (e < src.length)
         {
-            if (content[i] == '"' || content[i] == '\'')
+            if (src[e] == '\'')
             {
-                i = skipTomlString(content, i);
-                continue;
+                size_t run = 0;
+                while (e + run < src.length && src[e + run] == '\'')
+                    run++;
+                if (run >= 3)
+                    break;
+                e += run;
             }
-            if (content[i] == '.')
-            {
-                starts ~= segStart;
-                ends ~= i;
-                segStart = i + 1;
-            }
-            i++;
+            else
+                e++;
         }
-        starts ~= segStart;
-        ends ~= content.length;
+        if (e >= src.length)
+            throw fail("unterminated multi-line string");
+        // The closer is the last trio of the run: content keeps run - 3.
+        size_t run = 0;
+        while (e + run < src.length && src[e + run] == '\'')
+            run++;
+        if (run > 5)
+            throw fail("too many consecutive \"'\" — use a basic string");
+        import std.array : appender;
+        auto app = appender!string;
+        foreach (size_t k; 0 .. run - 3)
+            app.put('\'');
+        const size_t end = e + run;
+        const string body = src[i .. e];
+        app.put(body);
+        line += countNewlines(src[i .. end]);
+        i = end;
+        return app.data;
     }
 
-    string[] outSegs;
-    foreach (size_t k, unused; starts)
+    private void parseEscape(ref Appender!string app) @safe pure
     {
-        const string seg = content[starts[k] .. ends[k]].strip();
-        if (!isQuotableKey(seg) || isBareKey(seg) || isQuotedKey(seg))
+        if (atEnd())
+            throw fail("unterminated escape sequence");
+        const char c = src[i];
+        advance();
+        switch (c)
         {
-            outSegs ~= seg; // bare, quoted, or for the parser to reject
-            continue;
+            case 'b': app.put('\b'); break;
+            case 't': app.put('\t'); break;
+            case 'n': app.put('\n'); break;
+            case 'f': app.put('\f'); break;
+            case 'r': app.put('\r'); break;
+            case '"': app.put('"'); break;
+            case '\\': app.put('\\'); break;
+            case 'u': app.put(hexChar(4)); break;
+            case 'U': app.put(hexChar(8)); break;
+            case '\n':
+                throw fail("a backslash at the end of the line is only"
+                    ~ " valid in a multi-line string");
+            default:
+                throw fail("unknown escape '\\" ~ c ~ "'");
         }
-        // Path-like key: its dots are part of the path, so merge the
-        // rest of the header into one quoted key.
-        const string merged = content[starts[k] .. $].strip();
-        outSegs ~= isQuotableKey(merged)
-            ? '"' ~ merged ~ '"'
-            : seg;
-        break;
     }
-    return outSegs.join(".");
+
+    private string hexChar(size_t n) @safe pure
+    {
+        if (src.length - i < n)
+            throw fail("expected " ~ toText(n) ~ " hexadecimal digits");
+        dchar cp;
+        foreach (size_t k; 0 .. n)
+        {
+            const char c = src[i + k];
+            long v;
+            if (c >= '0' && c <= '9')
+                v = c - '0';
+            else if (c >= 'a' && c <= 'f')
+                v = c - 'a' + 10;
+            else if (c >= 'A' && c <= 'F')
+                v = c - 'A' + 10;
+            else
+                throw fail("expected hexadecimal digits after '\\"
+                    ~ (n == 4 ? 'u' : 'U'));
+            cp = cast(dchar) (cp * 16 + v);
+        }
+        advance(n);
+        import std.utf : encode;
+        char[4] buf;
+        const size_t len = encode(buf, cp);
+        return buf[0 .. len].idup;
+    }
+
+    private static size_t countNewlines(in char[] s) @safe pure nothrow
+    {
+        size_t n;
+        foreach (char c; s)
+            if (c == '\n')
+                n++;
+        return n;
+    }
 }
 
-private bool isBareKey(string s) @safe pure
+private string toText(T)(T v) @safe pure
 {
-    if (!s.length)
-        return false;
-    foreach (char c; s)
-        if (!(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
-                || c >= '0' && c <= '9' || c == '_' || c == '-'))
-            return false;
-    return true;
-}
-
-private bool isQuotedKey(string s) @safe pure
-{
-    return s.length >= 2 && (s[0] == '"' || s[0] == '\'') && s[$ - 1] == s[0];
-}
-
-/// A key that can be embedded in double quotes without escaping:
-/// non-empty, no quotes, backslashes, whitespace or control characters
-/// (internal whitespace is never key intent — quote it yourself).
-private bool isQuotableKey(string s) @safe pure
-{
-    if (!s.length)
-        return false;
-    foreach (char c; s)
-        if (c == '"' || c == '\\' || c == ' ' || c == '\t' || c < 0x20 || c == 0x7F)
-            return false;
-    return true;
+    import std.conv : text;
+    return text(v);
 }
 
 // ---------------------------------------------------------------------------
@@ -514,159 +997,9 @@ string[] optStringArray(in Val[string] t, string key, string context)
     return r;
 }
 
-version (unittest)
+/// Parse Pravic from a string (the file loader's core; `path` names errors).
+package(tachy) PracticDoc parsePractic(string src, string path) @safe pure
 {
-    private Val parseVal(string src)
-    {
-        import tachy.errors;
-        auto doc = parseTOML(src);
-        Val r;
-        r.kind = Val.Kind.table_;
-        foreach (string k, const TOMLValue e; doc.table)
-            r.table_[k] = toVal(e);
-        return r;
-    }
-
-    unittest
-    {
-        auto v = parseVal("a = \"x\"\nb = 1\nc = 1.5\nd = true\ne = [1, 2]\n[f]\ng = \"h\"");
-        assert(v.table_["a"].kind == Val.Kind.string_ && v.table_["a"].str_ == "x");
-        assert(v.table_["b"].integer_ == 1);
-        assert(v.table_["c"].kind == Val.Kind.float_);
-        assert(v.table_["d"].boolean_);
-        assert(v.table_["e"].array_.length == 2);
-        assert(v.table_["e"].array_[1].integer_ == 2);
-        assert(v.table_["f"].table_["g"].str_ == "h");
-        assert(v.table_["b"].scalarToString() == "1");
-        assert(v.table_["d"].scalarToString() == "true");
-    }
-
-    unittest
-    {
-        import std.exception : assertThrown;
-        // Datetime values are rejected during TOML → Val conversion.
-        assertThrown!(TachyError)(parseVal("when = 1979-05-27T07:32:00Z"));
-    }
-
-    unittest // joinInlineTables: multi-line inline tables parse like sub-tables
-    {
-        import std.algorithm.searching : canFind;
-        import std.exception : assertThrown;
-
-        // The two spellings must be exactly equivalent.
-        const string inline_ = `
-[execute]
-"verify_os_is_debian" = {
-  run = "grep ID /etc/os-release"
-  exit_status = 0
-  output = { contains = "debian" }
-}`;
-        const string subtable = `
-[execute."verify_os_is_debian"]
-run = "grep ID /etc/os-release"
-exit_status = 0
-output = { contains = "debian" }`;
-
-        auto a = parseVal(joinInlineTables(inline_));
-        auto b = parseVal(subtable);
-        auto ea = a.table_["execute"].table_["verify_os_is_debian"].table_;
-        auto eb = b.table_["execute"].table_["verify_os_is_debian"].table_;
-        assert(ea["run"].str_ == eb["run"].str_);
-        assert(ea["exit_status"].integer_ == 0);
-        assert(ea["output"].table_["contains"].str_ == "debian");
-
-        // Comments inside the inline table disappear with the newline.
-        auto c = parseVal(joinInlineTables("k = {\n  a = 1 # note\n}\n"));
-        assert(c.table_["k"].table_["a"].integer_ == 1);
-
-        // Braces and '#' inside strings do not count; '#' at top level stays.
-        auto d = parseVal(joinInlineTables(
-            `s = "brace { and # inside" # trailing`
-            ~ "\n" ~ `t = { a = "}" }` ~ "\n"));
-        assert(d.table_["s"].str_ == "brace { and # inside");
-        assert(d.table_["t"].table_["a"].str_ == "}");
-
-        // Newlines in top-level (multi-line) arrays are preserved.
-        auto e = parseVal(joinInlineTables("list = [\n  1,\n  2,\n]\n"));
-        assert(e.table_["list"].array_.length == 2);
-
-        // Multi-line basic strings pass through untouched.
-        auto f = parseVal(joinInlineTables("m = \"\"\"\nline\n\"\"\"\n"));
-        assert(f.table_["m"].str_ == "line\n");
-
-        // Unterminated inline table: clear error with the opening line.
-        string msg;
-        try
-        {
-            joinInlineTables("a = 1\nk = {\n  x = 1\n");
-            assert(false, "expected TachyError");
-        }
-        catch (TachyError err)
-            msg = err.msg;
-        assert(canFind(msg, "unterminated inline table"), msg);
-        assert(canFind(msg, "line 2"), msg);
-    }
-
-    unittest // quotePathKeys: unquoted path keys in table headers
-    {
-        import std.algorithm.searching : canFind;
-        import std.exception : assertThrown;
-
-        // The user-facing spelling parses exactly like the quoted one.
-        auto v = parseVal(quotePathKeys(`
-[vars]
-x = 1
-
-[files./tmp/some_secret.txt]
-template = "some_secret.tmpl"
-`));
-        assert(v.table_["vars"].table_["x"].integer_ == 1);
-        assert(v.table_["files"].table_["/tmp/some_secret.txt"]
-            .table_["template"].str_ == "some_secret.tmpl");
-
-        // Dots inside the path belong to the path, not the key path.
-        auto w = parseVal(quotePathKeys("[files./etc/nginx.conf]\n"));
-        assert("/etc/nginx.conf" in w.table_["files"].table_);
-
-        // Already-quoted keys and bare keys are untouched (and still
-        // nest the standard way).
-        auto q = parseVal(quotePathKeys(
-            `[files."/tmp/quoted.txt"]` ~ "\n" ~ "[hosts.web1.vars]\n"));
-        assert("/tmp/quoted.txt" in q.table_["files"].table_);
-        assert("vars" in q.table_["hosts"].table_["web1"].table_);
-
-        // Array-of-tables headers rewrite the same way and keep parsing
-        // identically to the quoted spelling (tachy rejects array
-        // tables later anyway). Headers with surrounding spaces too.
-        assert(quotePathKeys("[[files./tmp/x]]\n") == `[[files."/tmp/x"]]` ~ "\n");
-        assert(parseVal(`[[files."/tmp/x"]]`).table_["files"].kind
-            == parseVal(quotePathKeys("[[files./tmp/x]]")).table_["files"].kind);
-        assert(quotePathKeys("  [files./tmp/x]  \n") == `  [files."/tmp/x"]  ` ~ "\n");
-
-        // Trailing comments survive; comment-looking headers do not
-        // rewrite; quoted segments with brackets do not confuse the
-        // header-end scan.
-        assert(quotePathKeys("[files./tmp/x] # c\n") == `[files."/tmp/x"] # c` ~ "\n");
-        assert(quotePathKeys("# [files./tmp/x]\n") == "# [files./tmp/x]\n");
-        auto qb = parseVal(quotePathKeys(`[files."weird]key"]` ~ "\n"));
-        assert("weird]key" in qb.table_["files"].table_);
-
-        // Header-looking lines inside strings and values stay verbatim.
-        auto s = parseVal(quotePathKeys(
-            `s = "[files./tmp/x]"` ~ "\n" ~ "m = \"\"\"\n[files./tmp/y]\n\"\"\"\n"));
-        assert(s.table_["s"].str_ == "[files./tmp/x]");
-        assert(s.table_["m"].str_ == "[files./tmp/y]\n");
-
-        // Genuinely invalid headers still fail with the parser's error.
-        assertThrown!(Exception)(parseVal(quotePathKeys("[files.a b./x]\n")));
-    }
-    unittest
-    {
-        auto v = parseVal("a = 1\nbad = 2");
-        import std.exception : assertThrown, assertNotThrown;
-        assertNotThrown(checkKeys(v.table_, ["a", "bad"], "ctx"));
-        assertThrown!(TachyError)(checkKeys(v.table_, ["a"], "ctx"));
-        assert(optString(v.table_, "missing", "ctx", "dflt") == "dflt");
-        assertThrown!(TachyError)(optString(v.table_, "a", "ctx", "dflt")); // integer, not string
-    }
+    auto p = Parser(src, path, 0, 1);
+    return PracticDoc(p.parseFile());
 }

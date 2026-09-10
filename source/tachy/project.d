@@ -10,7 +10,7 @@ module tachy.project;
  *
  *     /tmp/tachy.XXXXXXXXXX/      created by mktemp -d on the host
  *     ├── tachy                   copy of the controller's tachy binary
- *     ├── inventory.toml          generated: one local host with its vars
+ *     ├── inventory.pravic         generated: one local host with its vars
  *     ├── report                  written by the inner run: "ok changed failed"
  *     └── project/                copy of the tasks file's parent directory
  *
@@ -46,10 +46,10 @@ struct ProjectBundle
     string root;          // temporary directory on the host
     string projectDir;    // root ~ "/project": the copied project
     string tachyPath;     // root ~ "/tachy": the copied binary
-    string inventoryPath; // root ~ "/inventory.toml": generated inventory
+    string inventoryPath; // root ~ "/inventory.pravic": generated inventory
 }
 
-/// One `[import]` entry: a source file or directory (absolute path,
+/// One `import` statement's source: a file or directory (absolute path,
 /// possibly outside the project) copied into the bundle as `dest` —
 /// its base name — next to the project copy, so src/template/run
 /// references resolve on the host.
@@ -81,7 +81,7 @@ ProjectBundle deployProject(Transport t, string localProjectDir,
         throw new TachyError("unexpected mktemp output on " ~ hostName ~ ": '" ~ b.root ~ "'");
     b.projectDir = buildPath(b.root, "project");
     b.tachyPath = buildPath(b.root, "tachy");
-    b.inventoryPath = buildPath(b.root, "inventory.toml");
+    b.inventoryPath = buildPath(b.root, "inventory.pravic");
 
     auto mkd = t.run("mkdir -- " ~ shQuote(b.projectDir));
     if (!mkd.ok)
@@ -110,7 +110,7 @@ ProjectBundle deployProject(Transport t, string localProjectDir,
             ~ hostName ~ ": " ~ failText(chm));
 
     auto inv = t.runWithInput("cat > " ~ shQuote(b.inventoryPath),
-        hostInventoryToml(hostName, hostVars));
+        hostInventoryPravic(hostName, hostVars));
     if (!inv.ok)
         throw new TachyError("cannot write the generated inventory on "
             ~ hostName ~ ": " ~ failText(inv));
@@ -170,57 +170,62 @@ bool parseReport(string text, out ulong ok, out ulong changed, out ulong failed)
 }
 
 // ---------------------------------------------------------------------------
-// Generated inventory: host variables serialized back to TOML.
+// Generated inventory: host variables serialized back to Pravic.
 // ---------------------------------------------------------------------------
 
 /// A one-host, local-connection inventory carrying the host's effective
 /// variables (the controller's global < host merge).
-string hostInventoryToml(string hostName, in Val[string] hostVars)
+string hostInventoryPravic(string hostName, in Val[string] hostVars)
 {
     auto app = appender!string;
-    const string hostKey = tomlKey(hostName);
-    app.put("[hosts." ~ hostKey ~ "]\nconnection = \"local\"\n");
-    app.put("\n[hosts." ~ hostKey ~ ".vars]\n");
-    writeSections(app, hostVars, "hosts." ~ hostKey ~ ".vars");
+    app.put("host " ~ pravicKey(hostName) ~ " {\n");
+    app.put("    connection = \"local\",\n");
+    app.put("    vars {\n");
+    writeVarEntries(app, hostVars, 2);
+    app.put("    },\n");
+    app.put("}\n");
     return app.data;
 }
 
-/// Emit a table body: scalar and array keys first, then one section per
-/// nested table (scalars must precede any sub-table header).
-private void writeSections(ref Sink app, in Val[string] t, string prefix)
+/// Emit one vars level: scalar and array keys, then nested tables as
+/// blocks.  Keys are sorted for deterministic output.
+private void writeVarEntries(ref Sink app, in Val[string] t, int depth)
 {
     auto keys = t.byKey.array;
     keys.sort();
-    string[] tableKeys;
     foreach (k; keys)
     {
+        app.put(indentOf(depth));
         if (t[k].kind == Val.Kind.table_)
         {
-            tableKeys ~= k;
-            continue;
+            app.put(pravicKey(k) ~ " {\n");
+            writeVarEntries(app, t[k].table_, depth + 1);
+            app.put(indentOf(depth) ~ "},\n");
         }
-        app.put(tomlKey(k) ~ " = " ~ tomlValue(t[k]) ~ "\n");
-    }
-    foreach (k; tableKeys)
-    {
-        app.put("\n[" ~ prefix ~ "." ~ tomlKey(k) ~ "]\n");
-        writeSections(app, t[k].table_, prefix ~ "." ~ tomlKey(k));
+        else
+            app.put(pravicKey(k) ~ " = " ~ pravicValue(t[k]) ~ ",\n");
     }
 }
 
-private string tomlValue(in Val v)
+private string indentOf(int depth) @safe pure
+{
+    import std.array : replicate;
+    return "    ".replicate(depth);
+}
+
+private string pravicValue(in Val v)
 {
     final switch (v.kind)
     {
-        case Val.Kind.string_: return tomlString(v.str_);
+        case Val.Kind.string_: return pravicString(v.str_);
         case Val.Kind.integer_: return text(v.integer_);
-        case Val.Kind.float_: return tomlFloat(v.float_);
+        case Val.Kind.float_: return pravicFloat(v.float_);
         case Val.Kind.boolean_: return v.boolean_ ? "true" : "false";
         case Val.Kind.array_:
         {
             string[] parts;
             foreach (const e; v.array_)
-                parts ~= tomlValue(e);
+                parts ~= pravicValue(e);
             return "[" ~ parts.join(", ") ~ "]";
         }
         case Val.Kind.table_:
@@ -229,18 +234,18 @@ private string tomlValue(in Val v)
             keys.sort();
             string[] parts;
             foreach (k; keys)
-                parts ~= tomlKey(k) ~ " = " ~ tomlValue(v.table_[k]);
+                parts ~= pravicKey(k) ~ " = " ~ pravicValue(v.table_[k]);
             return "{ " ~ parts.join(", ") ~ " }";
         }
     }
 }
 
-private string tomlKey(string k)
+private string pravicKey(string k)
 {
-    return tomlString(k);
+    return pravicString(k);
 }
 
-private string tomlString(string s)
+private string pravicString(string s)
 {
     string r = "\"";
     foreach (char c; s)
@@ -262,8 +267,8 @@ private string tomlString(string s)
     return r ~ "\"";
 }
 
-/// TOML floats need a fractional part or exponent to stay floats.
-private string tomlFloat(double d)
+/// Pravic floats need a fractional part or exponent to stay floats.
+private string pravicFloat(double d)
 {
     import std.algorithm.searching : canFind;
     import std.string : toLower;
@@ -336,177 +341,3 @@ private string failText(in CommandResult r)
 }
 
 // ---------------------------------------------------------------------------
-
-version (unittest)
-{
-    import std.algorithm.searching : canFind;
-    import std.file : exists, mkdirRecurse, readText, tempDir;
-    import std.path : buildPath;
-    import std.stdio : File;
-    import tachy.transport : LocalTransport;
-    import tachy.value : toVal;
-    import toml : parseTOML;
-
-    unittest // hostInventoryToml round-trips through the TOML parser
-    {
-        Val[string] vars;
-        vars["str"] = Val("it's \"quoted\"\n");
-        vars["int"] = Val(42L);
-        vars["float"] = Val(1.5);
-        vars["whole-float"] = Val(2.0);
-        vars["bool"] = Val(true);
-        Val nested;
-        nested.kind = Val.Kind.table_;
-        nested.table_["x"] = Val(1L);
-        vars["nested"] = nested;
-        Val deep;
-        deep.kind = Val.Kind.table_;
-        deep.table_["in"] = Val("side");
-        nested.table_["deep"] = deep;
-        Val arr;
-        arr.kind = Val.Kind.array_;
-        arr.array_ ~= Val("one");
-        arr.array_ ~= Val("two");
-        vars["list"] = arr;
-
-
-        auto text = hostInventoryToml("web 1", vars);
-        auto doc = parseTOML(text);
-        auto host = toVal(doc.table["hosts"]).table_["web 1"].table_;
-        assert(host["connection"].str_ == "local");
-        auto got = host["vars"].table_;
-        assert(got["str"].str_ == "it's \"quoted\"\n");
-        assert(got["int"].integer_ == 42);
-        assert(got["float"].float_ == 1.5);
-        assert(got["whole-float"].kind == Val.Kind.float_);
-        assert(got["bool"].boolean_);
-        assert(got["nested"].table_["x"].integer_ == 1);
-        assert(got["list"].array_[0].str_ == "one");
-        assert(got["list"].array_.length == 2);
-        assert(got["list"].array_[1].str_ == "two");
-    }
-
-    unittest // empty vars still produce a valid inventory
-    {
-        auto text = hostInventoryToml("plain", null);
-        auto doc = parseTOML(text);
-        auto host = toVal(doc.table["hosts"]).table_["plain"].table_;
-        assert(host["connection"].str_ == "local");
-        assert("vars" in host);
-    }
-
-    unittest // parseReport
-    {
-        ulong ok, changed, failed;
-        assert(parseReport("3 2 1\n", ok, changed, failed));
-        assert(ok == 3 && changed == 2 && failed == 1);
-        assert(!parseReport("", ok, changed, failed));
-        assert(!parseReport("1 2", ok, changed, failed));
-        assert(!parseReport("1 2 x", ok, changed, failed));
-        assert(!parseReport("1 2 3 4", ok, changed, failed));
-    }
-
-    unittest // deployProject + removeBundle over the local transport
-    {
-        auto dir = buildPath(tempDir, "tachy_project_ut", "proj");
-        if (!exists(dir)) mkdirRecurse(dir);
-        {
-            auto f = File(buildPath(dir, "main.toml"), "w");
-            f.write("[files.\"/tmp/x\"]\n");
-            f.close();
-        }
-        if (!exists(buildPath(dir, "sub"))) mkdirRecurse(buildPath(dir, "sub"));
-        {
-            auto f = File(buildPath(dir, "sub", "data.txt"), "w");
-            f.write("payload");
-            f.close();
-        }
-
-        auto t = new LocalTransport;
-        Val[string] vars;
-        vars["k"] = Val("v");
-        auto b = deployProject(t, dir, "h1", vars);
-        scope (exit) removeBundle(t, b);
-
-        assert(isAbsolute(b.root));
-        assert(exists(buildPath(b.projectDir, "main.toml")));
-        assert(readText(buildPath(b.projectDir, "sub", "data.txt")) == "payload");
-        assert(exists(b.tachyPath));
-        auto inv = readText(b.inventoryPath);
-        assert(canFind(inv, `connection = "local"`));
-        assert(canFind(inv, `"k" = "v"`));
-        assert(canFind(inv, `[hosts."h1"`));
-        auto cmd = innerTachyCommand(b, "h1", "main.toml", true, false, true,
-            buildPath(b.root, "report"));
-        assert(canFind(cmd, "cd "));
-        assert(canFind(cmd, " check --direct --events --color"));
-        assert(canFind(cmd, "--direct-report"));
-        assert(canFind(cmd, "h1"));
-        assert(canFind(cmd, "'main.toml'"));
-        // without check mode the inner run uses the apply command
-        cmd = innerTachyCommand(b, "h1", "main.toml", false, false, false,
-            buildPath(b.root, "report"));
-        assert(canFind(cmd, " apply --direct --events"));
-        assert(!canFind(cmd, " check"));
-        assert(!canFind(cmd, " --check"));
-    }
-}
-
-unittest // imports are copied into the bundle; collisions are errors
-{
-    import std.algorithm.searching : canFind;
-    import std.exception : assertThrown;
-    import std.file : exists, mkdirRecurse, readText, rmdirRecurse, tempDir;
-    import std.path : baseName, buildPath;
-
-    auto base = buildPath(tempDir, "tachy_project_import_ut");
-    if (exists(base)) rmdirRecurse(base);
-    mkdirRecurse(buildPath(base, "proj"));
-    mkdirRecurse(buildPath(base, "tasks", "install_gogs"));
-    mkdirRecurse(buildPath(base, "shared"));
-    scope (exit) rmdirRecurse(base);
-    {
-        import std.stdio : File;
-        auto f = File(buildPath(base, "proj", "main.toml"), "w");
-        f.write("[files.\"/tmp/x\"]\n");
-        f.close();
-        f = File(buildPath(base, "tasks", "install_gogs", "setup.sh"), "w");
-        f.write("#!/bin/sh\necho gogs\n");
-        f.close();
-        f = File(buildPath(base, "shared", "data.conf"), "w");
-        f.write("key = value\n");
-        f.close();
-        // collides with the import destination below
-        f = File(buildPath(base, "proj", "clash"), "w");
-        f.write("project content\n");
-        f.close();
-    }
-
-    const string proj = buildPath(base, "proj");
-    const string gogs = buildPath(base, "tasks", "install_gogs");
-    const string sharedDir = buildPath(base, "shared");
-
-    auto t = new LocalTransport;
-    ImportSpec[] imports = [ImportSpec(gogs, baseName(gogs)),
-        ImportSpec(sharedDir, baseName(sharedDir))];
-    auto b = deployProject(t, proj, "h1", null, imports);
-    scope (exit) removeBundle(t, b);
-
-    assert(readText(buildPath(b.projectDir, "install_gogs", "setup.sh"))
-        .canFind("gogs"));
-    assert(readText(buildPath(b.projectDir, "shared", "data.conf"))
-        .canFind("key = value"));
-    assert(exists(buildPath(b.projectDir, "main.toml")));
-
-    // missing source
-    assertThrown!TachyError(deployProject(t, proj, "h1", null,
-        [ImportSpec(buildPath(base, "nope"), "nope")]));
-
-    // destination clashing with project content
-    assertThrown!TachyError(deployProject(t, proj, "h1", null,
-        [ImportSpec(buildPath(base, "tasks"), "clash")]));
-
-    // two imports with the same destination
-    assertThrown!TachyError(deployProject(t, proj, "h1", null,
-        [ImportSpec(gogs, "same"), ImportSpec(sharedDir, "same")]));
-}

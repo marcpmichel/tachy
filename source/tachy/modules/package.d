@@ -9,13 +9,13 @@ module tachy.modules;
  */
 public import tachy.modules.accounts : runGroupModule, runUserModule;
 public import tachy.modules.composemod : runComposeModule;
-public import tachy.modules.executemod : runExecuteModule;
+public import tachy.modules.checkmod : runCheckModule;
 public import tachy.modules.filemod : runFileModule;
 public import tachy.modules.packagemod : runPackageModule;
 public import tachy.modules.servicemod : runServiceModule;
 
 import tachy.modules.composemod : validateComposeParams;
-import tachy.modules.executemod : parseExitStatus, parseOutput;
+import tachy.modules.checkmod : parseExitStatus, parseOutput;
 import tachy.modules.packagemod : validatePackageKey;
 
 import tachy.errors;
@@ -38,7 +38,7 @@ struct TaskResult
     string[] details;  // commands executed + change details (shown with -v)
 }
 
-private immutable string[] allModules = ["file", "service", "execute", "group", "user", "package", "compose"];
+private immutable string[] allModules = ["file", "service", "check", "group", "user", "package", "compose"];
 
 /// Registered module names.
 string[] moduleNames() @safe pure nothrow
@@ -58,16 +58,16 @@ void validateModuleParams(string moduleName, in Val[string] params, string conte
             if ("path" !in params)
                 throw new TachyError(context ~ " (file): 'path' is required");
             break;
-        case "execute":
+        case "check":
         {
             checkKeys(params, ["name", "run", "exit_status", "output"],
-                context ~ " (execute)");
+                context ~ " (check)");
             if ("run" !in params)
-                throw new TachyError(context ~ " (execute): 'run' is required");
+                throw new TachyError(context ~ " (check): 'run' is required");
             if (auto p = "exit_status" in params)
-                parseExitStatus(*p, context ~ " (execute)");
+                parseExitStatus(*p, context ~ " (check)");
             if (auto p = "output" in params)
-                parseOutput(*p, context ~ " (execute)");
+                parseOutput(*p, context ~ " (check)");
             break;
         }
         case "group":
@@ -156,7 +156,7 @@ TaskResult runModule(string moduleName, Val[string] params, TaskContext ctx)
     {
         case "file": return runFileModule(params, ctx);
         case "service": return runServiceModule(params, ctx);
-        case "execute": return runExecuteModule(params, ctx);
+        case "check": return runCheckModule(params, ctx);
         case "group": return runGroupModule(params, ctx);
         case "user": return runUserModule(params, ctx);
         case "package": return runPackageModule(params, ctx);
@@ -249,37 +249,3 @@ private string intText(int v) @safe pure
 // ---------------------------------------------------------------------------
 // Tests: dispatch must cover every registered module name.
 // ---------------------------------------------------------------------------
-
-version (unittest)
-{
-    import std.algorithm.searching : canFind;
-    import tachy.modules.fake : FakeTransport;
-    import tachy.transport : CommandResult;
-
-    unittest // runModule dispatches every name moduleNames() registers
-    {
-        auto t = new FakeTransport;
-        TaskContext ctx = TaskContext(t, false, "fakehost", "/tmp");
-        foreach (m; moduleNames())
-        {
-            Val[string] noParams;
-            try
-                runModule(m, noParams, ctx);
-            catch (TachyError e)
-                assert(!canFind(e.msg, "unknown module"),
-                    m ~ " is registered but runModule does not dispatch it: " ~ e.msg);
-        }
-    }
-
-    unittest // "package" reaches its executor through runModule
-    {
-        auto t = new FakeTransport;
-        t.replies ~= [CommandResult(1, "", ""), CommandResult(0, "", "")];
-        TaskContext ctx = TaskContext(t, false, "fakehost", "/tmp");
-        Val[string] p;
-        p["name"] = Val("apt:vim");
-        auto r = runModule("package", p, ctx);
-        assert(r.changed, r.msg);
-        assert(canFind(t.commands[1], "apt-get install -y 'vim'"), t.commands[1]);
-    }
-}

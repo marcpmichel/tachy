@@ -1,7 +1,6 @@
 {
 	"fileVersion": 1,
 	"versions": {
-		"toml": "2.0.1",
-		"unit-threaded": "2.0.5"
+		"silly": "1.2.0-dev.2"
 	}
 }

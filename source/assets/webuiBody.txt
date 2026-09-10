@@ -1,0 +1,10 @@
+Starts a local web server (default: http://127.0.0.1:8080) that is a
+graphical version of this CLI.  The projects listed in the webui
+projects entry of settings.pravic (a directory uses its main.pravic)
+become clickable; pick a host selection, run apply or check on it,
+and watch each job line appear live — the page follows the run's
+events (the same stream as --events) as the remote executor finishes
+each job.  The interface (HTML, CSS, JavaScript) is embedded in the
+binary at compile time: one binary, no external files, no framework.
+The server executes real runs and binds to localhost only by default
+— anyone who can reach the port can run tachy.

@@ -106,7 +106,7 @@ function renderProjects() {
     },
       h("span", { class: "proj-name" }, p.name),
       p.kind === "missing" ? null : h("span", { class: "proj-kind" },
-        p.kind === "directory" ? "dir → main.toml" : "file"),
+        p.kind === "directory" ? "dir → main.pravic" : "file"),
       h("span", { class: "proj-path" }, p.path),
     ));
   }

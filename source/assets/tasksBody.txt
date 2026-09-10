@@ -1,0 +1,75 @@
+  file /etc/app/app.conf {            # state (default file; link/absent),
+      content = "port = {{ http_port }}"   # content is templated; src
+      mode = "0644"                    # copies verbatim, template renders;
+  }                                   # line/block ensure a line or a
+                                      # contiguous block of lines is
+                                      # present; mode (octal), owner, group
+
+  directory /etc/app {                # state (default directory; absent),
+      mode = "0755"                    # mode, owner, group
+  }
+
+  package apt:curl {                  # key is "<manager>:<name>" (only
+      version = "latest"              # apt); default "latest" just
+  }                                   # ensures presence; an explicit
+                                      # version pins it exactly
+                                      # (epoch-qualified, as dpkg reports
+                                      # it).  present = false removes
+
+  group epices                        # no attributes: the braces are
+                                      # optional; state (default present;
+                                      # absent removes)
+
+  user deploy {                       # shadow-utils accounts; group
+      group = "epices"                # defaults to a group named after
+      groups = ["docker"]             # the user, groups only ADD
+      shell = "/bin/bash"             # memberships, shell to /bin/sh at
+      comment = "epices user"         # creation, create_home to true;
+      home = "/home/epices"           # state = "absent" removes
+  }                                   # (remove_home = true also deletes
+                                      # the home directory)
+
+  service app {                       # state (started/stopped/restarted/
+      state = "started"               # reloaded/enabled), enabled =
+      enabled = true                  # true; src/template manage the
+  }                                   # unit file itself:
+  service my_service {
+      template = "my.service.tmpl"    # template renders it with the host
+      vars { user = "www" }           # scope plus the entry's local
+      state = "started"               # vars { ... } (template only);
+  }                                   # src copies a file verbatim
+
+  compose /srv/app {                  # Docker Compose stacks, keyed by
+      file = "compose.yml"            # project dir (absolute); file
+      state = "running"               # names the compose file (relative:
+  }                                   # inside dir); project overrides
+                                      # the derived name (lowercased dir
+                                      # basename); services = ["web"]
+                                      # selects a subset (default: every
+                                      # service the file enables); state:
+                                      # running (default) | stopped |
+                                      # absent — running checks each
+                                      # selected service's runtime, health
+                                      # and compose config-hash label
+                                      # before acting; pull/build/recreate:
+                                      # missing/auto/never; wait (capped by
+                                      # wait_timeout) waits after up;
+                                      # timeout is the stop/shutdown
+                                      # timeout in seconds; remove_orphans/
+                                      # remove_volumes/remove_images for
+                                      # stopped/absent teardowns
+
+  check "check if debian" {           # run a shell command and check it
+      run = "source /etc/os-release; echo $ID"
+                                      # (runs in the defining file's dir)
+      exit_status = 0                 # int | { not = N } | { cond = "< 1" }
+      output = "debian"               # string | { contains = "deb" }
+  }                                   # | { matches = "^debian.*$" }
+
+  Plural directives also take a group form; path keys need no quotes
+  (quotes are for spaces, braces and templates); and an instruction
+  with no attributes may omit the braces:
+  files {
+      /etc/hosts { owner = "root", mode = "0644" }
+  }
+  file "/srv/data {{ name }}" { content = "x" }

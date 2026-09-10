@@ -1,6 +1,5 @@
-module tachy.modules.fake;
+module tachy.tests.fake;
 
-version (unittest):
 
 import tachy.transport : CommandResult, Transport;
 

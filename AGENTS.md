@@ -87,18 +87,35 @@ When the user requests a durable behavior change, record it here or in the relev
 
 # Project
 
-- tachy: TOML-driven configuration management (Ansible-like) in D — see `README.md` (tour) and `DOCUMENTATION.md` (full reference); `dub.json` is the build manifest (DMD + dub, sole dependency `toml ~>2.0.1`, `stringImportPaths` embeds the webui assets, the webdoc stylesheet and the root `DOCUMENTATION.md`)
-- CLI shape: `tachy <command> [options] <selection> [<tasks.toml>...]`;
+- tachy: Pravic-driven configuration management (Ansible-like) in D —
+  see `README.md` (tour), `DOCUMENTATION.md` (full reference) and
+  `LANGUAGE.md` (the Pravic spec); `dub.json` is the build manifest
+  (DMD + dub, zero runtime dependencies; `silly` is the test-only
+  dependency of its `unittest` configuration, which compiles `tests/`
+  alongside `source/` — `stringImportPaths` embeds the app.d help/man
+  text assets in `source/assets/`, the webui assets (`app.css` is
+  shared with the webdoc pages) and the root `DOCUMENTATION.md`)
+- `LANGUAGE.md` is the spec for **Pravic**, tachy's configuration
+  language (implemented): directives as independent statements
+  (`vars { ... }` block form, `var X = "v"` single form;
+  `include`/`check`/`compose`/`import` single form only), jobs run in
+  statement order — no fixed order, no sorting; hooks, `apply` and the
+  `includes` group form do not exist, `execute` was renamed `check`,
+  and TOML support is gone (no dual reader ever shipped)
+- CLI shape: `tachy <command> [options] <selection> [<tasks.pravic>...]`;
  command is one of `apply`, `check` (check mode; the old `-c` option is
  gone), `generate` (`generate key <path>`, `generate task <path>`),
  `webui` (local web console; no selection — projects come from
- settings.toml `[webui]` projects, runs start from the browser),
+ settings.pravic `webui` projects, runs start from the browser),
  `webdoc` (serves the compiled-in DOCUMENTATION.md as a multi-page
  site; no selection, read-only), `man` (prints the full built-in
  manual, unix man-page style) or
- `help` (short form only: usage lines, commands, options); selection mixes host names, `@tag` and `all`; default inventory
- `inventory.toml`, default tasks file `main.toml` (a directory argument
- maps to its `main.toml`)
+ `help` (short form only: usage lines, commands, options); selection
+ mixes host names, `@tag` and `all`; default inventory
+ `inventory.pravic`, default tasks file `main.pravic` (a directory
+ argument maps to its `main.pravic`)
+- `syntax/` ships editor syntax coloring for Pravic (Vim/Neovim
+  `pravic.vim`, installed by hand — see README "Editor syntax")
 - `sessions/` holds saved session records (inert artifacts, not inputs to code or docs)
 - TODO.md / DONE.md are the task ledger: pending work arrives as TODO.md entries
 
@@ -109,8 +126,16 @@ When the user requests a durable behavior change, record it here or in the relev
 - Unit tests defend the contract (`dub test`); new resource/directive work gets a scripted-transport unittest plus an end-to-end run when feasible
 - End-to-end verification uses the `testing.internal` VM over ssh as root (Debian 12; `/bin/sh` is dash — use `.` not `source`): keep checks read-only or scoped to `/tmp`, and clean the VM and local scratch up afterwards
 - Task files and inventories are strict: unknown keys, undefined variables, duplicate targets, cycles and escaping includes are load-time errors with file context — keep new parsing equally strict
-- Both TOML spellings (sub-table and inline table) must stay equivalent for every keyed directive; multi-line inline tables and unquoted path keys in table headers are accepted by loader preprocessing
+- Pravic equivalence contract: the group form (`vars { ... }`) and the
+  single form (`var X = "v"`) must stay equivalent for every plural
+  directive; blocks are natively multi-line (commas and/or newlines
+  between entries), a block that would be empty may be omitted
+  (`directory /tmp/x`), and unquoted path keys
+  (`file /etc/x.conf { ... }`) are part of the language — parser
+  behavior must keep matching `LANGUAGE.md`
 
 # Child DOX Index
 
 - `source/AGENTS.md` — the D implementation tree: CLI, orchestration, inventory/tasks loading, templating, transports, project bundles; it indexes `source/tachy/modules/AGENTS.md` (job modules) itself
+- `syntax/AGENTS.md` — editor syntax coloring for Pravic (Vim/Neovim
+  format): the `pravic.vim` contract against LANGUAGE.md

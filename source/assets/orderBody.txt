@@ -1,0 +1,11 @@
+Jobs run in source order — there is no fixed order and no sorting:
+the order statements appear in is the order they execute, and an
+include composes its file at the statement's position.  What a fixed
+order used to guarantee is the author's to express: a directory before
+the files that live in it, a user's primary group before the user, a
+health check between the statements it checks.  vars/var and import
+statements are not jobs — they take effect file-wide regardless of
+position.
+Check jobs are checks by nature: they run even in check mode and never
+report "changed".
+Managing the same target twice anywhere in a composition is an error.

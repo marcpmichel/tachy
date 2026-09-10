@@ -41,7 +41,7 @@ import tachy.vars;
 
 struct RunOptions
 {
-    string inventoryPath = "inventory.toml";
+    string inventoryPath = "inventory.pravic";
     string selection;      // host names / @tags / all, comma separated
     bool checkMode;
     bool verbose;
@@ -60,18 +60,18 @@ struct RunOptions
 
 
 /// Interpret the positional tasks-file arguments: a directory names a
-/// project whose entry file is "main.toml"; anything else is used as
-/// the tasks file itself.  With no argument, "main.toml" in the
+/// project whose entry file is "main.pravic"; anything else is used as
+/// the tasks file itself.  With no argument, "main.pravic" in the
 /// current directory is the entry point.
 string[] resolveTasksFiles(in string[] args)
 {
     import std.file : exists, isDir;
     if (!args.length)
-        return ["main.toml"];
+        return ["main.pravic"];
     auto resolved = args.dup;
     foreach (ref f; resolved)
         if (f.length && exists(f) && isDir(f))
-            f = buildPath(f, "main.toml");
+            f = buildPath(f, "main.pravic");
     return resolved;
 }
 
@@ -136,13 +136,13 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
     {
         auto loaded = loadTasksFile(tasksFile, settings);
 
-        // Composition entries under an [import] destination that do
+        // Include entries under an import destination that do
         // not exist locally: without a bundle there is nothing to
         // compose them from, so --direct skips them (bundled mode
         // composes them on the host, where the import has landed).
         // stderr keeps stdout machine-clean in --events mode.
         foreach (d; loaded.deferred)
-            stderr.writeln("-- skipped (under an [import] destination,"
+            stderr.writeln("-- skipped (under an import destination,"
                 ~ " no bundle with --direct): ", d);
 
         consume(evFileStart(tasksFile, hosts.mapHosts()));
@@ -248,7 +248,7 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
             const string projectDir = dirName(absTasks);
             checkProjectContained(loaded, projectDir);
 
-            // [import] sources land in the bundle next to the project
+            // import sources land in the bundle next to the project
             // copy, under their base name (bundled mode only).
             ImportSpec[] imports;
             foreach (src; loaded.imports)
@@ -481,38 +481,3 @@ private bool isStdoutTty() @trusted
 }
 
 // ---------------------------------------------------------------------------
-
-version (unittest)
-{
-    import std.algorithm.searching : canFind;
-    import std.file : exists, mkdirRecurse, tempDir;
-    import std.path : buildPath;
-    import std.stdio : File;
-
-    unittest // resolveTasksFiles: directories map to main.toml
-    {
-        auto dir = buildPath(tempDir, "tachy_runner_ut", "proj");
-        if (!exists(dir)) mkdirRecurse(dir);
-        {
-            auto f = File(buildPath(dir, "main.toml"), "w");
-            f.write("[files.\"/tmp/x\"]\n");
-            f.close();
-        }
-
-        // directory argument -> main.toml inside it
-        auto r = resolveTasksFiles([dir]);
-        assert(r.length == 1 && r[0] == buildPath(dir, "main.toml"));
-
-        // trailing slash on the directory behaves the same
-        r = resolveTasksFiles([dir ~ "/"]);
-        assert(r.length == 1 && canFind(r[0], "main.toml"));
-
-        // plain file and missing paths pass through untouched
-        r = resolveTasksFiles(["site/other.toml", "missing.toml"]);
-        assert(r == ["site/other.toml", "missing.toml"]);
-
-        // no argument: main.toml in the current directory
-        r = resolveTasksFiles([]);
-        assert(r == ["main.toml"]);
-    }
-}

@@ -1,0 +1,6 @@
+Serves the documentation as a small web site on a local web server
+(default: http://127.0.0.1:8080): one page per section, with a left
+menu to pick one.  The pages are generated from the DOCUMENTATION.md
+embedded in the binary at compile time, so they always document the
+binary being run.  The site shares the web console's stylesheet —
+dark, like the webui.  The server is read-only.

@@ -1,0 +1,8 @@
+  tachy apply @web req/web
+  tachy check @web req/web
+  tachy generate key key.txt
+  tachy generate task main.pravic
+  tachy generate settings settings.pravic
+  tachy webui
+  tachy webdoc
+  tachy man

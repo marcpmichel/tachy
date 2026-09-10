@@ -1,0 +1,15 @@
+Precedence: global vars < host vars < include chain < file vars.
+Strings are templated with {{ name }} / {{ table.key }}; the builtin
+{{ inventory_hostname }} holds the current host name.
+A var of the form { env = "NAME" } (optionally
+{ env = "NAME", default = "...", from = ".env" }) is replaced by
+the value of that environment variable — read from the dotenv file
+named by 'from' (relative to the declaring file) instead of the
+process environment when given — or the default when it is unset:
+inventory vars read the controller's environment, tasks-file
+vars the environment of the process that loads them (the host, in
+bundled mode).  An unset variable without a default is an error.
+Inventory vars may also hold { age = "file.age" }: replaced by that
+file's age-decrypted content (one trailing newline stripped), on the
+controller, with the identity from --identity, AGE_IDENTITY or
+~/.ssh/id_ed25519.  Binary secrets are not supported in variables.
