@@ -61,7 +61,10 @@ exactly as inside a single block). Directives with no plural —
 `include`, `check`, `compose`, `import` — only ever appear in the
 single form, with the key inline, since they are keyed too. `webui` and
 settings' `imports` are group-form blocks whose entries are plain data
-(no keyed targets), so they have no single form.
+(no keyed targets), so they have no single form. Settings' `identity`
+spells both forms with one word: `identity "key.txt"` (the path is the
+key) and `identity { path = "key.txt" }` — a `{` after the keyword
+picks the group form.
 
 The **value layer is unchanged**: strings, integers, floats, booleans,
 arrays and tables use TOML 1.0 lexical rules verbatim, so existing
@@ -112,17 +115,19 @@ A parsing expression grammar (W3C/pegged notation): `←` defines,
 choice is what makes the keyword/path-key boundary mechanical:
 keywords are tried with a `!KeyChar` guard, so `varsite` fails to parse
 as `var site` and long/short spellings (`vars`/`var`) never collide.
-
+A keyword registered in both sets (`identity`) takes its group form
+when a `{` follows the keyword, its single form otherwise.
 ```peg
 PravicFile   ← WS StmtList? WS EOF
 StmtList     ← Stmt (LineEnd+ Stmt)*
 
 GroupKeyword ← ( 'vars' / 'files' / 'directories' / 'packages'
                / 'groups' / 'users' / 'services' / 'hosts'
-               / 'imports' / 'webui'                          ) !KeyChar
+               / 'imports' / 'webui' / 'identity'             ) !KeyChar
 SingleKeyword ← ( 'var' / 'file' / 'directory' / 'package'
                 / 'group' / 'user' / 'service' / 'host'
-                / 'include' / 'check' / 'compose' / 'import' ) !KeyChar
+                / 'include' / 'check' / 'compose' / 'import'
+                / 'identity'                                  ) !KeyChar
 
 Block        ← '{' WS Entries? WS '}'
 Entries      ← Entry (BSep Entry)* BSep?
@@ -213,8 +218,9 @@ Tasks files:
 
 Inventory files add `hosts { name { ... } }` / `host name { ... }`
 (entries: `address`, `user`, `port`, `key`, `connection`, `tags`,
-`vars`) and share `vars`/`var`. Settings files use `imports { paths =
-[...] }` and `webui { projects = [...] }` — group form only.
+`vars`) and share `vars`/`var`. Settings files use `identity "path"`
+and `identity { path = "path" }` (both forms), plus `imports {
+paths = [...] }` and `webui { projects = [...] }` — group form only.
 
 ## Examples
 
@@ -317,6 +323,8 @@ host web2 {
 Settings:
 
 ```pravic
+identity "key.txt"
+
 imports {
     paths = ["/opt/tachy/shared"],
 }

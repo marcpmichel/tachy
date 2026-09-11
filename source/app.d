@@ -259,8 +259,8 @@ void parseOptions(ref string[] args, ref RunOptions opts, ref bool wantHelp)
         "keep-bundle", "keep each host's temporary bundle directory after"
             ~ " the run, for inspection (project copy, generated"
             ~ " inventory, report)", &opts.keepBundle,
-        "settings", "PATH  optional settings file (default: TACHY_SETTINGS, ./settings.pravic, ~/.config/tachy/settings.pravic)", &opts.settings,
-        "identity", "PATH  age identity for { age = ... } inventory vars (default: AGE_IDENTITY, then ~/.ssh/id_ed25519)", &opts.identity,
+        "settings", "PATH  optional settings file: identity entry, imports search paths, webui projects (default: TACHY_SETTINGS, ./settings.pravic, ~/.config/tachy/settings.pravic)", &opts.settings,
+        "identity", "PATH  age identity for { age = ... } inventory vars; supersedes the settings identity entry (default: AGE_IDENTITY, then ~/.ssh/id_ed25519)", &opts.identity,
         "address", "ADDR  webui/webdoc: address to bind (default 127.0.0.1)", &opts.webAddress,
         "port", "N  webui/webdoc: port to listen on (default: a random port between 10000 and 65534)", &opts.webPort,
         "h|help", "show this help", &wantHelp,

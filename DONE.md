@@ -1476,3 +1476,46 @@
      (README commands+options blocks, DOCUMENTATION command table /
      options table / new "### hosts" section); AGENTS.md CLI shape
      and source/AGENTS.md layering bullets refreshed.
+
+
+46. settings.pravic: an `identity` entry for the age key, superseded
+    by --identity (requested directly in chat; no TODO.md entry)
+   - Both spellings are legal and equivalent: `identity "key.txt"`
+    and `identity { path = "key.txt" }`. Pravic-wise this is the
+     first keyword with both forms on one spelling: value.d's
+     parseStatement now dispatches a keyword registered in both sets
+     to its group form when a `{` follows the keyword, its single
+     form otherwise — existing keywords keep identical behavior and
+     error messages (group-only keywords still demand their block;
+     LANGUAGE.md grammar, prose and example updated to match).
+   - settings.d: `Settings.identity` (absolute, resolved like search
+     paths — ~-expanded, relative to the settings file), strict
+     validation (duplicate entries, non-string paths and attribute
+     blocks are load-time errors with file:line context) and
+     `effectiveIdentity(flag, settings)` — the flag wins, an empty
+     result keeps the old AGE_IDENTITY → ~/.ssh/id_ed25519 chain at
+     use time. Wired once per entry point: runTachy (settings now
+     loaded there once and threaded into runDirect/runBundled),
+     runHosts, and runWebUi (the webui's inventory load and the
+     spawned runs' `--identity` forwarding both use the effective
+     identity).
+   - Sample settings, generate key output and the no-identity error
+     mention the new entry; TaskContext/vars.d comments refreshed.
+   - Unittests (tests/settings.d): both spellings, unquoted and
+     absolute paths, coexistence with imports/webui, seven
+     bad-shape/duplicate errors with context, and effectiveIdentity
+     precedence. Follow-up caught by hammering the suite: the new
+     runHosts test in tests/runner.d raced the settings-discovery
+     test's transient TACHY_SETTINGS (runHosts reads discovery when
+     no --settings is given) — it now passes an explicit empty
+     settings file, making it hermetic; 20 consecutive full-suite
+     runs, 0 failures. `dub test`: 136 passed, 0 failed.
+   - E2E with real age (local --direct): settings identity decrypts
+     an `{ age }` var end-to-end; `--identity <wrong key>` fails the
+     decryption (the flag superseded the working settings entry);
+     the group form and cwd settings discovery (via `tachy hosts
+     info`) behave the same. --help/man/webdoc render the updated
+     text (webdoc settings page carries the identity example). Docs
+     trio updated throughout (option rows/blocks, settings and
+     Secrets sections, LANGUAGE.md); source/AGENTS.md settings.d and
+     value.d bullets refreshed.

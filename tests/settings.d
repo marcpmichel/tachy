@@ -222,3 +222,74 @@ private auto withEnv(string[] names, string[] values, alias dg)()
         }
     return dg();
 }
+
+@("identity entry: both spellings, resolution, shapes")
+unittest
+{
+    auto base = buildPath(tempDir, "tachy_settings_ident_ut");
+    if (exists(base)) rmdirRecurse(base);
+    mkdirRecurse(buildPath(base, "cfg"));
+    scope (exit) rmdirRecurse(base);
+
+    // single form: the path is the key
+    write(buildPath(base, "cfg", "single.pravic"), "identity \"key.txt\"\n");
+    auto s = loadSettings(buildPath(base, "cfg", "single.pravic"));
+    assert(s.identity == buildPath(base, "cfg", "key.txt"), s.identity);
+
+    // group form: identity { path = "..." }
+    write(buildPath(base, "cfg", "group.pravic"),
+        "identity { path = \"key.txt\" }\n");
+    s = loadSettings(buildPath(base, "cfg", "group.pravic"));
+    assert(s.identity == buildPath(base, "cfg", "key.txt"), s.identity);
+
+    // unquoted key spelling and absolute paths
+    write(buildPath(base, "cfg", "unquoted.pravic"), "identity key.txt\n");
+    s = loadSettings(buildPath(base, "cfg", "unquoted.pravic"));
+    assert(s.identity == buildPath(base, "cfg", "key.txt"), s.identity);
+    write(buildPath(base, "cfg", "abs.pravic"), "identity \"/abs/key.txt\"\n");
+    s = loadSettings(buildPath(base, "cfg", "abs.pravic"));
+    assert(s.identity == "/abs/key.txt");
+
+    // alongside the other entries
+    write(buildPath(base, "cfg", "all.pravic"),
+        "identity \"key.txt\"\nimports { paths = [\"libs\"] }\n"
+        ~ "webui { projects = [\"site\"] }\n");
+    s = loadSettings(buildPath(base, "cfg", "all.pravic"));
+    assert(s.identity.length && s.importPaths.length == 1
+        && s.webuiProjects.length == 1);
+
+    // wrong shapes and duplicates are load-time errors with context
+    foreach (content; [
+        "identity \"a.txt\"\nidentity \"b.txt\"\n",
+        "identity { path = \"a.txt\" }\nidentity { path = \"b.txt\" }\n",
+        "identity \"a.txt\"\nidentity { path = \"b.txt\" }\n",
+        "identity { path = 1 }\n",
+        "identity { bogus = \"x\" }\n",
+        "identity \"k.txt\" = \"v\"\n",
+        "identity \"k.txt\" { mode = \"0600\" }\n",
+    ])
+    {
+        string msg;
+        try
+        {
+            write(buildPath(base, "cfg", "bad.pravic"), content);
+            loadSettings(buildPath(base, "cfg", "bad.pravic"));
+            assert(false, "expected TachyError for: " ~ content);
+        }
+        catch (TachyError e)
+            msg = e.msg;
+        assert(canFind(msg, "bad.pravic"), msg);
+        assert(canFind(msg, "identity"), msg);
+    }
+}
+
+@("effectiveIdentity: the flag supersedes the settings entry")
+unittest
+{
+    Settings s;
+    assert(effectiveIdentity("", s) == "");
+    assert(effectiveIdentity("flag.txt", s) == "flag.txt");
+    s.identity = "settings.txt";
+    assert(effectiveIdentity("flag.txt", s) == "flag.txt");
+    assert(effectiveIdentity("", s) == "settings.txt");
+}

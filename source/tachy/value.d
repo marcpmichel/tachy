@@ -169,6 +169,25 @@ private struct Parser
         return src.length - i >= lit.length && src[i .. i + lit.length] == lit;
     }
 
+    /// Whether a `{` (spaces allowed) follows the n-character keyword
+    /// at the cursor: the group form's opening brace.
+    private bool groupFollows(size_t n) @safe pure const
+    {
+        size_t p = i + n;
+        while (p < src.length && (src[p] == ' ' || src[p] == '\t'))
+            p++;
+        return p < src.length && src[p] == '{';
+    }
+
+    /// Whether the keyword also has a single form (dual-form keyword).
+    private bool isSingleForm(string kw) @safe pure const
+    {
+        foreach (immutable k; singleKeywords)
+            if (k == kw)
+                return true;
+        return false;
+    }
+
     private void advance(size_t n = 1) @safe pure nothrow
     {
         foreach (size_t k; 0 .. n)
@@ -224,10 +243,11 @@ private struct Parser
     /// collide.  Order within a set does not matter (the guard decides).
     private static immutable string[] groupKeywords =
         ["vars", "files", "directories", "packages", "groups",
-         "users", "services", "hosts", "imports", "webui"];
+         "users", "services", "hosts", "imports", "webui", "identity"];
     private static immutable string[] singleKeywords =
         ["var", "file", "directory", "package", "group", "user",
-         "service", "host", "include", "check", "compose", "import"];
+         "service", "host", "include", "check", "compose", "import",
+         "identity"];
 
     /// Canonical directive names for the single-form keywords (group-form
     /// keywords are their own canonical name).
@@ -296,13 +316,19 @@ private struct Parser
         return stmts;
     }
 
-    /// Group-form statements expand to one statement per block entry.
     private PracticStmt[] parseStatement() @safe pure
     {
         const size_t stmtLine = line;
         foreach (immutable kw; groupKeywords)
             if (lookingAt(kw) && !isKeyChar(charAfter(kw.length)))
-                return expandGroup(kw);
+            {
+                // A keyword with both forms (`identity`) takes its
+                // group form when a block follows, and falls through
+                // to the single form below otherwise; group-only
+                // keywords must still open their block.
+                if (groupFollows(kw.length) || !isSingleForm(kw))
+                    return expandGroup(kw);
+            }
         foreach (immutable kw; singleKeywords)
             if (lookingAt(kw) && !isKeyChar(charAfter(kw.length)))
                 return [parseSingle(kw, stmtLine)];

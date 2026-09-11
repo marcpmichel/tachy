@@ -49,7 +49,8 @@ This doc owns the source tree's structure and conventions;
   - `value.d` — `Val` trees, the Pravic parser (`loadPractic` →
     ordered statements, `file: line N:` errors, duplicate-key
     detection) and the validated accessors; the grammar is specified
-    in the root `LANGUAGE.md`
+    in the root `LANGUAGE.md` (a keyword registered in both forms —
+    `identity` — takes its group form when a `{` follows)
   - `transport.d` — `local` and `ssh` transports (abstract class; `runStreaming` delivers output lines live — POSIX `read`, not buffered `rawRead`, so streams are not batched), `shQuote`, stat helpers
   - `project.d` — project bundles (project copy plus `import` sources
     under their base name, controller-decrypted `age = true` sources
@@ -58,8 +59,10 @@ This doc owns the source tree's structure and conventions;
   - `generate.d` — the `generate` command: age key pairs (`age-keygen`),
     sample tasks/settings files (controller-side scaffolding)
   - `settings.d` — the optional settings.pravic (discovery: `--settings`,
-    `TACHY_SETTINGS`, ./settings.pravic, XDG; `imports` search paths
-    and `webui` projects, strict validation)
+    `TACHY_SETTINGS`, ./settings.pravic, XDG; the `identity` age entry
+    — both spellings, `effectiveIdentity` makes the `--identity` flag
+    supersede it, wired once per entry point in runner.d/web.d —
+    `imports` search paths and `webui` projects, strict validation)
   - `web.d` — the `webui` command AND the shared ad-hoc HTTP layer:
     a tiny server (thread per connection, `Connection: close`, a
     Router with `:param` segments — `Request`/`Response`/`Router`/

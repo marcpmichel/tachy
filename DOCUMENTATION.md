@@ -136,7 +136,7 @@ Example: `tachy apply @web req/web`, `tachy check all`,
 | `--direct-report P` | With `--direct`: write `ok changed failed` counters to P. |
 | `--events` | Print one JSON event per line on stdout instead of text (machine mode). |
 | `--settings PATH` | Optional settings file (see [settings](#settings-settingspravic)); default: `TACHY_SETTINGS`, then `./settings.pravic`, then `~/.config/tachy/settings.pravic`. |
-| `--identity PATH` | Age identity for `{ age = ... }` inventory vars and `file` sources marked `age = true`; default: `AGE_IDENTITY` (path or key material), then `~/.ssh/id_ed25519` (age accepts ssh keys). |
+| `--identity PATH` | Age identity for `{ age = ... }` inventory vars and `file` sources marked `age = true`; supersedes the settings file's `identity` entry. Default: that entry, then `AGE_IDENTITY` (path or key material), then `~/.ssh/id_ed25519` (age accepts ssh keys). |
 | `--color` | Force colored statuses even when stdout is not a tty. |
 | `--address ADDR`, `--port PORT` | Webui/webdoc only: address (default 127.0.0.1) and port to listen on. The default port (and `0`) is a random port between 10000 and 65534 — both commands are localhost conveniences; the bound URL is printed, and tachy tries to open it in the local browser (`gio open`, best-effort). |
 
@@ -154,7 +154,8 @@ like every other command.
   connection/port defaults), then its effective variables — global
   `<` host, sorted by name, values in Pravic syntax. Age-marked vars
   are decrypted on the controller like in a run, so pass
-  `--identity`/`AGE_IDENTITY` to see them.
+  `--identity`, the settings `identity` entry or `AGE_IDENTITY` to
+  see them.
 
 Example: `tachy hosts list @web`, `tachy hosts info web1`.
 
@@ -200,7 +201,16 @@ then `$XDG_CONFIG_HOME/tachy/settings.pravic` (default
 `~/.config/tachy/settings.pravic`). An explicit `--settings` path or
 `TACHY_SETTINGS` that does not exist is an error; with no file found
 anywhere, settings are empty. Unknown keys in the file are load-time
-errors (strict). Today it holds two things:
+errors (strict). Today it holds the age `identity` entry and two
+sections:
+
+The top-level `identity` entry names the age identity file decrypting
+`{ age = ... }` inventory vars and `age = true` file sources —
+`identity "key.txt"` or `identity { path = "key.txt" }`, both forms
+equivalent; a second entry is a load-time error. `--identity`
+supersedes it; with neither, resolution falls back to `AGE_IDENTITY`,
+then `~/.ssh/id_ed25519`. Like every settings entry the path is
+`~`-expanded and relative to the settings file's directory.
 
 | Section | Keys | Meaning |
 |---|---|---|
@@ -208,6 +218,8 @@ errors (strict). Today it holds two things:
 | `webui` | `projects` | Array of project paths offered by [`tachy webui`](#web-ui-tachy-webui) in the browser. A directory is a project whose entry point is its `main.pravic`; a plain file is used as the entry point directly. Entries resolve like `imports.paths` (`~`-expanded, relative to the settings file); existence is not required at load time — the interface reports missing paths per project. |
 
 ```pravic
+identity "key.txt"
+
 imports {
     paths = ["libs", "~/.config/tachy/imports"]
 }
@@ -357,7 +369,7 @@ var secret_var = { env = "SECRET_VAR", from = ".env" }   # from a dotenv file
 
 | Entry | Description |
 |---|---|
-| `{ age = "path" }` | Inventory vars only: replaced by the age-decrypted content of `path` (relative to the inventory; one trailing newline stripped). Decrypted on the controller with the identity from `--identity PATH`, `AGE_IDENTITY` (path or key material — stdin, never on disk) or `~/.ssh/id_ed25519`; cannot combine with `env`/`default`/`from`; plaintext must be valid UTF-8. |
+| `{ age = "path" }` | Inventory vars only: replaced by the age-decrypted content of `path` (relative to the inventory; one trailing newline stripped). Decrypted on the controller with the identity from `--identity PATH`, the settings `identity` entry, `AGE_IDENTITY` (path or key material — stdin, never on disk) or `~/.ssh/id_ed25519`; cannot combine with `env`/`default`/`from`; plaintext must be valid UTF-8. |
 | `{ env = "NAME" }` | Replaced by the environment variable `NAME`. Unset without a `default` is an error; set-but-empty resolves to the empty string. |
 | `{ env = "NAME", from = "path" }` | Same, but the value is looked up in the dotenv file at `path` (relative to the declaring file) instead of the process environment; the environment is not consulted. `KEY=VALUE` lines, `#` comments, blank lines, optional `export ` prefix, single-line quoted values (double quotes process `\n \t \r \f \b \" \' \\`, single quotes are literal); empty values count, later keys win, malformed lines are errors naming file and line. `default` covers a key the file does not define; in bundled runs the file is read on the host, so it must live inside the project. |
 
@@ -511,7 +523,7 @@ file /tmp/stale.conf {              # removal of whatever is there
 | `state` | `"file"` | `"file"`, `"link"` (`src` is the link target), `"absent"` (removes the path). |
 | `content` | — | The exact file content; `{{ }}` rendered inline. |
 | `src` | — | Copy this project file verbatim — byte-exact, binary files (keyrings, archives) included. Presence/drift is detected by comparing sha256 checksums, so file content never travels back over the transport. |
-| `age` | — | Boolean marking `src` as age-encrypted: the plaintext is decrypted on the controller (identity from `--identity`/`AGE_IDENTITY`/`~/.ssh/id_ed25519`, like `{ age = ... }` vars) and deployed byte-exact — binary secrets fit, unlike in variables. Not templated, no newline stripping. Requires `src`, `state = "file"` only; in bundled runs the controller ships the plaintext inside the temporary bundle over the ciphertext copy (the identity never travels). See [Secrets (age)](#secrets-age). |
+| `age` | — | Boolean marking `src` as age-encrypted: the plaintext is decrypted on the controller (identity from `--identity`, the settings `identity` entry, `AGE_IDENTITY` or `~/.ssh/id_ed25519`, like `{ age = ... }` vars) and deployed byte-exact — binary secrets fit, unlike in variables. Not templated, no newline stripping. Requires `src`, `state = "file"` only; in bundled runs the controller ships the plaintext inside the temporary bundle over the ciphertext copy (the identity never travels). See [Secrets (age)](#secrets-age). |
 | `template` | — | Path to a template file (like `src`, resolved relative to the defining tasks file); its content is rendered with the variable scope and becomes the managed content. |
 | `line` | — | Ensure this line is present anywhere in the file (whole-line match); appended, newline-terminated, only when missing. |
 | `block` | — | Same for a contiguous block of lines, in order. |
@@ -769,11 +781,12 @@ check "version format" {
 ## Secrets (age)
 
 Secrets never sit in plain tasks or inventory files. Two mechanisms,
-one identity: `--identity PATH`, the `AGE_IDENTITY` environment
-variable (an existing file path, or raw key material — fed to age on
-stdin, never written to disk), or by default `~/.ssh/id_ed25519`
-(age accepts ed25519 ssh keys natively, so the deployment key can
-double as the decryption key; encrypt with
+one identity: `--identity PATH`, the `identity` entry in
+[settings](#settings-settingspravic) (superseded by the flag), the
+`AGE_IDENTITY` environment variable (an existing file path, or raw key
+material — fed to age on stdin, never written to disk), or by default
+`~/.ssh/id_ed25519` (age accepts ed25519 ssh keys natively, so the
+deployment key can double as the decryption key; encrypt with
 `age -R ~/.ssh/id_ed25519.pub`). Decryption happens on the controller
 only — the identity never travels inside a bundle.
 

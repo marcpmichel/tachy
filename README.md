@@ -259,15 +259,17 @@ tachy — Pravic-driven configuration management (Ansible-like)
         --keep-bundle      Keep each host's temporary bundle directory
                            after the run, for inspection (project copy,
                            generated inventory, report)
-        --settings PATH     Optional settings file (imports search
-                           paths, webui projects); default:
-                           TACHY_SETTINGS, then settings.pravic in the
-                           current directory, then
-                           ~/.config/tachy/settings.pravic
+        --settings PATH     Optional settings file (the identity entry,
+                           imports search paths, webui projects);
+                           default: TACHY_SETTINGS, then
+                           settings.pravic in the current directory,
+                           then ~/.config/tachy/settings.pravic
         --identity PATH    Age identity for { age = ... } inventory vars
-                           and file sources marked age = true; default:
-                           AGE_IDENTITY (path or key material), then
-                           ~/.ssh/id_ed25519 (age accepts ssh keys)
+                           and file sources marked age = true;
+                           supersedes the settings file's identity
+                           entry. Default: that entry, then AGE_IDENTITY
+                           (path or key material), then ~/.ssh/id_ed25519
+                           (age accepts ssh keys)
         --color            Force colored statuses even when stdout is not
                            a tty (forwarded to the run on each host)
         --address ADDR     Webui/webdoc only: address to bind (default
@@ -300,21 +302,24 @@ project copied to every selected host together with the tachy binary
 (and once when the webui server starts). Discovery, first found wins:
 `--settings PATH` (must exist), the `TACHY_SETTINGS` variable (must
 exist), `./settings.pravic`, then `~/.config/tachy/settings.pravic` — with
-none present, settings are empty. Today it holds the `imports` search
-paths and the `webui` project list:
+none present, settings are empty. Today it holds the age `identity`,
+the `imports` search paths and the `webui` project list:
 
 ```pravic
+identity "key.txt"
+
 imports {
     paths = ["libs", "~/.config/tachy/imports"],
 }
 
 webui {
-    projects = ["~/Code/site", "/etc/tachy/other/main.pravic"],
+    projects = ["~/Code/site"],
 }
 ```
 
-Entries of both lists are `~`-expanded and, when relative, resolve
-against the settings file's own directory (never the cwd). An `import`
+The identity and the entries of both lists are `~`-expanded and, when
+relative, resolve against the settings file's own directory (never the
+cwd). `--identity` supersedes the `identity` entry. An `import`
 path that does not resolve relative to its defining tasks file is
 searched in `paths`, in order; `projects` is what `tachy webui`
 offers in the browser (a directory is a project whose entry point is
@@ -589,7 +594,8 @@ Decryption happens **on the controller** — the identity never travels
 inside a bundle; the decrypted value reaches hosts the same way every
 resolved inventory var does (through the generated per-host inventory,
 removed with the bundle). The identity comes from `--identity PATH`,
-the `AGE_IDENTITY` environment variable (an existing file path, or raw
+the `identity` entry in settings.pravic (superseded by the flag), the
+`AGE_IDENTITY` environment variable (an existing file path, or raw
 key material — fed to age on stdin, never written to disk), or by
 default `~/.ssh/id_ed25519` (age accepts ed25519 ssh keys natively, so
 the deployment key can double as the decryption key; encrypt with
@@ -717,7 +723,8 @@ source/tachy/
   transport.d                Transport interface, local/ssh, shell helpers
   runner.d                   orchestration: bundled and direct modes
   generate.d                 the generate command: age keys, sample files
-  settings.d                 optional settings.pravic: imports search paths
+  settings.d                 optional settings.pravic: identity, imports
+                             search paths, webui projects
   modules/
     package.d                registry, TaskContext/TaskResult, shared helpers
     filemod.d                files / directories / links / absent

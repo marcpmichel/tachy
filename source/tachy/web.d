@@ -42,7 +42,7 @@ import tachy.errors;
 import tachy.events : JobEvent, eventLine, foldCounters, parseEventLine;
 import tachy.inventory : HostConfig, Inventory;
 import tachy.runner : RunOptions;
-import tachy.settings : Settings, loadSettings;
+import tachy.settings : Settings, effectiveIdentity, loadSettings;
 import tachy.transport : LocalTransport, shQuote;
 
 /// Chunk sink handed to streamed responses (one call = one write).
@@ -52,14 +52,19 @@ package(tachy) alias ChunkSink = void delegate(string chunk);
 // Entry point
 // ---------------------------------------------------------------------------
 
-int runWebUi(const RunOptions opts) @trusted
+int runWebUi(RunOptions optsIn) @trusted
 {
     import std.stdio : stdout;
 
-    if (opts.webPort < 0 || opts.webPort > 65535)
+    if (optsIn.webPort < 0 || optsIn.webPort > 65535)
         throw new TachyError("--port must be between 0 and 65535");
 
-    const Settings settings = loadSettings(opts.settings);
+    const Settings settings = loadSettings(optsIn.settings);
+    // The --identity flag supersedes the settings file's identity
+    // entry; the effective identity is what the inventory load uses
+    // and what spawned runs are given.
+    RunOptions opts = optsIn;
+    opts.identity = effectiveIdentity(optsIn.identity, settings);
     auto app = new WebApp(opts, settings);
 
     auto listener = webListener(opts);

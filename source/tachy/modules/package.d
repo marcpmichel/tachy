@@ -29,7 +29,7 @@ struct TaskContext
     string hostName;
     string tasksFileDir;  // base dir for relative `file.src` paths
     Val[string] vars;     // rendered variable scope, for template rendering
-    string ageIdentity;   // explicit --identity for `file` src decryption
+    string ageIdentity;   // --identity or the settings identity entry
                           // (empty: AGE_IDENTITY, then ~/.ssh/id_ed25519)
 }
 

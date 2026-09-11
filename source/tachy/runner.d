@@ -75,10 +75,16 @@ string[] resolveTasksFiles(in string[] args)
     return resolved;
 }
 
-int runTachy(const RunOptions opts)
+int runTachy(RunOptions optsIn)
 {
-    if (!opts.selection.length)
+    if (!optsIn.selection.length)
         throw new TachyError("missing hosts selection (comma-separated host names or @tags, or \"all\")");
+
+    // Settings are read once here for the whole run; the --identity
+    // flag supersedes the settings file's identity entry.
+    const Settings settings = loadSettings(optsIn.settings);
+    RunOptions opts = optsIn;
+    opts.identity = effectiveIdentity(optsIn.identity, settings);
 
     auto inventory = Inventory.load(opts.inventoryPath, opts.identity);
     auto hosts = inventory.select(opts.selection);
@@ -86,8 +92,8 @@ int runTachy(const RunOptions opts)
         throw new TachyError(text("selection '", opts.selection, "' matched no hosts"));
 
     if (opts.direct)
-        return runDirect(opts, inventory, hosts);
-    return runBundled(opts, inventory, hosts);
+        return runDirect(opts, inventory, hosts, settings);
+    return runBundled(opts, inventory, hosts, settings);
 }
 
 // ---------------------------------------------------------------------------
@@ -112,7 +118,9 @@ int runHosts(in string[] args, const RunOptions opts)
             ~ (args[0] == "list" ? " selection (host names, @tags or \"all\")"
                 : " host name"));
 
-    auto inventory = Inventory.load(opts.inventoryPath, opts.identity);
+    const Settings settings = loadSettings(opts.settings);
+    auto inventory = Inventory.load(opts.inventoryPath,
+        effectiveIdentity(opts.identity, settings));
     if (args[0] == "list")
     {
         auto hosts = inventory.select(args[1]);
@@ -182,7 +190,8 @@ private string attrLine(string name, string value) @safe pure
 // Direct mode: this process runs every job (the classic execution path).
 // ---------------------------------------------------------------------------
 
-private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] hosts)
+private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] hosts,
+    const Settings settings)
 {
     const bool tty = isStdoutTty() || opts.forceColor;
     const bool machine = opts.directReport.length > 0;
@@ -209,7 +218,7 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
 
     int totalFailed;
 
-    const Settings settings = loadSettings(opts.settings);
+
     foreach (tasksFile; opts.tasksFiles)
     {
         auto loaded = loadTasksFile(tasksFile, settings);
@@ -300,7 +309,8 @@ private struct DeployedBundle
     ProjectBundle bundle;
 }
 
-private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] hosts)
+private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] hosts,
+    const Settings settings)
 {
     const bool tty = isStdoutTty();
     const bool rawEvents = opts.events; // display the raw event stream
@@ -318,7 +328,6 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
 
     try
     {
-        const Settings settings = loadSettings(opts.settings);
         foreach (tasksFile; opts.tasksFiles)
         {
             auto loaded = loadTasksFile(tasksFile, settings); // validate on the controller

@@ -306,7 +306,7 @@ assert(none == "== x (ssh x)\n"
 @("hosts command: sub-command validation and unknown hosts")
 unittest
 {
-import std.file : rmdirRecurse;
+import std.file : rmdirRecurse, write;
 import tachy.errors : TachyError;
 import tachy.inventory : Inventory;
 
@@ -337,12 +337,20 @@ const string invPath = buildPath(dir, "inventory.pravic");
     f.close();
 }
 
-assert(runHosts(["info", "web1"], RunOptions(invPath)) == 0);
+// an explicit settings file keeps runHosts off discovery: other
+// threaded tests transiently set TACHY_SETTINGS (see envsync)
+const string settingsPath = buildPath(dir, "settings.pravic");
+write(settingsPath, "");
+RunOptions opts;
+opts.inventoryPath = invPath;
+opts.settings = settingsPath;
+
+assert(runHosts(["info", "web1"], opts) == 0);
 
 string msg;
 try
 {
-    runHosts(["info", "nope"], RunOptions(invPath));
+    runHosts(["info", "nope"], opts);
     assert(false, "expected TachyError");
 }
 catch (TachyError e)
@@ -353,7 +361,7 @@ assert(canFind(msg, "known: web1"), msg);
 // list rejects an empty selection the same way apply does
 try
 {
-    runHosts(["list", ""], RunOptions(invPath));
+    runHosts(["list", ""], opts);
     assert(false, "expected TachyError");
 }
 catch (TachyError e)

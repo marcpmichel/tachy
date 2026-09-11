@@ -11,9 +11,12 @@ module tachy.settings;
  *      (default `~/.config/tachy/settings.pravic`)
  *
  * With none of these present, settings are simply empty.  Today the
- * file holds the `import` search paths and the `webui` project list
- * (the projects `tachy webui` offers in the browser); anything else in
- * it is a load-time error (strict, like inventories and tasks files):
+ * file holds the age `identity`, the `import` search paths and the
+ * `webui` project list (the projects `tachy webui` offers in the
+ * browser); anything else in it is a load-time error (strict, like
+ * inventories and tasks files):
+ *
+ *     identity "key.txt"                     # or: identity { path = "key.txt" }
  *
  *     imports {
  *         paths = ["libs", "~/.config/tachy/imports"]
@@ -23,9 +26,11 @@ module tachy.settings;
  *         projects = ["~/Code/site"]
  *     }
  *
- * Entries of both lists are `~`-expanded and, when relative, resolve
- * against the settings file's own directory (never the cwd), so a
- * settings file works from anywhere.
+ * The identity decrypts `{ age = ... }` inventory vars and `age = true`
+ * file sources; `--identity` supersedes it (see `effectiveIdentity`).
+ * Entries of all three resolve like search paths: `~`-expanded and,
+ * when relative, against the settings file's own directory (never the
+ * cwd), so a settings file works from anywhere.
  */
 import std.path : absolutePath, buildNormalizedPath, buildPath, dirName,
     expandTilde, isAbsolute;
@@ -35,9 +40,18 @@ import tachy.value;
 
 struct Settings
 {
+    string identity;        // age identity file, absolute ("" when unset)
     string[] importPaths;    // absolute directories searched for import sources
     string[] webuiProjects;  // absolute project paths offered by `tachy webui`
     string file;             // where these came from ("" when none found)
+}
+
+/// The run's age identity: the `--identity` flag supersedes the
+/// settings file's `identity` entry.  An empty result falls back to
+/// AGE_IDENTITY, then ~/.ssh/id_ed25519 (resolved at use time).
+string effectiveIdentity(string flagIdentity, in Settings settings) @safe pure nothrow
+{
+    return flagIdentity.length ? flagIdentity : settings.identity;
 }
 
 /// Discover and load the settings file; never throws for a file that is
@@ -53,7 +67,22 @@ Settings loadSettings(string explicitPath) @trusted
     auto doc = loadPractic(path);
     foreach (const ref stmt; doc.stmts)
     {
-        if (stmt.kind == "imports")
+        if (stmt.kind == "identity")
+        {
+            if (s.identity.length)
+                throw new TachyError(path ~ ": line " ~ importConv(stmt.line)
+                    ~ ": duplicate 'identity' entry");
+            if (stmt.key == "path" && stmt.value.kind == Val.Kind.string_)
+                s.identity = resolveSearchPath(stmt.value.str_, path);
+            else if (stmt.value.kind == Val.Kind.table_
+                && stmt.value.table_.length == 0)
+                s.identity = resolveSearchPath(stmt.key, path);
+            else
+                throw new TachyError(path ~ ": line " ~ importConv(stmt.line)
+                    ~ ": identity takes a path — 'identity \"key.txt\"' or"
+                    ~ " 'identity { path = \"key.txt\" }', not attributes");
+        }
+        else if (stmt.kind == "imports")
         {
             if (stmt.key != "paths")
                 throw new TachyError(path ~ ": imports holds only 'paths', not '"

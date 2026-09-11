@@ -13,15 +13,17 @@
         --keep-bundle      Keep each host's temporary bundle directory
                            after the run, for inspection (project copy,
                            generated inventory, report)
-        --settings PATH     Optional settings file (imports search
-                           paths, webui projects); default:
-                           TACHY_SETTINGS, then settings.pravic in the
-                           current directory, then
-                           ~/.config/tachy/settings.pravic
+        --settings PATH     Optional settings file (the identity
+                           entry, imports search paths, webui
+                           projects); default: TACHY_SETTINGS, then
+                           settings.pravic in the current directory,
+                           then ~/.config/tachy/settings.pravic
         --identity PATH    Age identity for { age = ... } inventory vars
-                           and file sources marked age = true; default:
-                           AGE_IDENTITY (path or key material), then
-                           ~/.ssh/id_ed25519 (age accepts ssh keys)
+                           and file sources marked age = true;
+                           supersedes the settings file's identity
+                           entry. Default: that entry, then AGE_IDENTITY
+                           (path or key material), then ~/.ssh/id_ed25519
+                           (age accepts ssh keys)
         --color            Force colored statuses even when stdout is not
                            a tty (forwarded to the run on each host)
         --address ADDR     Webui/webdoc only: address to bind (default

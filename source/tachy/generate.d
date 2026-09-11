@@ -7,8 +7,9 @@ module tachy.generate;
  *    `age-keygen` binary and written to <path> (mode 0600, never
  *    overwritten; the public key is printed). The identity file
  *    decrypts `{ age = ... }` inventory vars — pass it with
- *    `--identity <path>` or `AGE_IDENTITY`, and encrypt secrets with
- *    the printed public key (`age -r <pubkey> -o secret.age`).
+ *    `--identity <path>`, the settings `identity` entry or
+ *    `AGE_IDENTITY`, and encrypt secrets with the printed public
+ *    key (`age -r <pubkey> -o secret.age`).
  *  - `tachy generate task <path>`: a commented sample tasks file,
  *    loadable as-is (verified by unittest).
  *  - `tachy generate settings <path>`: a commented sample settings
@@ -57,7 +58,8 @@ private int generateKey(string path) @trusted
     if (r.output.length)
         stdout.write(r.output); // the public key
     stdout.writefln("identity written to %s — decrypts { age = ... } inventory"
-        ~ " vars via --identity %s (or AGE_IDENTITY)", path, path);
+        ~ " vars via --identity %s, the settings identity entry or AGE_IDENTITY",
+        path, path);
     return 0;
 }
 
@@ -150,6 +152,11 @@ private immutable string sampleSettings = q"[# tachy settings — optional, read
 # variable, settings.pravic in the current directory, then
 # ~/.config/tachy/settings.pravic. Relative paths below resolve against
 # this file's directory; ~ is expanded.
+
+# The age identity decrypting { age = ... } inventory vars and
+# age = true file sources; superseded by --identity when that flag is
+# passed (default otherwise: AGE_IDENTITY, then ~/.ssh/id_ed25519).
+# identity "key.txt"
 
 imports {
     # Directories searched for import statements that do not resolve
