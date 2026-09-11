@@ -212,6 +212,7 @@ tachy generate settings settings.pravic  # a sample settings file
 tachy webui                              # graphical console (random port)
 tachy webdoc                             # the docs as a site (random port)
 tachy man                                # the full manual, man-page style
+tachy version                            # the build date (YY.mm.dd)
 ```
 
 (All of these assume the project layout above; `tachy apply '@web'` uses
@@ -241,7 +242,9 @@ tachy — Pravic-driven configuration management (Ansible-like)
     webdoc      start a local web server serving this documentation as
                 a browsable site
     man         show the full manual, unix man-page style
+    version     show the version (the build date, YY.mm.dd)
     help        show this help
+
 
   Options:
     -i, --inventory PATH   Inventory file (default: inventory.pravic)
@@ -259,9 +262,9 @@ tachy — Pravic-driven configuration management (Ansible-like)
         --keep-bundle      Keep each host's temporary bundle directory
                            after the run, for inspection (project copy,
                            generated inventory, report)
-        --settings PATH     Optional settings file (the identity entry,
-                           imports search paths, webui projects);
-                           default: TACHY_SETTINGS, then
+        --settings PATH     Optional settings file (the identity
+                           entry, imports search paths, webui
+                           projects); default: TACHY_SETTINGS, then
                            settings.pravic in the current directory,
                            then ~/.config/tachy/settings.pravic
         --identity PATH    Age identity for { age = ... } inventory vars

@@ -1519,3 +1519,34 @@
      trio updated throughout (option rows/blocks, settings and
      Secrets sections, LANGUAGE.md); source/AGENTS.md settings.d and
      value.d bullets refreshed.
+
+47. version: the program version is the build date, 'YY.mm.dd'
+   - source/assets/version holds it; dub's preBuildCommands refresh
+     it before every build — `date +%y.%m.%d | cmp -s - <file> ||
+     date +%y.%m.%d > <file>` — so the file is rewritten only when
+     the day changes: a second same-day build stays an up-to-date
+     no-op (mtime untouched, verified), while a stale date is
+     rewritten and the binary relinked with the new string (verified
+     by planting yesterday's date). Dub 1.39 rejected a shell `$(...)`
+     guard in preBuildCommands ("Invalid variable"), hence the cmp
+     pipeline with no shell dollar signs.
+   - app.d: `immutable string tachyVersion = strip(import(
+     "assets/version"))` — D reserves `version`, so the Cmd enum
+     member is Cmd.showVersion while the command word stays
+     "version"; `versionText()` returns "tachy <date>", the dispatch
+     prints it; parseCommand's unknown-command message and
+     commandEntries.txt gained the entry between man and help.
+   - Unittests (tests/app.d): ninth command word parses, the
+     unknown-command list carries version, and a new block pins the
+     `^\d{2}\.\d{2}\.\d{2}$` shape of tachyVersion, versionText()
+     and the help/man command entry. `dub test`: 137 passed, 0
+     failed.
+   - E2E (local — the command never contacts hosts, so no VM run):
+     `tachy version` prints "tachy 26.09.11", an unknown command
+     lists version, help and man carry the entry, and README's CLI
+     reference block now diffs clean against `tachy help` (also
+     fixed pre-existing drift found by that diff: a missing blank
+     line and the --settings option wrap). Docs trio updated
+     (commandEntries asset, README examples + CLI block,
+     DOCUMENTATION command table + new "### version" section);
+     AGENTS.md CLI shape and source/AGENTS.md app.d bullet refreshed.

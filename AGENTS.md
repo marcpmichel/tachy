@@ -106,7 +106,9 @@ When the user requests a durable behavior change, record it here or in the relev
  settings.pravic `webui` projects, runs start from the browser),
  `webdoc` (serves the compiled-in DOCUMENTATION.md as a multi-page
  site; no selection, read-only), `man` (prints the full built-in
- manual, unix man-page style) or
+ manual, unix man-page style), `version` (prints the version — the
+ build date `YY.mm.dd`, kept in `source/assets/version` and refreshed
+ by dub's preBuildCommands) or
  `help` (short form only: usage lines, commands, options); selection
  mixes host names, `@tag` and `all`; default inventory
  `inventory.pravic`, default tasks file `main.pravic` (a directory

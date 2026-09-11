@@ -108,6 +108,7 @@ tachy <command> [options] <selection> [<tasks.pravic>...]
   | `webui` | Start a local web server, a graphical version of the CLI — see [Web UI](#web-ui-tachy-webui). |
   | `webdoc` | Serve this documentation as a browsable web site — see [Web docs](#web-docs-tachy-webdoc). |
   | `man` | Print the full built-in manual, unix man-page style — see [man](#man). |
+  | `version` | Print the version: the build date, `YY.mm.dd` — see [version](#version). |
   | `help` | Show the short help: project and usage lines, commands, options (same as `--help`). |
 
 - `<selection>` is a comma-separated list of host names and `@tag`
@@ -191,6 +192,14 @@ top and bottom. Pipe it through `less` to page through it.
 short form: the project line, the usage lines, the commands and the
 options, plus a pointer to `man`. Everything the help used to carry
 beyond that now lives here and in `tachy man`.
+
+### version
+
+`tachy version` prints the version: the build date in `YY.mm.dd` form
+(for example `26.09.11`). The date lives in `source/assets/version`,
+stamped in by dub's pre-build commands — only the `version` command
+reads it, and rebuilding on a later day picks up the new date
+automatically.
 
 ### Settings (settings.pravic)
 

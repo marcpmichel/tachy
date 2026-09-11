@@ -22,6 +22,7 @@ enum Cmd
     webui,
     webdoc,
     man,
+    showVersion, // the word is "version", reserved in D as a keyword
     help,
 }
 
@@ -44,12 +45,14 @@ Cmd parseCommand(string word)
             return Cmd.webdoc;
         case "man":
             return Cmd.man;
+        case "version":
+            return Cmd.showVersion;
         case "help":
             return Cmd.help;
         default:
             throw new TachyError("unknown command '" ~ word
                 ~ "' (commands: apply, check, hosts, generate, webui,"
-                ~ " webdoc, man, help)");
+                ~ " webdoc, man, version, help)");
     }
 }
 
@@ -124,6 +127,9 @@ int main(string[] args)
             case Cmd.man:
                 printMan();
                 return 0;
+            case Cmd.showVersion:
+                printVersion();
+                return 0;
             case Cmd.help:
                 printHelp();
                 return 0;
@@ -146,6 +152,28 @@ int main(string[] args)
         return 1;
     }
 }
+}
+
+// ---------------------------------------------------------------------------
+// Version.  The version is the build date, 'YY.mm.dd': dub's
+// preBuildCommands keep source/assets/version current (rewritten only
+// when the day changes, so same-day rebuilds stay no-ops) and it is
+// embedded here with import(), like every other asset.  D reserves
+// 'version' as a keyword, so the symbol is tachyVersion.
+// ---------------------------------------------------------------------------
+
+/// The tachy version: the build date, 'YY.mm.dd'.
+immutable string tachyVersion = strip(import("assets/version"));
+
+/// What the `version` command prints.
+string versionText() @safe pure
+{
+    return "tachy " ~ tachyVersion;
+}
+
+private void printVersion()
+{
+    writeln(versionText());
 }
 
 // ---------------------------------------------------------------------------

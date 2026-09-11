@@ -12,4 +12,5 @@
     webdoc      start a local web server serving this documentation as
                 a browsable site
     man         show the full manual, unix man-page style
+    version     show the version (the build date, YY.mm.dd)
     help        show this help

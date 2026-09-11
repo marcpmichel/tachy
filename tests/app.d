@@ -16,7 +16,7 @@ import std.getopt : GetOptException;
 import tachy.errors : TachyError;
 import tachy.runner : RunOptions;
 
-// the eight command words parse; anything else names the commands
+// the nine command words parse; anything else names the commands
 assert(parseCommand("apply") == Cmd.apply);
 assert(parseCommand("check") == Cmd.check);
 assert(parseCommand("hosts") == Cmd.hosts);
@@ -24,6 +24,7 @@ assert(parseCommand("generate") == Cmd.generate);
 assert(parseCommand("webui") == Cmd.webui);
 assert(parseCommand("webdoc") == Cmd.webdoc);
 assert(parseCommand("man") == Cmd.man);
+assert(parseCommand("version") == Cmd.showVersion);
 assert(parseCommand("help") == Cmd.help);
 {
     string msg;
@@ -35,7 +36,7 @@ assert(parseCommand("help") == Cmd.help);
     catch (TachyError e)
         msg = e.msg;
     assert(canFind(msg, "apply, check, hosts, generate, webui,"), msg);
-    assert(canFind(msg, "webdoc, man, help"), msg);
+    assert(canFind(msg, "webdoc, man, version, help"), msg);
 }
 
 // help stays short; man carries the full reference
@@ -118,4 +119,20 @@ foreach (o; ["--keep-bundle", "--color", "--events",
     assertThrown!GetOptException(parseOptions(args, opts, wantHelp),
         "--list-hosts must no longer be an option (use: tachy hosts list)");
 }
+}
+
+@("version is the build date and the version command prints it")
+unittest
+{
+import std.algorithm.searching : canFind;
+import std.regex : match, regex;
+
+// the version comes from the embedded assets/version file: the build
+// date, YY.mm.dd
+assert(match(tachyVersion, regex(r"^\d{2}\.\d{2}\.\d{2}$")), tachyVersion);
+assert(versionText() == "tachy " ~ tachyVersion);
+
+// help and man carry the version entry
+assert(canFind(helpText(), "version     show the version"), "help");
+assert(canFind(manText(), "version     show the version"), "man");
 }
