@@ -1,14 +1,14 @@
-module tachy.settings;
+module tachy.config;
 
 /**
- * The optional settings file (`settings.pravic`), read once at the start
+ * The optional config file (`config.pravic`), read once at the start
  * of a run.  Discovery, first match wins:
  *
- *   1. `--settings PATH` — explicit, must exist
- *   2. the `TACHY_SETTINGS` environment variable — must exist
- *   3. `settings.pravic` in the current directory
- *   4. `$XDG_CONFIG_HOME/tachy/settings.pravic`
- *      (default `~/.config/tachy/settings.pravic`)
+ *   1. `--config PATH` — explicit, must exist
+ *   2. the `TACHY_CONFIG` environment variable — must exist
+ *   3. `config.pravic` in the current directory
+ *   4. `$XDG_CONFIG_HOME/tachy/config.pravic`
+ *      (default `~/.config/tachy/config.pravic`)
  *
  * With none of these present, settings are simply empty.  Today the
  * file holds the age `identity`, the `import` search paths and the
@@ -29,8 +29,8 @@ module tachy.settings;
  * The identity decrypts `{ age = ... }` inventory vars and `age = true`
  * file sources; `--identity` supersedes it (see `effectiveIdentity`).
  * Entries of all three resolve like search paths: `~`-expanded and,
- * when relative, against the settings file's own directory (never the
- * cwd), so a settings file works from anywhere.
+ * when relative, against the config file's own directory (never the
+ * cwd), so a config file works from anywhere.
  */
 import std.path : absolutePath, buildNormalizedPath, buildPath, dirName,
     expandTilde, isAbsolute;
@@ -38,7 +38,7 @@ import std.path : absolutePath, buildNormalizedPath, buildPath, dirName,
 import tachy.errors;
 import tachy.value;
 
-struct Settings
+struct Config
 {
     string identity;        // age identity file, absolute ("" when unset)
     string[] importPaths;    // absolute directories searched for import sources
@@ -47,19 +47,19 @@ struct Settings
 }
 
 /// The run's age identity: the `--identity` flag supersedes the
-/// settings file's `identity` entry.  An empty result falls back to
+/// config file's `identity` entry.  An empty result falls back to
 /// AGE_IDENTITY, then ~/.ssh/id_ed25519 (resolved at use time).
-string effectiveIdentity(string flagIdentity, in Settings settings) @safe pure nothrow
+string effectiveIdentity(string flagIdentity, in Config config) @safe pure nothrow
 {
-    return flagIdentity.length ? flagIdentity : settings.identity;
+    return flagIdentity.length ? flagIdentity : config.identity;
 }
 
-/// Discover and load the settings file; never throws for a file that is
+/// Discover and load the config file; never throws for a file that is
 /// simply absent, only for one that exists but is wrong.
-Settings loadSettings(string explicitPath) @trusted
+Config loadConfig(string explicitPath) @trusted
 {
-    Settings s;
-    const string path = discoverSettings(explicitPath);
+    Config s;
+    const string path = discoverConfig(explicitPath);
     if (!path.length)
         return s;
     s.file = path;
@@ -120,7 +120,7 @@ Settings loadSettings(string explicitPath) @trusted
         else
             throw new TachyError(path ~ ": line "
                 ~ importConv(stmt.line) ~ ": '" ~ stmt.kind
-                ~ "' is not valid in a settings file");
+                ~ "' is not valid in a config file");
     }
     return s;
 }
@@ -131,9 +131,9 @@ private string importConv(T)(T v)
     return text(v);
 }
 
-/// One search-path entry: ~-expanded, then relative to the settings
+/// One search-path entry: ~-expanded, then relative to the config
 /// file's directory, always absolute.
-private string resolveSearchPath(string entry, string settingsPath) @trusted
+private string resolveSearchPath(string entry, string configPath) @trusted
 {
     import std.file : exists;
 
@@ -141,10 +141,10 @@ private string resolveSearchPath(string entry, string settingsPath) @trusted
     if (isAbsolute(dir))
         return buildNormalizedPath(dir);
     return buildNormalizedPath(
-        buildPath(dirName(absolutePath(settingsPath)), dir));
+        buildPath(dirName(absolutePath(configPath)), dir));
 }
 
-private string discoverSettings(string explicitPath) @trusted
+private string discoverConfig(string explicitPath) @trusted
 {
     import std.file : exists;
     import std.process : environment;
@@ -153,26 +153,26 @@ private string discoverSettings(string explicitPath) @trusted
     {
         auto p = expandTilde(explicitPath);
         if (!exists(p))
-            throw new TachyError("settings file '" ~ explicitPath
+            throw new TachyError("config file '" ~ explicitPath
                 ~ "' does not exist");
         return p;
     }
-    const string env = environment.get("TACHY_SETTINGS");
+    const string env = environment.get("TACHY_CONFIG");
     if (env.length)
     {
         auto p = expandTilde(env);
         if (!exists(p))
-            throw new TachyError("TACHY_SETTINGS '" ~ env ~ "' does not exist");
+            throw new TachyError("TACHY_CONFIG '" ~ env ~ "' does not exist");
         return p;
     }
-    if (exists("settings.pravic"))
-        return "settings.pravic";
+    if (exists("config.pravic"))
+        return "config.pravic";
     const string xdg = environment.get("XDG_CONFIG_HOME");
-    const string config = xdg.length ? xdg
+    const string xdgRoot = xdg.length ? xdg
         : buildPath(environment.get("HOME"), ".config");
-    if (config.length)
+    if (xdgRoot.length)
     {
-        auto p = buildPath(config, "tachy", "settings.pravic");
+        auto p = buildPath(xdgRoot, "tachy", "config.pravic");
         if (exists(p))
             return p;
     }

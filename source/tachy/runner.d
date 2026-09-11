@@ -35,7 +35,7 @@ import tachy.inventory;
 import tachy.models;
 import tachy.modules;
 import tachy.project;
-import tachy.settings;
+import tachy.config;
 import tachy.transport;
 import tachy.value;
 import tachy.vars;
@@ -52,7 +52,7 @@ struct RunOptions
     string directReport;   // with --direct: write "ok changed failed" here
     bool events;           // with --direct: print one JSON event per line
     string identity;       // age identity for { age = ... } inventory vars
-    string settings;       // optional settings file (default: discovered)
+    string config;         // optional config file (default: discovered)
     string webAddress = "127.0.0.1"; // webui/webdoc: bind address
     int webPort = 0;       // webui/webdoc: listen port (0 = random in 10000..65534)
     string[] tasksFiles;
@@ -80,20 +80,22 @@ int runTachy(RunOptions optsIn)
     if (!optsIn.selection.length)
         throw new TachyError("missing hosts selection (comma-separated host names or @tags, or \"all\")");
 
-    // Settings are read once here for the whole run; the --identity
-    // flag supersedes the settings file's identity entry.
-    const Settings settings = loadSettings(optsIn.settings);
+    // The config file is read once here for the whole run; the
+    // --identity flag supersedes its identity entry.
+    const Config config = loadConfig(optsIn.config);
     RunOptions opts = optsIn;
-    opts.identity = effectiveIdentity(optsIn.identity, settings);
+    opts.identity = effectiveIdentity(optsIn.identity, config);
 
     auto inventory = Inventory.load(opts.inventoryPath, opts.identity);
     auto hosts = inventory.select(opts.selection);
-    if (hosts.length == 0)
-        throw new TachyError(text("selection '", opts.selection, "' matched no hosts"));
-
+    if (!hosts.length)
+        throw new TachyError("selection '" ~ opts.selection ~ "' matched no hosts");
+    if (hosts.length == 1 && hosts[0].connection == "local" && !opts.tasksFiles.length)
+        throw new TachyError("no tasks files given (a local host needs"
+            ~ " at least one tasks file argument)");
     if (opts.direct)
-        return runDirect(opts, inventory, hosts, settings);
-    return runBundled(opts, inventory, hosts, settings);
+        return runDirect(opts, inventory, hosts, config);
+    return runBundled(opts, inventory, hosts, config);
 }
 
 // ---------------------------------------------------------------------------
@@ -121,9 +123,9 @@ int runHosts(in string[] args, const RunOptions opts)
         throw new TachyError("hosts info: expected exactly one host name");
 
     const string selection = args.length == 2 ? args[1] : "all";
-    const Settings settings = loadSettings(opts.settings);
+    const Config config = loadConfig(opts.config);
     auto inventory = Inventory.load(opts.inventoryPath,
-        effectiveIdentity(opts.identity, settings));
+        effectiveIdentity(opts.identity, config));
     if (args[0] == "list")
     {
         auto hosts = inventory.select(selection);
@@ -194,7 +196,7 @@ private string attrLine(string name, string value) @safe pure
 // ---------------------------------------------------------------------------
 
 private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] hosts,
-    const Settings settings)
+    const Config config)
 {
     const bool tty = isStdoutTty() || opts.forceColor;
     const bool machine = opts.directReport.length > 0;
@@ -224,9 +226,9 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
 
     foreach (tasksFile; opts.tasksFiles)
     {
-        auto loaded = loadTasksFile(tasksFile, settings);
+        auto loaded = loadTasksFile(tasksFile, config);
 
-        // Include entries under an import destination that do
+        // Apply entries under an import destination that do
         // not exist locally: without a bundle there is nothing to
         // compose them from, so --direct skips them (bundled mode
         // composes them on the host, where the import has landed).
@@ -313,7 +315,7 @@ private struct DeployedBundle
 }
 
 private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] hosts,
-    const Settings settings)
+    const Config config)
 {
     const bool tty = isStdoutTty();
     const bool rawEvents = opts.events; // display the raw event stream
@@ -333,7 +335,7 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
     {
         foreach (tasksFile; opts.tasksFiles)
         {
-            auto loaded = loadTasksFile(tasksFile, settings); // validate on the controller
+            auto loaded = loadTasksFile(tasksFile, config); // validate on the controller
 
             const string absTasks = buildNormalizedPath(absolutePath(tasksFile));
             const string projectDir = dirName(absTasks);
@@ -363,7 +365,7 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
                 staging = makeStaging(projectDir, imports);
                 secretProjectDir = staging;
                 secretLoaded = loadTasksFile(
-                    buildPath(staging, baseName(absTasks)), settings);
+                    buildPath(staging, baseName(absTasks)), config);
             }
 
             // Controller-side decryption of `file` sources marked

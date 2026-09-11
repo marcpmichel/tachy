@@ -2,9 +2,9 @@
 
 Status: **the language tachy implements.** The parser lives in
  `source/tachy/value.d` (a hand-written recursive descent of the grammar
- below); every tasks, inventory and settings file is Pravic, and TOML
+ below); every tasks, inventory and config file is Pravic, and TOML
  support is gone.  File extension `.pravic` (`main.pravic`,
- `inventory.pravic`, `settings.pravic`); a directory entry point is its
+ `inventory.pravic`, `config.pravic`); a directory entry point is its
  `main.pravic`.
 
 ## The name
@@ -60,8 +60,8 @@ and one `vars` block naming the same variable is a duplicate-key error,
 exactly as inside a single block). Directives with no plural —
 `apply`, `ensure`, `compose`, `import` — only ever appear in the
 single form, with the key inline, since they are keyed too. `webui` and
-settings' `imports` are group-form blocks whose entries are plain data
-(no keyed targets), so they have no single form. Settings' `identity`
+config's `imports` are group-form blocks whose entries are plain data
+(no keyed targets), so they have no single form. Config's `identity`
 spells both forms with one word: `identity "key.txt"` (the path is the
 key) and `identity { path = "key.txt" }` — a `{` after the keyword
 picks the group form.
@@ -216,7 +216,7 @@ Tasks files:
 
 Inventory files add `hosts { name { ... } }` / `host name { ... }`
 (entries: `address`, `user`, `port`, `key`, `connection`, `tags`,
-`vars`) and share `vars`/`var`. Settings files use `identity "path"`
+`vars`) and share `vars`/`var`. Config files use `identity "path"`
 and `identity { path = "path" }` (both forms), plus `imports {
 paths = [...] }` and `webui { projects = [...] }` — group form only.
 
@@ -318,7 +318,7 @@ host web2 {
 }
 ```
 
-Settings:
+Config:
 
 ```pravic
 identity "key.txt"

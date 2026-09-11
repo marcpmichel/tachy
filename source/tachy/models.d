@@ -47,7 +47,7 @@ import std.string : indexOf;
 
 import tachy.errors;
 import tachy.modules : validateModuleParams;
-import tachy.settings;
+import tachy.config;
 import tachy.value;
 import tachy.vars : deepMerge, resolveEnvVars;
 
@@ -78,16 +78,16 @@ struct LoadedTasks
 
 /// Load a tasks file, recursively resolving applies.  The entry path is
 /// used as spelled (error origins read like the command line); composed
-/// files are recorded normalized in `sourceFiles`.  `settings` supplies
-/// the import search paths (settings.pravic).
-LoadedTasks loadTasksFile(string path, in Settings settings = Settings.init)
+/// files are recorded normalized in `sourceFiles`.  `config` supplies
+/// the import search paths (config.pravic).
+LoadedTasks loadTasksFile(string path, in Config config = Config.init)
 {
     LoadedTasks loaded;
     string[][string] seen; // (module \0 target) -> origins
     string[] active;       // apply chain, for cycle detection
     string[] importLandings; // where each import lands in the project
     const string projectDir = dirName(buildNormalizedPath(absolutePath(path)));
-    loadInto(path, null, projectDir, importLandings, settings, active, loaded, seen);
+    loadInto(path, null, projectDir, importLandings, config, active, loaded, seen);
     return loaded;
 }
 
@@ -96,7 +96,7 @@ LoadedTasks loadTasksFile(string path, in Settings settings = Settings.init)
 /// monotonically through the composition, so statements after an apply
 /// can use variables defined by the files it composes.
 private Val[string] loadInto(string path, Val[string] outerVars,
-    string projectDir, ref string[] importLandings, in Settings settings,
+    string projectDir, ref string[] importLandings, in Config config,
     ref string[] active, ref LoadedTasks loaded, ref string[][string] seen)
 {
     if (canFind(active, path))
@@ -115,7 +115,7 @@ private Val[string] loadInto(string path, Val[string] outerVars,
         if (s.kind == "vars")
             ownVars[s.key] = cast(Val) s.value;
         else if (s.kind == "import")
-            addImport(loaded, path, projectDir, importLandings, settings, s);
+            addImport(loaded, path, projectDir, importLandings, config, s);
         else if (s.kind != "files" && s.kind != "directories" && s.kind != "packages"
                 && s.kind != "groups" && s.kind != "users" && s.kind != "services"
                 && s.kind != "compose" && s.kind != "ensure" && s.kind != "apply")
@@ -131,7 +131,7 @@ private Val[string] loadInto(string path, Val[string] outerVars,
     {
         if (s.kind == "apply")
         {
-            processApply(s, path, projectDir, importLandings, settings,
+            processApply(s, path, projectDir, importLandings, config,
                 scopeVars, active, loaded, seen);
         }
         else if (s.kind != "vars" && s.kind != "import")
@@ -141,11 +141,11 @@ private Val[string] loadInto(string path, Val[string] outerVars,
 }
 
 /// Resolve one import statement key: as-is when absolute; the defining
-/// file's directory next; then the settings search paths in order (first
+/// file's directory next; then the config search paths in order (first
 /// existing candidate wins).  Unresolved keys keep the defining-relative
 /// path, so the deploy-time existence check names it.
 private string resolveImportPath(string src, string definingFile,
-    in Settings settings)
+    in Config config)
 {
     import std.file : exists;
 
@@ -153,9 +153,9 @@ private string resolveImportPath(string src, string definingFile,
         return src;
     auto here = buildNormalizedPath(
         absolutePath(buildPath(dirName(definingFile), src)));
-    if (!settings.importPaths.length || exists(here))
+    if (!config.importPaths.length || exists(here))
         return here;
-    foreach (root; settings.importPaths)
+    foreach (root; config.importPaths)
     {
         auto candidate = buildNormalizedPath(buildPath(root, src));
         if (exists(candidate))
@@ -171,7 +171,7 @@ private string resolveImportPath(string src, string definingFile,
 /// inner run, where the copies already sit inside the project) parse and
 /// ignore them, so no existence check happens here.
 private void addImport(ref LoadedTasks loaded, string path, string projectDir,
-    ref string[] importLandings, in Settings settings, in PracticStmt s)
+    ref string[] importLandings, in Config config, in PracticStmt s)
 {
     const string ctx = path ~ ": line " ~ text(s.line) ~ ": import \""
         ~ s.key ~ "\"";
@@ -180,7 +180,7 @@ private void addImport(ref LoadedTasks loaded, string path, string projectDir,
     if (s.value.table_.length)
         throw new TachyError(ctx ~ ": 'import' entries take no parameters (the"
             ~ " path is copied into the bundle as its base name)");
-    auto resolved = resolveImportPath(s.key, path, settings);
+    auto resolved = resolveImportPath(s.key, path, config);
     if (!canFind(loaded.imports, resolved))
     {
         loaded.imports ~= resolved;
@@ -208,7 +208,7 @@ private bool underImportLanding(string resolved, in string[] importLandings)
 /// flows on, so later statements (and the applier, when the apply
 /// comes first) see everything it contributed.
 private void processApply(in PracticStmt s, string path,
-    string projectDir, ref string[] importLandings, in Settings settings,
+    string projectDir, ref string[] importLandings, in Config config,
     ref Val[string] scopeVars, ref string[] active, ref LoadedTasks loaded,
     ref string[][string] seen)
 {
@@ -256,7 +256,7 @@ private void processApply(in PracticStmt s, string path,
         resolved = buildPath(resolved, "main.pravic");
     active ~= path;
     auto childScope = loadInto(resolved, deepMerge(scopeVars, binding),
-        projectDir, importLandings, settings, active, loaded, seen);
+        projectDir, importLandings, config, active, loaded, seen);
     active = active[0 .. $ - 1];
     scopeVars = deepMerge(scopeVars, childScope);
 }

@@ -136,8 +136,8 @@ Example: `tachy apply @web req/web`, `tachy check all`,
 | `--direct` | Apply tasks files directly in this process, without bundling a project (this is how the copied binary runs on each host). |
 | `--direct-report P` | With `--direct`: write `ok changed failed` counters to P. |
 | `--events` | Print one JSON event per line on stdout instead of text (machine mode). |
-| `--settings PATH` | Optional settings file (see [settings](#settings-settingspravic)); default: `TACHY_SETTINGS`, then `./settings.pravic`, then `~/.config/tachy/settings.pravic`. |
-| `--identity PATH` | Age identity for `{ age = ... }` inventory vars and `file` sources marked `age = true`; supersedes the settings file's `identity` entry. Default: that entry, then `AGE_IDENTITY` (path or key material), then `~/.ssh/id_ed25519` (age accepts ssh keys). |
+| `--config PATH` | Optional config file (see [config](#config-configpravic)); default: `TACHY_CONFIG`, then `./config.pravic`, then `~/.config/tachy/config.pravic`. |
+| `--identity PATH` | Age identity for `{ age = ... }` inventory vars and `file` sources marked `age = true`; supersedes the config file's `identity` entry. Default: that entry, then `AGE_IDENTITY` (path or key material), then `~/.ssh/id_ed25519` (age accepts ssh keys). |
 | `--color` | Force colored statuses even when stdout is not a tty. |
 | `--address ADDR`, `--port PORT` | Webui/webdoc only: address (default 127.0.0.1) and port to listen on. The default port (and `0`) is a random port between 10000 and 65534 — both commands are localhost conveniences; the bound URL is printed, and tachy tries to open it in the local browser (`gio open`, best-effort). |
 
@@ -155,7 +155,7 @@ like every other command.
   connection/port defaults), then its effective variables — global
   `<` host, sorted by name, values in Pravic syntax. Age-marked vars
   are decrypted on the controller like in a run, so pass
-  `--identity`, the settings `identity` entry or `AGE_IDENTITY` to
+  `--identity`, the config `identity` entry or `AGE_IDENTITY` to
   see them.
 
 Example: `tachy hosts list`, `tachy hosts list @web`,
@@ -176,8 +176,8 @@ never contacts a host and never overwrites an existing file.
   `age-keygen` (it ships with the age package) on the controller.
 - `tachy generate task <path>` — a commented sample tasks file exercising
   the common directives (`var`, `directory`, `file`, `ensure`, composition
-- `tachy generate settings <path>` — a commented sample settings file
-  (see [settings](#settings-settingspravic)).
+- `tachy generate config <path>` — a commented sample config file
+  (see [config](#config-configpravic)).
 
 ### man
 
@@ -201,14 +201,14 @@ stamped in by dub's pre-build commands — only the `version` command
 reads it, and rebuilding on a later day picks up the new date
 automatically.
 
-### Settings (settings.pravic)
+### Config (config.pravic)
 
 Optional; read once at the start of every `apply`/`check` (and once
 when the webui server starts). Discovery, first found wins:
-`--settings PATH`, the `TACHY_SETTINGS` variable, `./settings.pravic`,
-then `$XDG_CONFIG_HOME/tachy/settings.pravic` (default
-`~/.config/tachy/settings.pravic`). An explicit `--settings` path or
-`TACHY_SETTINGS` that does not exist is an error; with no file found
+`--config PATH`, the `TACHY_CONFIG` variable, `./config.pravic`,
+then `$XDG_CONFIG_HOME/tachy/config.pravic` (default
+`~/.config/tachy/config.pravic`). An explicit `--config` path or
+`TACHY_CONFIG` that does not exist is an error; with no file found
 anywhere, settings are empty. Unknown keys in the file are load-time
 errors (strict). Today it holds the age `identity` entry and two
 sections:
@@ -218,13 +218,13 @@ The top-level `identity` entry names the age identity file decrypting
 `identity "key.txt"` or `identity { path = "key.txt" }`, both forms
 equivalent; a second entry is a load-time error. `--identity`
 supersedes it; with neither, resolution falls back to `AGE_IDENTITY`,
-then `~/.ssh/id_ed25519`. Like every settings entry the path is
-`~`-expanded and relative to the settings file's directory.
+then `~/.ssh/id_ed25519`. Like every config entry the path is
+`~`-expanded and relative to the config file's directory.
 
 | Section | Keys | Meaning |
 |---|---|---|
-| `imports` | `paths` | Array of directories searched, in order, for `import` keys that do not resolve relative to their defining tasks file (first existing match wins; unresolved keys keep the defining-relative path, which the deploy-time existence check reports). Entries are `~`-expanded; relative entries resolve against the settings file's directory, never the cwd. |
-| `webui` | `projects` | Array of project paths offered by [`tachy webui`](#web-ui-tachy-webui) in the browser. A directory is a project whose entry point is its `main.pravic`; a plain file is used as the entry point directly. Entries resolve like `imports.paths` (`~`-expanded, relative to the settings file); existence is not required at load time — the interface reports missing paths per project. |
+| `imports` | `paths` | Array of directories searched, in order, for `import` keys that do not resolve relative to their defining tasks file (first existing match wins; unresolved keys keep the defining-relative path, which the deploy-time existence check reports). Entries are `~`-expanded; relative entries resolve against the config file's directory, never the cwd. |
+| `webui` | `projects` | Array of project paths offered by [`tachy webui`](#web-ui-tachy-webui) in the browser. A directory is a project whose entry point is its `main.pravic`; a plain file is used as the entry point directly. Entries resolve like `imports.paths` (`~`-expanded, relative to the config file); existence is not required at load time — the interface reports missing paths per project. |
 
 ```pravic
 identity "key.txt"
@@ -262,10 +262,10 @@ files into the bundle.
 the local browser, `gio open`, best-effort) that is a graphical version
 of the CLI:
 
-- **Projects**: the `webui` `projects` list of settings.pravic becomes
+- **Projects**: the `webui` `projects` list of config.pravic becomes
   a clickable sidebar (a directory is a project entered through its
-  `main.pravic`; missing paths show struck through). Settings are read
-  once when the server starts — restart it after editing them.
+  `main.pravic`; missing paths show struck through). The config file
+  is read once when the server starts — restart it after editing it.
 - **Runs**: pick a host selection (the inventory's hosts and `@tag`s
   are offered as toggleable chips; free text works too) and press
   **Check** or **Apply**. Each run is this very binary spawned as
@@ -310,7 +310,7 @@ read-only:
 - **Internal links work across pages**: `#anchor` links are resolved
   against every heading and rewritten to the page holding their
   target (both the hyphenated and the compact spelling, e.g.
-  `#settings-settingspravic` and `#settingssettingspravic`).
+  `#config-configpravic` and `#configconfigpravic`).
 - **Always current**: the pages are generated from the
   `DOCUMENTATION.md` embedded in the binary at compile time — the site
   documents exactly the binary being run, with no file to discover.
@@ -378,7 +378,7 @@ var secret_var = { env = "SECRET_VAR", from = ".env" }   # from a dotenv file
 
 | Entry | Description |
 |---|---|
-| `{ age = "path" }` | Inventory vars only: replaced by the age-decrypted content of `path` (relative to the inventory; one trailing newline stripped). Decrypted on the controller with the identity from `--identity PATH`, the settings `identity` entry, `AGE_IDENTITY` (path or key material — stdin, never on disk) or `~/.ssh/id_ed25519`; cannot combine with `env`/`default`/`from`; plaintext must be valid UTF-8. |
+| `{ age = "path" }` | Inventory vars only: replaced by the age-decrypted content of `path` (relative to the inventory; one trailing newline stripped). Decrypted on the controller with the identity from `--identity PATH`, the config `identity` entry, `AGE_IDENTITY` (path or key material — stdin, never on disk) or `~/.ssh/id_ed25519`; cannot combine with `env`/`default`/`from`; plaintext must be valid UTF-8. |
 | `{ env = "NAME" }` | Replaced by the environment variable `NAME`. Unset without a `default` is an error; set-but-empty resolves to the empty string. |
 | `{ env = "NAME", from = "path" }` | Same, but the value is looked up in the dotenv file at `path` (relative to the declaring file) instead of the process environment; the environment is not consulted. `KEY=VALUE` lines, `#` comments, blank lines, optional `export ` prefix, single-line quoted values (double quotes process `\n \t \r \f \b \" \' \\`, single quotes are literal); empty values count, later keys win, malformed lines are errors naming file and line. `default` covers a key the file does not define; in bundled runs the file is read on the host, so it must live inside the project. |
 
@@ -430,7 +430,7 @@ file /opt/gogs/setup.sh {
 
 Imports take no parameters (so the braces are optional). A key that does not
 resolve relative to its defining file is searched in the
-[settings](#settings-settingspravic) `imports` paths. Sources are validated on
+[config](#config-configpravic) `imports` paths. Sources are validated on
 the controller at deploy time (existence, and a destination that does
 not collide with project content or another import — imports never
 overwrite anything). Direct runs (`--direct`, including the on-host
@@ -532,7 +532,7 @@ file /tmp/stale.conf {              # removal of whatever is there
 | `state` | `"file"` | `"file"`, `"link"` (`src` is the link target), `"absent"` (removes the path). |
 | `content` | — | The exact file content; `{{ }}` rendered inline. |
 | `src` | — | Copy this project file verbatim — byte-exact, binary files (keyrings, archives) included. Presence/drift is detected by comparing sha256 checksums, so file content never travels back over the transport. |
-| `age` | — | Boolean marking `src` as age-encrypted: the plaintext is decrypted on the controller (identity from `--identity`, the settings `identity` entry, `AGE_IDENTITY` or `~/.ssh/id_ed25519`, like `{ age = ... }` vars) and deployed byte-exact — binary secrets fit, unlike in variables. Not templated, no newline stripping. Requires `src`, `state = "file"` only; in bundled runs the controller ships the plaintext inside the temporary bundle over the ciphertext copy (the identity never travels). See [Secrets (age)](#secrets-age). |
+| `age` | — | Boolean marking `src` as age-encrypted: the plaintext is decrypted on the controller (identity from `--identity`, the config `identity` entry, `AGE_IDENTITY` or `~/.ssh/id_ed25519`, like `{ age = ... }` vars) and deployed byte-exact — binary secrets fit, unlike in variables. Not templated, no newline stripping. Requires `src`, `state = "file"` only; in bundled runs the controller ships the plaintext inside the temporary bundle over the ciphertext copy (the identity never travels). See [Secrets](#secrets-age). |
 | `template` | — | Path to a template file (like `src`, resolved relative to the defining tasks file); its content is rendered with the variable scope and becomes the managed content. |
 | `line` | — | Ensure this line is present anywhere in the file (whole-line match); appended, newline-terminated, only when missing. |
 | `block` | — | Same for a contiguous block of lines, in order. |
@@ -791,7 +791,7 @@ ensure "version format" {
 
 Secrets never sit in plain tasks or inventory files. Two mechanisms,
 one identity: `--identity PATH`, the `identity` entry in
-[settings](#settings-settingspravic) (superseded by the flag), the
+[config](#config-configpravic) (superseded by the flag), the
 `AGE_IDENTITY` environment variable (an existing file path, or raw key
 material — fed to age on stdin, never written to disk), or by default
 `~/.ssh/id_ed25519` (age accepts ed25519 ssh keys natively, so the
@@ -859,5 +859,5 @@ init file:
 autocmd BufNewFile,BufRead *.pravic setfiletype pravic
 ```
 
-Then every `main.pravic`, `inventory.pravic` and `settings.pravic`
+Then every `main.pravic`, `inventory.pravic` and `config.pravic`
 opens colorized.

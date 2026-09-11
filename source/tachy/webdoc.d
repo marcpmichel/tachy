@@ -374,8 +374,8 @@ private string makeLink(string label, string href, const(string[string])* anchor
 
 /// Lowercase; alphanumerics kept, whitespace becomes a '-' separator
 /// (runs collapse), every other character is dropped — GitHub-style
-/// slugs, matching the file's link spellings ("Settings
-/// (settings.pravic)" -> settings-settingspravic).
+/// slugs, matching the file's link spellings ("Config
+/// (config.pravic)" -> config-configpravic).
 package(tachy) string slugify(string t) @safe pure
 {
     import std.ascii : isDigit, isLower, toLower;

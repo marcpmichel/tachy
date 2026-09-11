@@ -7,12 +7,12 @@ module tachy.generate;
  *    `age-keygen` binary and written to <path> (mode 0600, never
  *    overwritten; the public key is printed). The identity file
  *    decrypts `{ age = ... }` inventory vars — pass it with
- *    `--identity <path>`, the settings `identity` entry or
+ *    `--identity <path>`, the config `identity` entry or
  *    `AGE_IDENTITY`, and encrypt secrets with the printed public
  *    key (`age -r <pubkey> -o secret.age`).
  *  - `tachy generate task <path>`: a commented sample tasks file,
  *    loadable as-is (verified by unittest).
- *  - `tachy generate settings <path>`: a commented sample settings
+ *  - `tachy generate config <path>`: a commented sample config
  *    file, loadable as-is.
  */
 import std.stdio : stdout;
@@ -24,20 +24,20 @@ int runGenerate(in string[] args)
 {
     if (args.length != 2)
         throw new TachyError("generate: expected 'key <path>', 'task <path>'"
-            ~ " or 'settings <path>' — examples: tachy generate key key.txt,"
-            ~ " tachy generate task main.pravic, tachy generate settings"
-            ~ " settings.pravic");
+            ~ " or 'config <path>' — examples: tachy generate key key.txt,"
+            ~ " tachy generate task main.pravic, tachy generate config"
+            ~ " config.pravic");
     switch (args[0])
     {
         case "key":
             return generateKey(args[1]);
         case "task":
             return generateTask(args[1]);
-        case "settings":
-            return generateSettings(args[1]);
+        case "config":
+            return generateConfig(args[1]);
         default:
             throw new TachyError("generate: unknown thing '" ~ args[0]
-                ~ "' to generate (expected 'key', 'task' or 'settings')");
+                ~ "' to generate (expected 'key', 'task' or 'config')");
     }
 }
 
@@ -58,7 +58,7 @@ private int generateKey(string path) @trusted
     if (r.output.length)
         stdout.write(r.output); // the public key
     stdout.writefln("identity written to %s — decrypts { age = ... } inventory"
-        ~ " vars via --identity %s, the settings identity entry or AGE_IDENTITY",
+        ~ " vars via --identity %s, the config identity entry or AGE_IDENTITY",
         path, path);
     return 0;
 }
@@ -94,23 +94,23 @@ package(tachy) int generateTask(string path)
     return 0;
 }
 
-/// Sample settings file; refuses to overwrite (generate creates new
+/// Sample config file; refuses to overwrite (generate creates new
 /// files).
-private int generateSettings(string path)
+private int generateConfig(string path)
 {
     import std.file : exists, write;
     import std.stdio : writefln;
 
     if (!path.length)
-        throw new TachyError("generate settings: expected an output path");
+        throw new TachyError("generate config: expected an output path");
     if (exists(path))
-        throw new TachyError("generate settings: '" ~ path
+        throw new TachyError("generate config: '" ~ path
             ~ "' already exists (generate never overwrites)");
     try
-        write(path, sampleSettings);
+        write(path, sampleConfig);
     catch (Exception e)
         throw new TachyError("cannot write '" ~ path ~ "': " ~ e.msg);
-    writefln("wrote a sample settings file to %s — edit the imports"
+    writefln("wrote a sample config file to %s — edit the imports"
         ~ " search paths, then use import \"name\" in tasks files", path);
     return 0;
 }
@@ -118,4 +118,4 @@ private int generateSettings(string path)
 // The sample texts live in assets/*.txt and are embedded at compile
 // time with import(), like the help/man blocks in app.d.
 private immutable string sampleTasks = import("assets/sampleTask.txt");
-private immutable string sampleSettings = import("assets/sampleSettings.txt");
+private immutable string sampleConfig = import("assets/sampleConfig.txt");

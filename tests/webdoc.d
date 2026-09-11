@@ -24,8 +24,8 @@ unittest
 assert(slugify("`[compose]` — Docker Compose stacks")
     == "compose-docker-compose-stacks");
 assert(slugify("Web UI (tachy webui)") == "web-ui-tachy-webui");
-assert(slugify("Settings (settings.pravic)") == "settings-settingspravic");
-assert(compactOf("settings-settingspravic") == "settingssettingspravic");
+assert(slugify("Config (config.pravic)") == "config-configpravic");
+assert(compactOf("config-configpravic") == "configconfigpravic");
 assert(slugify("Purpose") == "purpose");
 assert(slugify("A b") == "a-b");
 }
@@ -35,7 +35,7 @@ unittest
 {
 string[string] anchors;
 anchors["generate"] = "4-generate";
-anchors["settingssettingspravic"] = "6-settings-settingspravic";
+anchors["configconfigpravic"] = "6-config-configpravic";
 
 assert(inlineMd("a < b & c", null) == "a &lt; b &amp; c");
 assert(inlineMd("`a < b`", null) == "<code>a &lt; b</code>");
@@ -46,8 +46,8 @@ assert(inlineMd("`**not bold** [x](y)`", null) == "<code>**not bold** [x](y)</co
 // internal anchors resolve to their page, both spellings
 assert(inlineMd("[g](#generate)", &anchors)
     == `<a href="/doc/4-generate#generate">g</a>`);
-assert(inlineMd("[s](#settingssettingspravic)", &anchors)
-    == `<a href="/doc/6-settings-settingspravic#settingssettingspravic">s</a>`);
+assert(inlineMd("[s](#configconfigpravic)", &anchors)
+    == `<a href="/doc/6-config-configpravic#configconfigpravic">s</a>`);
 // unknown anchors and external urls stay as written
 assert(inlineMd("[x](#nowhere)", &anchors) == `<a href="#nowhere">x</a>`);
 assert(inlineMd("[x](https://example.invalid/a?b=1&c)", null)

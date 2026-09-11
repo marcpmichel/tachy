@@ -149,7 +149,7 @@ import std.stdio : File;
 import tachy.errors : TachyError;
 import tachy.models : loadTasksFile;
 import tachy.project : DecryptedFile, ImportSpec;
-import tachy.settings : Settings;
+import tachy.config : Config;
 import tachy.value : Val;
 import tachy.vars : AgeIdentity, ageDecrypt;
 
@@ -180,10 +180,10 @@ apply "land/x.pravic"
     f.close();
 }
 
-Settings settings;
-settings.importPaths = [buildPath(root, "src")];
+Config cfg;
+cfg.importPaths = [buildPath(root, "src")];
 
-auto loaded = loadTasksFile(buildPath(root, "proj", "main.pravic"), settings);
+auto loaded = loadTasksFile(buildPath(root, "proj", "main.pravic"), cfg);
 assert(loaded.deferred.length == 1, text(loaded.deferred.length));
 assert(canFind(loaded.deferred[0], "land/x.pravic"), loaded.deferred[0]);
 assert(loaded.jobs.length == 0); // everything deferred, nothing seen
@@ -207,7 +207,7 @@ assert(exists(buildPath(staging, "land", "x.pravic")));
 
 // the shadow composition sees the deferred subtree, nested apply
 // composed, exactly like the on-host inner run will
-auto shadow = loadTasksFile(buildPath(staging, "main.pravic"), settings);
+auto shadow = loadTasksFile(buildPath(staging, "main.pravic"), cfg);
 assert(shadow.deferred.length == 0, "landing exists in the mirror");
 assert(shadow.jobs.length == 2, text(shadow.jobs.length));
 
@@ -338,13 +338,13 @@ const string invPath = buildPath(dir, "inventory.pravic");
     f.close();
 }
 
-// an explicit settings file keeps runHosts off discovery: other
-// threaded tests transiently set TACHY_SETTINGS (see envsync)
-const string settingsPath = buildPath(dir, "settings.pravic");
-write(settingsPath, "");
+// an explicit config file keeps runHosts off discovery: other
+// threaded tests transiently set TACHY_CONFIG (see envsync)
+const string configPath = buildPath(dir, "config.pravic");
+write(configPath, "");
 RunOptions opts;
 opts.inventoryPath = invPath;
-opts.settings = settingsPath;
+opts.config = configPath;
 
 assert(runHosts(["info", "web1"], opts) == 0);
 

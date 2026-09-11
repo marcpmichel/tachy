@@ -11,7 +11,7 @@ vars the environment of the process that loads them (the host, in
 bundled mode).  An unset variable without a default is an error.
 Inventory vars may also hold { age = "file.age" }: replaced by that
 file's age-decrypted content (one trailing newline stripped), on the
-controller, with the identity from --identity, the settings identity
+controller, with the identity from --identity, the config identity
 entry, AGE_IDENTITY or ~/.ssh/id_ed25519.  Binary secrets do not fit
 variables — deploy
 them with a file src marked age = true instead: the source is

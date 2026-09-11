@@ -5,7 +5,7 @@
                 <host>" shows one host's attributes
     generate    key <path> : writes a new age key pair
                 task <path> : write a sample tasks file
-                settings <path> : write a sample settings file
+                config <path> : write a sample config file
                 (note: all refuse to overwrite)
     webui       start a local web server: a graphical version of this
                 CLI

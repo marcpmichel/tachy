@@ -40,7 +40,7 @@ This doc owns the source tree's structure and conventions;
   - `models.d` — tasks-file composition: Pravic statements in source
     order (`apply` composes its file at the statement's position;
     vars/import statements are file-wide, not jobs), duplicate-target
-    and cycle detection, `import` collection with settings search
+    and cycle detection, `import` collection with config search
     paths (bundled-mode external files; applies under an import
     landing missing locally defer to the host)
   - `events.d` — execution events (producer/consumer split): `JobEvent` + builders, `foldCounters`, `TextRenderer` (the one renderer for both modes), NDJSON `eventLine`/`parseEventLine` for the stream between inner runs and the controller
@@ -61,11 +61,11 @@ This doc owns the source tree's structure and conventions;
     written over their ciphertext copies, generated one-host
     inventory), Val → Pravic serialization
   - `generate.d` — the `generate` command: age key pairs (`age-keygen`),
-    sample tasks/settings files (controller-side scaffolding; the sample
-    texts are assets — `sampleTask.txt`/`sampleSettings.txt` — embedded
+    sample tasks/config files (controller-side scaffolding; the sample
+    texts are assets — `sampleTask.txt`/`sampleConfig.txt` — embedded
     with `import()` like app.d's help/man blocks)
-  - `settings.d` — the optional settings.pravic (discovery: `--settings`,
-    `TACHY_SETTINGS`, ./settings.pravic, XDG; the `identity` age entry
+  - `config.d` — the optional config.pravic (discovery: `--config`,
+    `TACHY_CONFIG`, ./config.pravic, XDG; the `identity` age entry
     — both spellings, `effectiveIdentity` makes the `--identity` flag
     supersede it, wired once per entry point in runner.d/web.d —
     `imports` search paths and `webui` projects, strict validation)

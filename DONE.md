@@ -1629,3 +1629,39 @@
      `tachy help` again. Doc trio (commandEntries asset, README,
      DOCUMENTATION hosts section + example) and the root/source AGENTS
      CLI bullets updated.
+
+51. rename settings.pravic to config.pravic (name, not concept: the
+   file keeps holding identity/imports/webui settings)
+   - One clean cutover to "config": file name (`./config.pravic`,
+     `~/.config/tachy/config.pravic`), `--settings` → `--config`,
+     `TACHY_SETTINGS` → `TACHY_CONFIG`, `generate settings` →
+     `generate config`, module `settings.d` → `config.d`
+     (`tachy.settings` → `tachy.config`, `Settings`/`loadSettings` →
+     `Config`/`loadConfig`, RunOptions.settings → .config), and the
+     sample asset `sampleSettings.txt` → `sampleConfig.txt` (header
+     comments updated). No compat aliases: old names error
+     ("Unrecognized option --settings", "unknown thing 'settings'",
+     TACHY_SETTINGS silently ignored).
+   - Importers rewired (models/runner/web/vars error texts/app getopt
+     + webui error strings, webui/index.html hint); man/help assets
+     (optionEntries --config row, commandEntries generate config,
+     manExamples, compositionBody/variablesBody/webuiBody wording);
+     doc trio (README Config section + CLI block, DOCUMENTATION "###
+     Config (config.pravic)" — the webdoc anchor is now
+     #config-configpravic, links and slug tests updated — LANGUAGE.md
+     "config files"); root/source AGENTS bullets.
+   - Tests: tests/settings.d → tests/config.d (fixtures, TACHY_CONFIG,
+     scratch names), app/models/runner/generate/value/envsync updated.
+   - Found and fixed a self-inflicted regression while verifying: the
+     module rewrite dropped loadConfig's `if (!path.length) return s;
+     s.file = path;` guard (empty discovery crashed into loadPractic
+     and s.file stayed unset) — restored, proven by the XDG discovery
+     unittest that caught it.
+   - dub test: 137 passed, 0 failed (run twice). E2E: `generate config`
+     writes a loadable sample; discovery verified through the real
+     binary for --config, TACHY_CONFIG, cwd and XDG ($HOME override,
+     broken-file error names the path); imports search path from
+     config.pravic lands an import in the bundle (file deployed from
+     it, idempotent second run); webui startup lists projects from
+     config.pravic; help carries --config (no --settings) and
+     README's CLI block byte-matches `tachy help`.

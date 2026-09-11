@@ -24,4 +24,4 @@ bindings < composed file's own vars):
                                       # host.  A bare name that does
                                       # not resolve here is searched in
                                       # the imports paths of
-                                      # settings.pravic
+                                      # config.pravic

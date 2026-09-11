@@ -158,7 +158,7 @@ hosts {
         && g[1].value.table_["address"].str_ == "10.0.0.2");
 }
 
-@("inventory and settings shapes")
+@("inventory and config shapes")
 unittest
 {
     auto stmts = parseStmts(`

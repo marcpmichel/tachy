@@ -1,8 +1,8 @@
-/// Tests for tachy.settings, moved from the module's in-file
+/// Tests for tachy.config, moved from the module's in-file
 /// unittest blocks (tests/ is compiled only under `dub test`).
-module tachy.tests.settings;
+module tachy.tests.config;
 
-import tachy.settings;
+import tachy.config;
 
 import std.algorithm.searching : canFind;
 import std.file : exists, mkdirRecurse, rmdirRecurse, tempDir, write;
@@ -14,7 +14,7 @@ import tachy.errors : TachyError;
 @("discovery: explicit, env, cwd, xdg (first found wins)")
 unittest
 {
-    auto base = buildPath(tempDir, "tachy_settings_ut");
+    auto base = buildPath(tempDir, "tachy_config_ut");
     if (exists(base)) rmdirRecurse(base);
     mkdirRecurse(base);
     scope (exit) rmdirRecurse(base);
@@ -23,7 +23,7 @@ unittest
     {
         try
         {
-            loadSettings(buildPath(base, "missing.pravic"));
+            loadConfig(buildPath(base, "missing.pravic"));
             assert(false, "expected TachyError");
         }
         catch (TachyError e)
@@ -33,18 +33,18 @@ unittest
     }
     write(buildPath(base, "explicit.pravic"), "imports { paths = [\"d\"] }\n");
     mkdirRecurse(buildPath(base, "d"));
-    auto s = loadSettings(buildPath(base, "explicit.pravic"));
+    auto s = loadConfig(buildPath(base, "explicit.pravic"));
     assert(s.importPaths.length == 1
         && s.importPaths[0] == buildPath(base, "d"), s.importPaths[0]);
 
     // XDG discovery (~-expanded and relative entries resolve against it)
     mkdirRecurse(buildPath(base, "home", ".config", "tachy"));
-    write(buildPath(base, "home", ".config", "tachy", "settings.pravic"),
+    write(buildPath(base, "home", ".config", "tachy", "config.pravic"),
         "imports { paths = [\"~/abs-ut\", \"rel\"] }\n");
-    s = withEnv(["TACHY_SETTINGS", "XDG_CONFIG_HOME", "HOME"],
+    s = withEnv(["TACHY_CONFIG", "XDG_CONFIG_HOME", "HOME"],
         ["", "", buildPath(base, "home")],
-        () => loadSettings(""));
-    assert(canFind(s.file, ".config/tachy/settings.pravic"), s.file);
+        () => loadConfig(""));
+    assert(canFind(s.file, ".config/tachy/config.pravic"), s.file);
     assert(s.importPaths.length == 2);
     assert(s.importPaths[1] == buildPath(base, "home", ".config",
         "tachy", "rel"));
@@ -52,9 +52,9 @@ unittest
     // explicit env var must exist
     try
     {
-        withEnv(["TACHY_SETTINGS", "XDG_CONFIG_HOME", "HOME"],
+        withEnv(["TACHY_CONFIG", "XDG_CONFIG_HOME", "HOME"],
             [buildPath(base, "nope.pravic"), "", ""],
-            () => loadSettings(""));
+            () => loadConfig(""));
         assert(false, "expected TachyError");
     }
     catch (TachyError e)
@@ -64,31 +64,31 @@ unittest
 
     // empty XDG falls back to HOME
     mkdirRecurse(buildPath(base, "cfg", "tachy"));
-    write(buildPath(base, "cfg", "tachy", "settings.pravic"), "");
+    write(buildPath(base, "cfg", "tachy", "config.pravic"), "");
 
-    s = withEnv(["TACHY_SETTINGS", "XDG_CONFIG_HOME", "HOME"],
+    s = withEnv(["TACHY_CONFIG", "XDG_CONFIG_HOME", "HOME"],
         ["", buildPath(base, "cfg"), buildPath(base, "home")],
-        () => loadSettings(""));
+        () => loadConfig(""));
     assert(canFind(s.file, buildPath(base, "cfg")));
 
-    // cwd settings.pravic is found before xdg
+    // cwd config.pravic is found before xdg
     {
         import std.file : chdir, getcwd;
         auto keep = getcwd();
         scope (exit) chdir(keep);
         chdir(base);
-        write("settings.pravic", "");
-        s = withEnv(["TACHY_SETTINGS", "XDG_CONFIG_HOME", "HOME"],
+        write("config.pravic", "");
+        s = withEnv(["TACHY_CONFIG", "XDG_CONFIG_HOME", "HOME"],
             ["", buildPath(base, "cfg"), buildPath(base, "home")],
-            () => loadSettings(""));
-        assert(s.file == "settings.pravic", s.file);
+            () => loadConfig(""));
+        assert(s.file == "config.pravic", s.file);
     }
 }
 
 @("webui projects: resolution and shapes")
 unittest
 {
-    auto base = buildPath(tempDir, "tachy_settings_webui_ut");
+    auto base = buildPath(tempDir, "tachy_config_webui_ut");
     if (exists(base)) rmdirRecurse(base);
     mkdirRecurse(buildPath(base, "cfg"));
     mkdirRecurse(buildPath(base, "site"));
@@ -97,7 +97,7 @@ unittest
     // whole span (set, load, assert, restore) holds the env lock.
     // Everything after the first load is explicit-path and reads no
     // environment.
-    Settings s;
+    Config s;
     synchronized (envM)
     {
         const string savedHome = environment.get("HOME");
@@ -106,10 +106,10 @@ unittest
 
         write(buildPath(base, "cfg", "s.pravic"),
             "webui { projects = [\"site\", \"~/home-site\", \"/abs/task.pravic\"] }\n");
-        s = loadSettings(buildPath(base, "cfg", "s.pravic"));
+        s = loadConfig(buildPath(base, "cfg", "s.pravic"));
         assert(s.webuiProjects.length == 3);
         assert(s.webuiProjects[0] == buildPath(base, "cfg", "site"),
-            s.webuiProjects[0]); // relative to the settings file
+            s.webuiProjects[0]); // relative to the config file
         assert(s.webuiProjects[1] == buildPath(base, "home", "home-site"),
             s.webuiProjects[1]); // ~ expanded
         assert(s.webuiProjects[2] == "/abs/task.pravic"); // absolute kept
@@ -118,12 +118,12 @@ unittest
     // reports existence per project)
     write(buildPath(base, "cfg", "both.pravic"),
         "imports { paths = [\"libs\"] }\nwebui { projects = [\"nope\"] }\n");
-    s = loadSettings(buildPath(base, "cfg", "both.pravic"));
+    s = loadConfig(buildPath(base, "cfg", "both.pravic"));
     assert(s.importPaths.length == 1 && s.webuiProjects.length == 1);
 
     // empty section is fine
     write(buildPath(base, "cfg", "empty.pravic"), "webui { }\n");
-    s = loadSettings(buildPath(base, "cfg", "empty.pravic"));
+    s = loadConfig(buildPath(base, "cfg", "empty.pravic"));
     assert(s.webuiProjects.length == 0);
 
     // wrong shapes are load-time errors with file context
@@ -137,7 +137,7 @@ unittest
         try
         {
             write(buildPath(base, "cfg", "bad.pravic"), content);
-            loadSettings(buildPath(base, "cfg", "bad.pravic"));
+            loadConfig(buildPath(base, "cfg", "bad.pravic"));
             assert(false, "expected TachyError for: " ~ content);
         }
         catch (TachyError e)
@@ -149,8 +149,8 @@ unittest
 
 // run `dg()` with environment variables temporarily overridden; holds
 // the env lock so threaded tests cannot observe the transient values
-private Settings withEnv(string[] names, string[] values,
-    Settings delegate() dg) @trusted
+private Config withEnv(string[] names, string[] values,
+    Config delegate() dg) @trusted
 {
     synchronized (envM) // set, run and restore are one atomic span
     {
@@ -173,7 +173,7 @@ private Settings withEnv(string[] names, string[] values,
 @("parse errors: unknown keys, wrong shapes")
 unittest
 {
-    auto base = buildPath(tempDir, "tachy_settings_err_ut");
+    auto base = buildPath(tempDir, "tachy_config_err_ut");
     if (exists(base)) rmdirRecurse(base);
     mkdirRecurse(base);
     scope (exit) rmdirRecurse(base);
@@ -191,7 +191,7 @@ unittest
         try
         {
             write(buildPath(base, "s.pravic"), content);
-            loadSettings(buildPath(base, "s.pravic"));
+            loadConfig(buildPath(base, "s.pravic"));
             assert(false, "expected TachyError for: " ~ content);
         }
         catch (TachyError e)
@@ -201,7 +201,7 @@ unittest
 
     // imports without paths is fine
     write(buildPath(base, "s.pravic"), "imports { }\n");
-    auto s = loadSettings(buildPath(base, "s.pravic"));
+    auto s = loadConfig(buildPath(base, "s.pravic"));
     assert(s.importPaths.length == 0);
 }
 
@@ -226,35 +226,35 @@ private auto withEnv(string[] names, string[] values, alias dg)()
 @("identity entry: both spellings, resolution, shapes")
 unittest
 {
-    auto base = buildPath(tempDir, "tachy_settings_ident_ut");
+    auto base = buildPath(tempDir, "tachy_config_ident_ut");
     if (exists(base)) rmdirRecurse(base);
     mkdirRecurse(buildPath(base, "cfg"));
     scope (exit) rmdirRecurse(base);
 
     // single form: the path is the key
     write(buildPath(base, "cfg", "single.pravic"), "identity \"key.txt\"\n");
-    auto s = loadSettings(buildPath(base, "cfg", "single.pravic"));
+    auto s = loadConfig(buildPath(base, "cfg", "single.pravic"));
     assert(s.identity == buildPath(base, "cfg", "key.txt"), s.identity);
 
     // group form: identity { path = "..." }
     write(buildPath(base, "cfg", "group.pravic"),
         "identity { path = \"key.txt\" }\n");
-    s = loadSettings(buildPath(base, "cfg", "group.pravic"));
+    s = loadConfig(buildPath(base, "cfg", "group.pravic"));
     assert(s.identity == buildPath(base, "cfg", "key.txt"), s.identity);
 
     // unquoted key spelling and absolute paths
     write(buildPath(base, "cfg", "unquoted.pravic"), "identity key.txt\n");
-    s = loadSettings(buildPath(base, "cfg", "unquoted.pravic"));
+    s = loadConfig(buildPath(base, "cfg", "unquoted.pravic"));
     assert(s.identity == buildPath(base, "cfg", "key.txt"), s.identity);
     write(buildPath(base, "cfg", "abs.pravic"), "identity \"/abs/key.txt\"\n");
-    s = loadSettings(buildPath(base, "cfg", "abs.pravic"));
+    s = loadConfig(buildPath(base, "cfg", "abs.pravic"));
     assert(s.identity == "/abs/key.txt");
 
     // alongside the other entries
     write(buildPath(base, "cfg", "all.pravic"),
         "identity \"key.txt\"\nimports { paths = [\"libs\"] }\n"
         ~ "webui { projects = [\"site\"] }\n");
-    s = loadSettings(buildPath(base, "cfg", "all.pravic"));
+    s = loadConfig(buildPath(base, "cfg", "all.pravic"));
     assert(s.identity.length && s.importPaths.length == 1
         && s.webuiProjects.length == 1);
 
@@ -273,7 +273,7 @@ unittest
         try
         {
             write(buildPath(base, "cfg", "bad.pravic"), content);
-            loadSettings(buildPath(base, "cfg", "bad.pravic"));
+            loadConfig(buildPath(base, "cfg", "bad.pravic"));
             assert(false, "expected TachyError for: " ~ content);
         }
         catch (TachyError e)
@@ -283,10 +283,10 @@ unittest
     }
 }
 
-@("effectiveIdentity: the flag supersedes the settings entry")
+@("effectiveIdentity: the flag supersedes the config entry")
 unittest
 {
-    Settings s;
+    Config s;
     assert(effectiveIdentity("", s) == "");
     assert(effectiveIdentity("flag.txt", s) == "flag.txt");
     s.identity = "settings.txt";

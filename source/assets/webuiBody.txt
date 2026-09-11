@@ -1,7 +1,7 @@
 Starts a local web server on a random port between 10000 and 65534
 (the http://127.0.0.1:<port> URL is printed; --address/--port to
 change it) that is a graphical version of this CLI.  The projects
-listed in the webui projects entry of settings.pravic (a directory
+listed in the webui projects entry of config.pravic (a directory
 uses its main.pravic) become clickable; pick a host selection, run
 apply or check on it,
 and watch each job line appear live — the page follows the run's

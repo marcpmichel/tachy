@@ -62,20 +62,20 @@ unittest
     assert(canFind(msg, "already exists"), msg);
 }
 
-@("generate settings: loadable sample, no overwrite")
+@("generate config: loadable sample, no overwrite")
 unittest
 {
-    import tachy.settings : loadSettings;
+    import tachy.config : loadConfig;
 
-    auto dir = buildPath(tempDir, "tachy_generate_settings_ut");
+    auto dir = buildPath(tempDir, "tachy_generate_config_ut");
     if (exists(dir)) rmdirRecurse(dir);
     mkdirRecurse(dir);
     scope (exit) rmdirRecurse(dir);
 
-    const string path = buildPath(dir, "settings.pravic");
-    assert(runGenerate(["settings", path]) == 0);
-    auto s = loadSettings(path);
+    const string path = buildPath(dir, "config.pravic");
+    assert(runGenerate(["config", path]) == 0);
+    auto s = loadConfig(path);
     assert(s.importPaths.length == 0); // entries are commented out
     assert(s.webuiProjects.length == 0); // so are these
-    assertThrown!TachyError(runGenerate(["settings", path]));
+    assertThrown!TachyError(runGenerate(["config", path]));
 }

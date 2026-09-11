@@ -105,11 +105,11 @@ int main(string[] args)
                 return runHosts(args[2 .. $], opts);
             case Cmd.webui:
                 // webui takes no positional arguments: the projects
-                // come from settings.pravic (webui projects) and runs
+                // come from config.pravic (webui projects) and runs
                 // are started from the browser.
                 if (args.length > 2)
                     throw new TachyError("webui takes no arguments (projects"
-                        ~ " are configured in settings.pravic, runs are started"
+                        ~ " are configured in config.pravic, runs are started"
                         ~ " from the browser)");
                 if (!opts.inventoryPath.length)
                     opts.inventoryPath = "inventory.pravic";
@@ -287,8 +287,8 @@ void parseOptions(ref string[] args, ref RunOptions opts, ref bool wantHelp)
         "keep-bundle", "keep each host's temporary bundle directory after"
             ~ " the run, for inspection (project copy, generated"
             ~ " inventory, report)", &opts.keepBundle,
-        "settings", "PATH  optional settings file: identity entry, imports search paths, webui projects (default: TACHY_SETTINGS, ./settings.pravic, ~/.config/tachy/settings.pravic)", &opts.settings,
-        "identity", "PATH  age identity for { age = ... } inventory vars; supersedes the settings identity entry (default: AGE_IDENTITY, then ~/.ssh/id_ed25519)", &opts.identity,
+        "config", "PATH  optional config file: identity entry, imports search paths, webui projects (default: TACHY_CONFIG, ./config.pravic, ~/.config/tachy/config.pravic)", &opts.config,
+        "identity", "PATH  age identity for { age = ... } inventory vars; supersedes the config identity entry (default: AGE_IDENTITY, then ~/.ssh/id_ed25519)", &opts.identity,
         "address", "ADDR  webui/webdoc: address to bind (default 127.0.0.1)", &opts.webAddress,
         "port", "N  webui/webdoc: port to listen on (default: a random port between 10000 and 65534)", &opts.webPort,
         "h|help", "show this help", &wantHelp,

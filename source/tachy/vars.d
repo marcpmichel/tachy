@@ -252,7 +252,7 @@ private bool dotenvLookup(string path, string key, string where,
 }
 
 /// Identity for `{ age = ... }` markers, in order: the explicit
-/// identity (`--identity`, or the settings file's `identity` entry
+/// identity (`--identity`, or the config file's `identity` entry
 /// when the flag is absent), then the AGE_IDENTITY environment
 /// variable (an existing file path, or raw key material), then the
 /// controller's default ssh key — age accepts ed25519 ssh private
@@ -289,7 +289,7 @@ private AgeIdentity resolveAgeIdentity(string explicitIdentity, string where) @t
             return AgeIdentity.fromPath(sshKey); // age accepts ssh keys natively
     }
     throw new TachyError(where ~ ": no age identity available: pass"
-        ~ " --identity PATH, set an identity in settings.pravic, set"
+        ~ " --identity PATH, set an identity in config.pravic, set"
         ~ " AGE_IDENTITY to a path or key material, or provide"
         ~ " ~/.ssh/id_ed25519");
 }

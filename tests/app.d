@@ -68,7 +68,7 @@ assert(parseCommand("help") == Cmd.help);
 }
 
 foreach (o; ["--keep-bundle", "--color", "--events",
-    "--verbose", "--direct", "--settings", "--identity", "--address",
+    "--verbose", "--direct", "--config", "--identity", "--address",
     "--port", "--direct-report"])
 {
     RunOptions opts;
@@ -76,7 +76,7 @@ foreach (o; ["--keep-bundle", "--color", "--events",
     // value-taking options need their value, or the command word is
     // eaten as the value
     string[] args = ["/tachy", o];
-    if (among(o, "--settings", "--identity", "--address", "--port",
+    if (among(o, "--config", "--identity", "--address", "--port",
             "--direct-report"))
         args ~= o == "--port" ? "9000" : "x";
     args ~= "webui";

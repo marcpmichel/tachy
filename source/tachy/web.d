@@ -12,7 +12,7 @@ module tachy.web;
  *     `app.css`, embedded in the binary at compile time with
  *     `import("...")` — plain HTML/CSS/ES2020, no build step;
  *   - a small JSON API: `GET /api/state` (projects from the `webui`
- *     section of settings.pravic, inventory hosts and tags, past runs),
+ *     section of config.pravic, inventory hosts and tags, past runs),
  *     `POST /api/run` (start `apply` or `check` on one project and a
  *     host selection) and `GET /api/events/<id>` (the run's progress
  *     as Server-Sent Events);
@@ -42,7 +42,7 @@ import tachy.errors;
 import tachy.events : JobEvent, eventLine, foldCounters, parseEventLine;
 import tachy.inventory : HostConfig, Inventory;
 import tachy.runner : RunOptions;
-import tachy.settings : Settings, effectiveIdentity, loadSettings;
+import tachy.config : Config, effectiveIdentity, loadConfig;
 import tachy.transport : LocalTransport, shQuote;
 
 /// Chunk sink handed to streamed responses (one call = one write).
@@ -59,21 +59,21 @@ int runWebUi(RunOptions optsIn) @trusted
     if (optsIn.webPort < 0 || optsIn.webPort > 65535)
         throw new TachyError("--port must be between 0 and 65535");
 
-    const Settings settings = loadSettings(optsIn.settings);
-    // The --identity flag supersedes the settings file's identity
+    const Config config = loadConfig(optsIn.config);
+    // The --identity flag supersedes the config file's identity
     // entry; the effective identity is what the inventory load uses
     // and what spawned runs are given.
     RunOptions opts = optsIn;
-    opts.identity = effectiveIdentity(optsIn.identity, settings);
-    auto app = new WebApp(opts, settings);
+    opts.identity = effectiveIdentity(optsIn.identity, config);
+    auto app = new WebApp(opts, config);
 
     auto listener = webListener(opts);
     auto addr = cast(InternetAddress) listener.localAddress();
     stdout.writefln("tachy webui listening on http://%s — Ctrl-C to stop",
         addr.toString());
     stdout.writefln("inventory: %s — projects: %s", opts.inventoryPath,
-        settings.webuiProjects.length ? settings.webuiProjects.join(", ")
-            : "none configured (webui projects in settings.pravic)");
+        config.webuiProjects.length ? config.webuiProjects.join(", ")
+            : "none configured (webui projects in config.pravic)");
     stdout.flush();
 
     tryOpenBrowser(browserUrl(addr.toAddrString(), addr.port));
@@ -98,17 +98,17 @@ package(tachy) TcpSocket webListener(const RunOptions opts) @trusted
 private final class WebApp
 {
     const RunOptions opts;
-    const Settings settings;
+    const Config config;
     Router router;
 
     private Mutex regM; // guards runs/nextId
     private Run[] runs;
     private size_t nextId;
 
-    this(const RunOptions opts, const Settings settings)
+    this(const RunOptions opts, const Config config)
     {
         this.opts = opts;
-        this.settings = settings;
+        this.config = config;
         regM = new Mutex;
         router = new Router;
 
@@ -128,7 +128,7 @@ private final class WebApp
         string[] members;
 
         string[] projects;
-        foreach (p; settings.webuiProjects)
+        foreach (p; config.webuiProjects)
             projects ~= projectJson(p);
         members ~= `"projects":[` ~ projects.join(",") ~ `]`;
 
@@ -186,9 +186,9 @@ private final class WebApp
         if (mode != "apply" && mode != "check")
             return errorJson(400, "'mode' must be \"apply\" or \"check\"");
         const string project = fields["project"];
-        if (!canFindString(settings.webuiProjects, project))
+        if (!canFindString(config.webuiProjects, project))
             return errorJson(400, "unknown project '" ~ project
-                ~ "' — configure it under webui projects in settings.pravic");
+                ~ "' — configure it under webui projects in config.pravic");
         if (!pathExists(project))
             return errorJson(400, "project path '" ~ project ~ "' does not exist");
 
@@ -215,15 +215,15 @@ private final class WebApp
     }
 
     /// The command the run executes: this binary, the mode, `--events`
-    /// and the same inventory/settings/identity the server was given —
+    /// and the same inventory/config/identity the server was given —
     /// so a webui run behaves exactly like the same CLI invocation.
     private string childCommand(string project, string selection, string mode) @trusted
     {
         import std.file : thisExePath;
         string cmd = "exec " ~ shQuote(thisExePath) ~ " " ~ mode ~ " --events";
         cmd ~= " -i " ~ shQuote(opts.inventoryPath);
-        if (opts.settings.length)
-            cmd ~= " --settings " ~ shQuote(opts.settings);
+        if (opts.config.length)
+            cmd ~= " --config " ~ shQuote(opts.config);
         if (opts.identity.length)
             cmd ~= " --identity " ~ shQuote(opts.identity);
         return cmd ~ " " ~ shQuote(selection) ~ " " ~ shQuote(project);

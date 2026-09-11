@@ -13,14 +13,14 @@
         --keep-bundle      Keep each host's temporary bundle directory
                            after the run, for inspection (project copy,
                            generated inventory, report)
-        --settings PATH     Optional settings file (the identity
-                           entry, imports search paths, webui
-                           projects); default: TACHY_SETTINGS, then
-                           settings.pravic in the current directory,
-                           then ~/.config/tachy/settings.pravic
+        --config PATH       Optional config file (the identity entry,
+                           imports search paths, webui projects);
+                           default: TACHY_CONFIG, then config.pravic
+                           in the current directory, then
+                           ~/.config/tachy/config.pravic
         --identity PATH    Age identity for { age = ... } inventory vars
                            and file sources marked age = true;
-                           supersedes the settings file's identity
+                           supersedes the config file's identity
                            entry. Default: that entry, then AGE_IDENTITY
                            (path or key material), then ~/.ssh/id_ed25519
                            (age accepts ssh keys)

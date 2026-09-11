@@ -1,7 +1,7 @@
-# tachy settings — optional, read once at the start of every run.
-# Discovery, first found wins: --settings PATH, the TACHY_SETTINGS
-# variable, settings.pravic in the current directory, then
-# ~/.config/tachy/settings.pravic. Relative paths below resolve against
+# tachy config — optional, read once at the start of every run.
+# Discovery, first found wins: --config PATH, the TACHY_CONFIG
+# variable, config.pravic in the current directory, then
+# ~/.config/tachy/config.pravic. Relative paths below resolve against
 # this file's directory; ~ is expanded.
 
 # The age identity decrypting { age = ... } inventory vars and

@@ -573,13 +573,13 @@ assertThrown!TachyError(loadTasksFile(writeTemp("defer_missing.pravic",
     "apply nowhere_lib/x.pravic { }\n")));
 }
 
-@("import search paths: settings.pravic resolution order")
+@("import search paths: config.pravic resolution order")
 unittest
 {
 import std.algorithm.searching : canFind;
 import std.file : mkdirRecurse, rmdirRecurse, tempDir, write;
 import std.path : buildPath;
-import tachy.settings : Settings;
+import tachy.config : Config;
 
 auto base = buildPath(tempDir, "tachy_import_search_ut");
 if (exists(base)) rmdirRecurse(base);
@@ -594,12 +594,12 @@ import found2 { }
 import nowhere { }
 `);
 
-Settings settings;
-settings.importPaths ~= buildPath(base, "libs1");
-settings.importPaths ~= buildPath(base, "libs2");
+Config cfg;
+cfg.importPaths ~= buildPath(base, "libs1");
+cfg.importPaths ~= buildPath(base, "libs2");
 
 auto loaded = loadTasksFile(buildPath(base, "proj", "main.pravic"),
-    settings);
+    cfg);
 assert(loaded.imports.length == 4);
 foreach (src; loaded.imports)
 {
@@ -614,7 +614,7 @@ foreach (src; loaded.imports)
         // unresolved: keeps the defining-relative guess
         assert(canFind(src, buildPath(base, "proj", "nowhere")), src);
 }
-// without settings, keys stay defining-relative
+// without config, keys stay defining-relative
 loaded = loadTasksFile(buildPath(base, "proj", "main.pravic"));
 foreach (src; loaded.imports)
     assert(canFind(src, buildPath(base, "proj")), src);

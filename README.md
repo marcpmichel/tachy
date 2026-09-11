@@ -44,7 +44,7 @@ tachy apply '@web'     # applies main.pravic; its directory is the project
 - Check mode (`tachy check`): dry-run that reports would-be changes
   without applying anything.
 - **Web UI** (`tachy webui`): a local web server that is a graphical
-  version of the CLI — projects from settings.pravic, apply/check runs
+  version of the CLI — projects from config.pravic, apply/check runs
   with the events streaming in live. The interface is embedded in the
   binary (HTML/CSS/JS via `import("...")` — one binary, no framework,
   no asset pipeline).
@@ -208,7 +208,7 @@ Other useful invocations:
 tachy apply '@web' ~/site/main.pravic    # explicit entry file
 tachy generate key key.txt               # a new age key pair
 tachy generate task main.pravic          # a sample tasks file
-tachy generate settings settings.pravic  # a sample settings file
+tachy generate config config.pravic     # a sample config file
 tachy webui                              # graphical console (random port)
 tachy webdoc                             # the docs as a site (random port)
 tachy man                                # the full manual, man-page style
@@ -235,7 +235,7 @@ tachy — Pravic-driven configuration management (Ansible-like)
                 <host>" shows one host's attributes
     generate    key <path> : writes a new age key pair
                 task <path> : write a sample tasks file
-                settings <path> : write a sample settings file
+                config <path> : write a sample config file
                 (note: all refuse to overwrite)
     webui       start a local web server: a graphical version of this
                 CLI
@@ -262,14 +262,14 @@ tachy — Pravic-driven configuration management (Ansible-like)
         --keep-bundle      Keep each host's temporary bundle directory
                            after the run, for inspection (project copy,
                            generated inventory, report)
-        --settings PATH     Optional settings file (the identity
-                           entry, imports search paths, webui
-                           projects); default: TACHY_SETTINGS, then
-                           settings.pravic in the current directory,
-                           then ~/.config/tachy/settings.pravic
+        --config PATH       Optional config file (the identity entry,
+                           imports search paths, webui projects);
+                           default: TACHY_CONFIG, then config.pravic
+                           in the current directory, then
+                           ~/.config/tachy/config.pravic
         --identity PATH    Age identity for { age = ... } inventory vars
                            and file sources marked age = true;
-                           supersedes the settings file's identity
+                           supersedes the config file's identity
                            entry. Default: that entry, then AGE_IDENTITY
                            (path or key material), then ~/.ssh/id_ed25519
                            (age accepts ssh keys)
@@ -299,12 +299,12 @@ list of host names and `@tag`s (`all` matches everything); a
 project copied to every selected host together with the tachy binary
 (linux/amd64 only).
 
-### Settings (optional)
+### Config (optional)
 
-`settings.pravic` is read once at the start of every `apply`/`check`
+`config.pravic` is read once at the start of every `apply`/`check`
 (and once when the webui server starts). Discovery, first found wins:
-`--settings PATH` (must exist), the `TACHY_SETTINGS` variable (must
-exist), `./settings.pravic`, then `~/.config/tachy/settings.pravic` — with
+`--config PATH` (must exist), the `TACHY_CONFIG` variable (must
+exist), `./config.pravic`, then `~/.config/tachy/config.pravic` — with
 none present, settings are empty. Today it holds the age `identity`,
 the `imports` search paths and the `webui` project list:
 
@@ -321,13 +321,13 @@ webui {
 ```
 
 The identity and the entries of both lists are `~`-expanded and, when
-relative, resolve against the settings file's own directory (never the
+relative, resolve against the config file's own directory (never the
 cwd). `--identity` supersedes the `identity` entry. An `import`
 path that does not resolve relative to its defining tasks file is
 searched in `paths`, in order; `projects` is what `tachy webui`
 offers in the browser (a directory is a project whose entry point is
 its `main.pravic`; a plain file is used as the entry point directly).
-`tachy generate settings <path>` writes a commented sample.
+`tachy generate config <path>` writes a commented sample.
 
 ### Web UI
 
@@ -338,7 +338,7 @@ in the local browser — `gio open`, best-effort;
 CLI:
 
 - the projects from the `webui` block's `projects` list in
-  settings.pravic are listed and clickable; missing paths are shown
+  config.pravic are listed and clickable; missing paths are shown
   struck through;
 - pick a host selection (the hosts and `@tag`s of the inventory are
   offered as toggleable chips) and run **Check** or **Apply**;
@@ -403,7 +403,7 @@ A tasks file is a sequence of statements, one per line (all optional):
 | `user NAME { ... }` | name | `group` (primary; default: a group named after the user), `groups` (supplementary, additive only), `shell` (default `/bin/sh` at creation), `comment`, `create_home` (default `true`, creation only), `home` (default `/home/<name>` at creation), `state` (default `present`; `absent` removes), `remove_home` (default `false`, with `state = "absent"`). |
 | `ensure "name" { ... }` | name | `run` (required), `exit_status` (integer, `{ not = N }`, or `{ cond = "OP N" }`; default 0), `output` (string, `{ contains = "..." }`, or `{ matches = "..." }`) |
 | `apply "path" { bindings }` | path | Composes another tasks file **at the statement's position**, carrying its own variables: the binding's entry keys, or the same grouped in a `vars { ... }` sub-block. A path naming an existing directory uses its `main.pravic`, like a directory CLI argument. |
-| `import "path"` | path | Bundled mode only: an external file or directory (absolute, or relative to the defining tasks file) copied into the bundle next to the project copy under its base name — `import "tasks/install_gogs"` → `project/install_gogs` — so `src`/`template`/`run` can use it on the host. No parameters — the braces are optional; destinations colliding with project content or another import are load-time errors; a path that does not resolve relative to its defining file is searched in the `settings.pravic` `imports` paths. An apply naming the import destination itself works too (`apply "neovim" { }` → its `main.pravic`); entries under a destination that are missing locally defer to the host (the inner run composes them, bindings included; a directory entry resolves to its `main.pravic`, as everywhere). |
+| `import "path"` | path | Bundled mode only: an external file or directory (absolute, or relative to the defining tasks file) copied into the bundle next to the project copy under its base name — `import "tasks/install_gogs"` → `project/install_gogs` — so `src`/`template`/`run` can use it on the host. No parameters — the braces are optional; destinations colliding with project content or another import are load-time errors; a path that does not resolve relative to its defining file is searched in the `config.pravic` `imports` paths. An apply naming the import destination itself works too (`apply "neovim" { }` → its `main.pravic`); entries under a destination that are missing locally defer to the host (the inner run composes them, bindings included; a directory entry resolves to its `main.pravic`, as everywhere). |
 
 Both forms of a directive are equivalent — the same entry, spelled once
 each way:
@@ -597,7 +597,7 @@ Decryption happens **on the controller** — the identity never travels
 inside a bundle; the decrypted value reaches hosts the same way every
 resolved inventory var does (through the generated per-host inventory,
 removed with the bundle). The identity comes from `--identity PATH`,
-the `identity` entry in settings.pravic (superseded by the flag), the
+the `identity` entry in config.pravic (superseded by the flag), the
 `AGE_IDENTITY` environment variable (an existing file path, or raw
 key material — fed to age on stdin, never written to disk), or by
 default `~/.ssh/id_ed25519` (age accepts ed25519 ssh keys natively, so
@@ -726,7 +726,7 @@ source/tachy/
   transport.d                Transport interface, local/ssh, shell helpers
   runner.d                   orchestration: bundled and direct modes
   generate.d                 the generate command: age keys, sample files
-  settings.d                 optional settings.pravic: identity, imports
+  config.d                   optional config.pravic: identity, imports
                              search paths, webui projects
   modules/
     package.d                registry, TaskContext/TaskResult, shared helpers

@@ -103,9 +103,9 @@ When the user requests a durable behavior change, record it here or in the relev
  gone), `hosts` (`hosts list [<selection>]` — `all` when omitted,
  `hosts info <host>`; the old `--list-hosts` option is gone),
  `generate` (`generate key <path>`,
- `generate task <path>`, `generate settings <path>`),
+ `generate task <path>`, `generate config <path>`),
  `webui` (local web console; no selection — projects come from
- settings.pravic `webui` projects, runs start from the browser),
+ config.pravic `webui` projects, runs start from the browser),
  `webdoc` (serves the compiled-in DOCUMENTATION.md as a multi-page
  site; no selection, read-only), `man` (prints the full built-in
  manual, unix man-page style), `version` (prints the version — the
