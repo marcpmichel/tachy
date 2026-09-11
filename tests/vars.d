@@ -636,3 +636,15 @@ environment.remove("AGE_IDENTITY");
     assert(canFind(msg, "'age' must be a string"), msg);
 }
 }
+
+unittest // isAgeCiphertext: the age v1 header decides ciphertext vs plaintext
+{
+import tachy.vars : isAgeCiphertext;
+
+assert(isAgeCiphertext("age-encryption.org/v1\n-> X25519 body\n"));
+assert(isAgeCiphertext("age-encryption.org/v1\n"));
+assert(!isAgeCiphertext("age-encryption.org/v1")); // no newline: not the header
+assert(!isAgeCiphertext(""));
+assert(!isAgeCiphertext("plain secret\n"));
+assert(!isAgeCiphertext("\x00\x01age-encryption.org/v1\n"));
+}

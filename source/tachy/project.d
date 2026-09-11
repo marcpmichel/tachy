@@ -53,6 +53,17 @@ struct ProjectBundle
 /// possibly outside the project) copied into the bundle as `dest` —
 /// its base name — next to the project copy, so src/template/run
 /// references resolve on the host.
+/// One controller-decrypted secret: `src` file (relative to the project
+/// root) with its plaintext.  Bundled mode decrypts `age = true` sources
+/// on the controller — the identity never travels inside a bundle — and
+/// writes the plaintext over the ciphertext copy, exactly like decrypted
+/// inventory vars travel in the generated inventory.
+struct DecryptedFile
+{
+    string relPath; // project-relative path of the source file
+    string bytes;   // plaintext, byte-exact
+}
+
 struct ImportSpec
 {
     string src;
@@ -65,8 +76,11 @@ struct ImportSpec
 /// one-host inventory into a fresh temporary directory there, plus
 /// every `imports` source (validated here: it must exist, and its
 /// destination must not clash with project content or another import).
+/// `decrypted` overwrites project files with controller-decrypted
+/// plaintext (age-marked `src` secrets).
 ProjectBundle deployProject(Transport t, string localProjectDir,
-    string hostName, in Val[string] hostVars, in ImportSpec[] imports = [])
+    string hostName, in Val[string] hostVars, in ImportSpec[] imports = [],
+    in DecryptedFile[] decrypted = [])
 {
     checkImports(localProjectDir, imports);
 
@@ -95,6 +109,18 @@ ProjectBundle deployProject(Transport t, string localProjectDir,
     if (!extract.ok)
         throw new TachyError("cannot copy project '" ~ localProjectDir ~ "' to "
             ~ hostName ~ ": " ~ failText(extract));
+
+    // Decrypted secrets overwrite their ciphertext copies (the tar above
+    // brought the encrypted files in; relPath is validated project-relative
+    // by the caller, so this stays inside the bundle's project copy).
+    foreach (ref const DecryptedFile d; decrypted)
+    {
+        auto put = t.runWithInput("cat > " ~ shQuote(buildPath(b.projectDir, d.relPath)),
+            d.bytes);
+        if (!put.ok)
+            throw new TachyError("cannot write decrypted secret '" ~ d.relPath
+                ~ "' into the bundle on " ~ hostName ~ ": " ~ failText(put));
+    }
 
     // The binary itself (linux/amd64: same platform as the controller).
     string selfBytes;

@@ -1297,3 +1297,79 @@
      the ordering rule, no-other-formats rule, empty-by-policy
      Verification section); root AGENTS.md Project bullet + Child
      DOX Index entry. TODO.md entry removed.
+
+40. implement age decryption for files (similar to what has been done
+    for vars)
+   - Language: `file`/`files` entries take `age = true` marking their
+     `src` as age-encrypted — `file /etc/x { src = "x.age", age = true }`
+     (spelling chosen in chat over `src_age`/`secret =`). Load-time
+     validation (package.d): boolean only, requires `src`; run-time
+     (filemod.d): exclusive with content/template/line/block and every
+     non-file state, including link (where `src` is the target).
+   - Semantics: the plaintext deploys byte-exact — binary secrets that
+     `{ age = ... }` vars reject; not templated, nothing stripped. The
+     source resolves like `src` (defining file's dir) and must live
+     inside the project. `vars.d` gained `isAgeCiphertext` (the
+     `age-encryption.org/v1` header decides ciphertext vs plaintext)
+     and `decryptAgeFile` (identity resolution + the swappable
+     `ageDecrypt` hook, errors wrapped with file context); the vars
+     binary-secret message now points at the file spelling.
+   - Bundled mode: the identity never travels inside a bundle, so the
+     controller decrypts — `collectDecryptedFiles` (runner.d) renders
+     each host's scope (secret paths may be templated per host),
+     dedupes by resolved path across hosts, and `deployProject`
+     (project.d, `DecryptedFile`) writes the plaintext over the
+     ciphertext copy after the tar extract; the bundle cache key gained
+     the decrypted-set signature (two entry files sharing a project but
+     with different secrets no longer reuse one bundle). On the host,
+     a source without the age header is used as-is — that is the
+     pre-decrypted bundle copy; `--direct` runs decrypt in-process
+     (`TaskContext.ageIdentity` from `--identity`). Secrets inside
+     includes that only exist under an import destination stay
+     unsupported (documented): the controller cannot see them.
+   - Unittests: filemod (decrypt round-trip incl. binary bytes,
+     idempotence, drift, check mode, pre-decrypted-as-is, every
+     combination error, decrypt-failure context), models (load-time
+     validation), runner (`collectDecryptedFiles`: dedupe, host-templated
+     path, cache reuse, outside-project error), vars (isAgeCiphertext).
+   - E2E with real age 1.3.2: local bundled run (binary secret
+     byte-exact via cmp, mode 0600, idempotent rerun, drift repair,
+     check mode untouched), `--direct`, `AGE_IDENTITY`, wrong identity
+     failing with age's message before any write, `--keep-bundle`
+     showing the plaintext inside the bundle, two entry files with
+     different secret sets in one invocation (cache-key split), and the
+     same project applied over ssh to the Debian 12 VM (sha256 match).
+     Docs trio updated (help/man optionEntries + tasksBody/
+     variablesBody, README Secrets section + help copy verified
+     byte-identical to `tachy --help`, DOCUMENTATION file table row +
+     new "## Secrets (age)" group served by webdoc at /doc/23-secrets-age).
+     LANGUAGE.md/pravic.vim untouched: `age` is an attribute key, not
+     grammar.
+
+41. the webserver (webdoc and webui) should default to a random port
+    between 10000 and 65534 instead of 8080
+   - `RunOptions.webPort` defaults to 0; `webListener` (web.d, shared by
+     both commands) binds `--port N` when given and otherwise calls the
+     new `bindListenerAuto`: 16 attempts at a uniform random port in
+     [10000, 65534] (unpredictableSeed), then a kernel-picked free port
+     (bind 0). The listening banner always prints the bound URL.
+   - Unittests: port range + connect + explicit-port override through
+     `webListener`. E2E: webdoc and webui banners showed in-range ports
+     (13015, 59967), pages/API served, explicit `--port` still binds
+     exactly. Docs trio updated (optionEntries --port, both man web
+     bodies, README help copy + web sections, DOCUMENTATION options row
+     + webui/webdoc sections).
+
+42. webdoc and webui should try to automatically open a web browser on
+    the host (`gio open`)
+   - `tryOpenBrowser`/`browserUrl` (web.d): after the banner, before
+     serveForever, both commands spawn `gio open http://<addr>:<port>/`
+     in a daemon thread (waited, so no zombie; stdio to /dev/null) —
+     Linux is the only supported platform and gio the freedesktop
+     opener; failures are silent and the URL is printed regardless.
+     Every-interface binds (0.0.0.0) open on 127.0.0.1.
+   - Unittest: browserUrl mapping. E2E: a stub `gio` on PATH recorded
+     `gio open http://127.0.0.1:<port>/` for both commands; with gio
+     absent from PATH the servers start and print the URL unchanged.
+     Docs trio updated alongside 41.
+

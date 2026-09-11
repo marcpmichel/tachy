@@ -1,7 +1,10 @@
   file /etc/app/app.conf {            # state (default file; link/absent),
       content = "port = {{ http_port }}"   # content is templated; src
-      mode = "0644"                    # copies verbatim, template renders;
-  }                                   # line/block ensure a line or a
+      mode = "0644"                    # copies verbatim, template renders,
+      age = true                       # age = true marks src as
+  }                                   # age-encrypted: decrypted on the
+                                      # controller, deployed byte-exact;
+                                      # line/block ensure a line or a
                                       # contiguous block of lines is
                                       # present; mode (octal), owner, group
 

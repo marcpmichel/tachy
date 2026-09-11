@@ -476,3 +476,171 @@ const string sub = buildPath(dir, "never");
 }
 assert(!exists(sub));
 }
+
+unittest // src + age = true: decrypt, byte-exact deploy, idempotence
+{
+import std.exception : assertThrown;
+import std.file : read, write;
+import tachy.vars : AgeIdentity, ageDecrypt;
+
+auto dir = freshDir;
+scope (exit) rmdirRecurse(dir);
+
+// fake ciphertext (the real age binary is a controller-only dependency)
+write(buildPath(dir, "tls.key.age"),
+    "age-encryption.org/v1\n-> X25519 fake ciphertext body\n");
+write(buildPath(dir, "id.txt"), "# identity\n");
+// binary plaintext: no UTF-8 constraint, no newline stripping
+const ubyte[] plain = cast(ubyte[]) "\x00\x01\xFF\xFE key \x80 bytes";
+string lastAgePath;
+auto saved = ageDecrypt;
+scope (exit) ageDecrypt = saved;
+ageDecrypt = (string agePath, in AgeIdentity identity, string where)
+{
+    lastAgePath = agePath;
+    return cast(string) plain;
+};
+
+auto f = buildPath(dir, "tls.key");
+Val[string] p;
+p["path"] = Val(f);
+p["src"] = Val("tls.key.age");
+p["age"] = Val(true);
+
+auto ctx = ctxLocal(dir);
+ctx.ageIdentity = buildPath(dir, "id.txt");
+
+auto r1 = runFileModule(p, ctx);
+assert(r1.changed, r1.msg);
+assert(read(f) == plain, "decrypted byte-exact");
+assert(lastAgePath == buildPath(dir, "tls.key.age"), lastAgePath);
+assert(!runFileModule(p, ctx).changed); // checksum against the plaintext
+write(f, "tampered");                  // check mode compares, never writes
+auto ctxc = ctxLocal(dir, true);
+ctxc.ageIdentity = buildPath(dir, "id.txt");
+auto rc = runFileModule(p, ctxc);
+assert(rc.changed && read(f) == "tampered");
+}
+
+unittest // src + age = true, pre-decrypted source: used as-is, no identity
+{
+import std.file : readText, write;
+
+auto dir = freshDir;
+scope (exit) rmdirRecurse(dir);
+
+// inside a deployed bundle the controller already wrote the plaintext
+// over the ciphertext: the source carries no age header, and the
+// on-host run holds no identity — it must never try to decrypt.
+write(buildPath(dir, "secret.conf"), "already plaintext\n");
+
+Val[string] p;
+p["path"] = Val(buildPath(dir, "out.conf"));
+p["src"] = Val("secret.conf");
+p["age"] = Val(true);
+
+auto r = runFileModule(p, ctxLocal(dir)); // ageIdentity empty
+assert(r.changed, r.msg);
+assert(readText(buildPath(dir, "out.conf")) == "already plaintext\n");
+assert(!runFileModule(p, ctxLocal(dir)).changed);
+}
+
+unittest // src + age = true: error paths
+{
+import std.exception : assertThrown;
+import std.algorithm.searching : canFind;
+import std.file : write;
+import tachy.vars : AgeIdentity, ageDecrypt;
+
+auto dir = freshDir;
+scope (exit) rmdirRecurse(dir);
+auto ctx = ctxLocal(dir);
+ctx.ageIdentity = buildPath(dir, "id.txt");
+write(buildPath(dir, "id.txt"), "# identity\n");
+
+// age without src
+{
+    Val[string] p;
+    p["path"] = Val(buildPath(dir, "x"));
+    p["age"] = Val(true);
+    assertThrown!(TachyError)(runFileModule(p, ctx));
+}
+// age with content (a second content source)
+{
+    Val[string] p;
+    p["path"] = Val(buildPath(dir, "x"));
+    p["content"] = Val("a");
+    p["src"] = Val("b.age");
+    p["age"] = Val(true);
+    assertThrown!(TachyError)(runFileModule(p, ctx));
+}
+// age with template
+{
+    write(buildPath(dir, "t.tmpl"), "x");
+    Val[string] p;
+    p["path"] = Val(buildPath(dir, "x"));
+    p["template"] = Val("t.tmpl");
+    p["src"] = Val("b.age");
+    p["age"] = Val(true);
+    assertThrown!(TachyError)(runFileModule(p, ctx));
+}
+// age with state=link (src is the link target there)
+{
+    Val[string] p;
+    p["path"] = Val(buildPath(dir, "x"));
+    p["state"] = Val("link");
+    p["src"] = Val("/usr/bin/env");
+    p["age"] = Val(true);
+    string msg;
+    try
+    {
+        runFileModule(p, ctx);
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(canFind(msg, "'age' is not allowed with state=link"), msg);
+}
+// missing source file
+{
+    Val[string] p;
+    p["path"] = Val(buildPath(dir, "x"));
+    p["src"] = Val("nope.age");
+    p["age"] = Val(true);
+    string msg;
+    try
+    {
+        runFileModule(p, ctx);
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(canFind(msg, "cannot read src"), msg);
+}
+
+// decryption failure carries the file's origin
+{
+    write(buildPath(dir, "bad.age"), "age-encryption.org/v1\njunk\n");
+    auto saved = ageDecrypt;
+    scope (exit) ageDecrypt = saved;
+    ageDecrypt = (string agePath, in AgeIdentity identity, string where)
+    {
+        throw new TachyError("no identity matched any of the recipients");
+    };
+
+    Val[string] p;
+    p["path"] = Val(buildPath(dir, "out"));
+    p["src"] = Val("bad.age");
+    p["age"] = Val(true);
+    string msg;
+    try
+    {
+        runFileModule(p, ctx);
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(canFind(msg, "file: '" ~ buildPath(dir, "out") ~ "'"), msg);
+    assert(canFind(msg, "no identity matched"), msg);
+}
+}

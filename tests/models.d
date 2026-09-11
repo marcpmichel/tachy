@@ -727,3 +727,60 @@ assertThrown!(TachyError)(loadTasksFile(writeTemp("compose_wt.pravic",
 assertThrown!(TachyError)(loadTasksFile(writeTemp("compose_to.pravic",
     "compose /srv/app { file = \"a.yml\", timeout = 0 }\n")));
 }
+
+unittest // file age = true: load-time validation
+{
+import tachy.value : Val;
+// the boolean marks src as age-encrypted and rides along as a param
+auto p = writeTemp("age_ok.pravic", `
+file /etc/tls/tls.key {
+    src = "secrets/tls.key.age"
+    age = true
+    mode = "0600"
+}
+`);
+auto loaded = loadTasksFile(p);
+assert(loaded.jobs.length == 1);
+assert(loaded.jobs[0].params["age"].kind == Val.Kind.boolean_);
+assert(loaded.jobs[0].params["age"].boolean_);
+assert(loaded.jobs[0].params["src"].str_ == "secrets/tls.key.age");
+
+// age without src
+{
+    auto q = writeTemp("age_nosrc.pravic", `
+file /tmp/x { age = true }
+`);
+    string msg;
+    try
+    {
+        loadTasksFile(q);
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(msg.indexOf("'age' requires 'src'") >= 0, msg);
+}
+// non-boolean age
+{
+    auto q = writeTemp("age_str.pravic", `
+file /tmp/x { src = "a.age", age = "yes" }
+`);
+    string msg;
+    try
+    {
+        loadTasksFile(q);
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(msg.indexOf("'age' must be a boolean") >= 0, msg);
+}
+// false needs no src and changes nothing
+{
+    auto q = writeTemp("age_false.pravic", `
+file /tmp/x { age = false }
+`);
+    auto l2 = loadTasksFile(q);
+    assert(l2.jobs.length == 1 && !l2.jobs[0].params["age"].boolean_);
+}
+}

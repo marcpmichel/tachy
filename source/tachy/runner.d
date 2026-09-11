@@ -25,7 +25,8 @@ import std.array : join;
 import std.conv : text;
 import std.datetime.stopwatch : StopWatch;
 import std.format : format;
-import std.path : absolutePath, baseName, buildNormalizedPath, buildPath, dirName;
+import std.path : absolutePath, baseName, buildNormalizedPath, buildPath,
+    dirName, isAbsolute;
 import std.stdio : File, stderr, stdout, write, writefln, writeln;
 
 import tachy.errors;
@@ -54,7 +55,7 @@ struct RunOptions
     string identity;       // age identity for { age = ... } inventory vars
     string settings;       // optional settings file (default: discovered)
     string webAddress = "127.0.0.1"; // webui/webdoc: bind address
-    int webPort = 8080;    // webui/webdoc: listen port
+    int webPort = 0;       // webui/webdoc: listen port (0 = random in 10000..65534)
     string[] tasksFiles;
 }
 
@@ -169,7 +170,8 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
                 {
                     auto vars = deepMerge(hostVars, job.overlay);
                     auto params = renderParams(job.params, vars);
-                    TaskContext ctx = TaskContext(t, opts.checkMode, host.name, job.tasksFileDir, vars);
+                    TaskContext ctx = TaskContext(t, opts.checkMode, host.name,
+                        job.tasksFileDir, vars, opts.identity);
                     StopWatch sw;
                     sw.start();
                     auto r = runModule(job.moduleName, params, ctx);
@@ -254,6 +256,14 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
             foreach (src; loaded.imports)
                 imports ~= ImportSpec(src, baseName(src));
 
+            // Controller-side decryption of `file` sources marked
+            // `age = true`: the identity never travels inside a bundle,
+            // so the plaintext does — each secret is decrypted once and
+            // shipped over its ciphertext copy (exactly like decrypted
+            // inventory vars travel in the generated inventory).
+            const bool anyAgeSrc = hasAgeSrc(loaded);
+            string[string] decryptedCache; // resolved source path -> plaintext
+
 
             // display() routes through the raw-event serializer in
             // --events mode, so the machine stream is self-describing:
@@ -277,18 +287,26 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
 
                 try
                 {
-                    // The cache key covers the import set: two entry
-                    // files sharing a project but importing differently
-                    // must not reuse one bundle.
+                    // The cache key covers the import set and the
+                    // decrypted-secret set: two entry files sharing a
+                    // project but importing differently must not reuse
+                    // one bundle, and neither must two files whose
+                    // age-marked sources differ.
+                    DecryptedFile[] decrypted;
+                    if (anyAgeSrc)
+                        decrypted = collectDecryptedFiles(loaded,
+                            inventory.varsFor(host.name), projectDir,
+                            opts.identity, decryptedCache);
                     const string key = host.name ~ "\0" ~ projectDir
-                        ~ "\0" ~ importsSignature(imports);
+                        ~ "\0" ~ importsSignature(imports)
+                        ~ "\0" ~ decryptedSignature(decrypted);
                     ProjectBundle b;
                     if (auto d = key in deployed)
                         b = (*d).bundle;
                     else
                     {
                         b = deployProject(t, projectDir, host.name,
-                            inventory.varsFor(host.name), imports);
+                            inventory.varsFor(host.name), imports, decrypted);
                         deployed[key] = DeployedBundle(host.name, t, b);
                     }
 
@@ -393,6 +411,89 @@ private string importsSignature(in ImportSpec[] imports) @safe pure
     foreach (ref const i; imports)
         s ~= i.src ~ "\0" ~ i.dest ~ "\n";
     return s;
+}
+
+/// Cache-key signature of a bundle's decrypted-secret set.
+private string decryptedSignature(in DecryptedFile[] decrypted) @safe pure
+{
+    import std.algorithm.sorting : sort;
+    auto rels = new string[decrypted.length];
+    foreach (i, ref const d; decrypted)
+        rels[i] = d.relPath;
+    rels.sort();
+    string s;
+    foreach (r; rels)
+        s ~= r ~ "\n";
+    return s;
+}
+
+/// True when any `file` job of the composition marks its `src` as
+/// age-encrypted (`age = true`): only then does bundled mode do
+/// controller-side decryption work.
+private bool hasAgeSrc(in LoadedTasks loaded) @safe
+{
+    foreach (ref const job; loaded.jobs)
+    {
+        if (job.moduleName != "file")
+            continue;
+        if (auto a = "age" in job.params)
+            if ((*a).kind == Val.Kind.boolean_ && (*a).boolean_)
+                return true;
+    }
+    return false;
+}
+
+/// Decrypt every `age = true` file source of the composition for one
+/// host, against that host's rendered scope (the source path may be
+/// templated, e.g. per-host secrets).  Returns the plaintexts keyed by
+/// their project-relative path — what deployProject writes over the
+/// ciphertext copies inside the bundle.  `cache` deduplicates
+/// decryption across hosts (resolved path -> plaintext).
+package(tachy) DecryptedFile[] collectDecryptedFiles(in LoadedTasks loaded,
+    in Val[string] hostVars, string projectDir, string identity,
+    ref string[string] cache) @trusted
+{
+    DecryptedFile[] out_;
+    bool[string] seenRel;
+    foreach (ref const job; loaded.jobs)
+    {
+        if (job.moduleName != "file")
+            continue;
+        auto a = "age" in job.params;
+        if (a is null || (*a).kind != Val.Kind.boolean_ || !(*a).boolean_)
+            continue;
+
+        auto vars = deepMerge(hostVars, job.overlay);
+        auto params = renderParams(job.params, vars);
+        auto s = "src" in params;
+        if (s is null || (*s).kind != Val.Kind.string_)
+            throw new TachyError(job.origin ~ ": 'age' requires 'src'"
+                ~ " (it marks that source file as age-encrypted)");
+        const string src = (*s).str_;
+
+        string srcPath = src;
+        if (!isAbsolute(srcPath))
+            srcPath = buildPath(job.tasksFileDir, src);
+        srcPath = buildNormalizedPath(absolutePath(srcPath));
+        if (!srcPath.startsWith(projectDir ~ "/"))
+            throw new TachyError(job.origin ~ ": age-marked 'src' '" ~ src
+                ~ "' must live inside the project directory '" ~ projectDir
+                ~ "' (only the project is copied into the bundle)");
+        const string rel = srcPath[projectDir.length + 1 .. $];
+        if (rel in seenRel)
+            continue;
+        seenRel[rel] = true;
+
+        if (auto hit = srcPath in cache)
+        {
+            out_ ~= DecryptedFile(rel, *hit);
+            continue;
+        }
+        const string plain = decryptAgeFile(srcPath, identity, job.origin);
+        cache[srcPath] = plain;
+        out_ ~= DecryptedFile(rel, plain);
+    }
+    return out_;
 }
 
 /// A project must be self-contained: every file of the composition has

@@ -7,6 +7,9 @@ module tachy.modules.filemod;
  *     file.state   = "directory"            # file (default) | directory | link | absent
  *     file.src     = "app.conf"             # state=file: copy this local file
  *                                           # state=link: symlink target (required)
+ *     file.age     = true                   # state=file: src is age-encrypted —
+ *                                           # decrypt it (controller-side) and
+ *                                           # deploy the plaintext, byte-exact
  *     file.template = "app.tmpl"            # state=file: render this file's
  *                                           # {{ vars }} onto the target
  *     file.line    = "umask 022"            # state=file: ensure this line is present
@@ -23,6 +26,12 @@ module tachy.modules.filemod;
  * `src` copies a file verbatim; `template` (state=file) renders the
  * named file with the host's variable scope and writes the result —
  * the two are distinct, mutually exclusive sources, like `content`.
+ * `age = true` marks the `src` file as age-encrypted: the plaintext is
+ * deployed byte-exact (no UTF-8 constraint, no newline stripping, no
+ * templating — unlike `{ age = ... }` inventory vars).  Decryption
+ * happens where an identity lives: the controller decrypts the file
+ * into the bundle before the on-host run, so a src that already holds
+ * plaintext (no age header) is used as-is.
  */
 import std.algorithm.searching : canFind;
 import std.conv : octal, text;
@@ -36,7 +45,7 @@ import tachy.errors;
 import tachy.modules : TaskContext, TaskResult, mustRun, mustRunWithInput, optBool, optStr, requireStr;
 import tachy.transport : StatKind, Transport, readLinkTarget, shQuote, statPath;
 import tachy.value : Val;
-import tachy.vars : renderTemplate;
+import tachy.vars : decryptAgeFile, isAgeCiphertext, renderTemplate;
 
 TaskResult runFileModule(Val[string] params, TaskContext ctx)
 {
@@ -78,6 +87,7 @@ TaskResult runFileModule(Val[string] params, TaskContext ctx)
 
     string src = optStr(params, "src", "file");
     bool hasSrc = src.length > 0;
+    const bool hasAge = optBool(params, "age", "file");
     const string templatePath = optStr(params, "template", "file");
     const bool hasTemplate = templatePath.length > 0;
     const string owner = optStr(params, "owner", "file");
@@ -87,6 +97,9 @@ TaskResult runFileModule(Val[string] params, TaskContext ctx)
         mode = parseMode(*p);
 
     // Combination validation.
+    if (hasAge && !hasSrc)
+        throw new TachyError("file: 'age' requires 'src' (it marks that"
+            ~ " source file as age-encrypted)");
     if (hasTemplate && hasSrc)
         throw new TachyError("file: 'src' (copy) and 'template' (render) are mutually exclusive");
     if (hasTemplate && hasContent)
@@ -113,6 +126,8 @@ TaskResult runFileModule(Val[string] params, TaskContext ctx)
         case State.link:
             if (!hasSrc)
                 throw new TachyError("file: 'src' (the link target) is required with state=link");
+            if (hasAge)
+                throw new TachyError("file: 'age' is not allowed with state=link ('src' is the link target)");
             if (hasContent)
                 throw new TachyError("file: 'content' is not allowed with state=link");
             if (hasTemplate)
@@ -187,11 +202,18 @@ TaskResult runFileModule(Val[string] params, TaskContext ctx)
             {
                 // src = <path>: copy this file verbatim, as bytes — it may
                 // be binary (e.g. a GPG keyring); only `template` needs
-                // valid UTF-8.
+                // valid UTF-8.  With age = true the source is an
+                // age-encrypted secret: decrypt it when it still carries
+                // the ciphertext header (on the controller); inside a
+                // deployed bundle the controller already replaced it with
+                // the plaintext, which is used as-is.
                 const string srcPath = isAbsolute(src) ? src : buildPath(ctx.tasksFileDir, src);
                 try content = cast(string) read(srcPath);
                 catch (Exception e)
                     throw new TachyError("file: cannot read src '" ~ srcPath ~ "': " ~ e.msg);
+                if (hasAge && isAgeCiphertext(content))
+                    content = decryptAgeFile(srcPath, ctx.ageIdentity,
+                        "file: '" ~ path ~ "'");
                 hasContent = true;
             }
             if (hasContent)

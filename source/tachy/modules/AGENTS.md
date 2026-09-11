@@ -15,18 +15,21 @@ This doc owns module-level contracts.
   (static key/type checks at load time) and `runModule` (dispatch);
   `fake.d` is the scripted transport for unittests — a new module is
   not done until it is in all three plus `models.d`
-- Modules: `filemod` (files/directories: state, content, src, template,
-  line/block, mode/owner/group), `servicemod` (systemctl state/enablement
+- Modules: `filemod` (files/directories: state, content, src,
+  template, line/block, `age = true` marking src as age-encrypted —
+  controller-decrypted and shipped as plaintext inside bundles,
+  decrypted in-process on `--direct`, byte-exact either way —
+  mode/owner/group), `servicemod` (systemctl state/enablement
   plus unit file management: `src` verbatim copy, `template` rendering
   with the entry's local `vars`, written to /etc/systemd/system with
   daemon-reload on drift), `packagemod` (apt), `checkmod` (run +
   exit_status/output assertions behind the `check` directive),
   `accounts.d` (groups + users via
   shadow-utils), `composemod` (Docker Compose stacks keyed by project
-  dir: read-only probes — container runtime/health via `docker ps`/`docker
-  inspect` labels, config drift via `docker compose config --hash` vs the
-  container's config-hash label — then `up --detach`/`stop`/`down` with
-  the pull/build/recreate/wait policy flags)
+  dir: read-only probes — container runtime/health via `docker ps`/
+  `docker inspect` labels, config drift via `docker compose config
+  --hash` vs the container's config-hash label — then `up --detach`/
+  `stop`/`down` with the pull/build/recreate/wait policy flags)
 - Directives → module names are wired in `models.d` (`addJob` over the
   ordered Pravic statements): keys are targets, `path`/`dir`/`name` is
   injected, duplicate/cycle detection comes free — modules never

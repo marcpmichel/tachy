@@ -171,3 +171,40 @@ unittest // loopback: end-to-end request/response over a real socket
     assert(canFind(roundtrip("GET /nope HTTP/1.1\r\n\r\n"), "404"));
     assert(canFind(roundtrip("garbage\r\n\r\n"), "400"));
 }
+
+unittest // bindListenerAuto and webListener: the random-port default
+{
+import std.socket : InternetAddress, TcpSocket;
+import tachy.runner : RunOptions;
+
+// random default: within [10000, 65534] and actually accepting connections
+auto l = bindListenerAuto("127.0.0.1");
+auto addr = cast(InternetAddress) l.localAddress();
+assert(addr.toAddrString() == "127.0.0.1", addr.toString());
+assert(addr.port >= 10000 && addr.port <= 65534, addr.toString());
+auto c = new TcpSocket;
+c.connect(new InternetAddress("127.0.0.1", addr.port));
+c.close();
+l.close();
+
+// the shared entry: default opts (webPort = 0) behave the same
+RunOptions opts;
+auto l2 = webListener(opts);
+auto a2 = cast(InternetAddress) l2.localAddress();
+assert(a2.port >= 10000 && a2.port <= 65534, a2.toString());
+l2.close();
+
+// an explicit --port still binds exactly that port
+opts.webPort = 19023;
+auto l3 = webListener(opts);
+auto a3 = cast(InternetAddress) l3.localAddress();
+assert(a3.port == 19023, a3.toString());
+l3.close();
+}
+
+unittest // browserUrl: every-interface binds open on the loopback
+{
+assert(browserUrl("127.0.0.1", 8080) == "http://127.0.0.1:8080/");
+assert(browserUrl("0.0.0.0", 12345) == "http://127.0.0.1:12345/");
+assert(browserUrl("192.168.1.5", 10000) == "http://192.168.1.5:10000/");
+}

@@ -51,8 +51,36 @@ struct AgeIdentity
     }
 }
 
+/// The first line of every age v1 ciphertext file (armor-less header).
+package(tachy) enum string ageFileHeader = "age-encryption.org/v1\n";
+
+/// True when `bytes` look like an age ciphertext.  `file` sources
+/// marked `age = true` carry ciphertext on the controller and
+/// plaintext inside a deployed bundle (the controller decrypts them
+/// when building the bundle, exactly like it decrypts inventory vars
+/// into the generated inventory); this check tells the two apart.
+package(tachy) bool isAgeCiphertext(const char[] bytes) @safe pure nothrow
+{
+    return bytes.length >= ageFileHeader.length
+        && bytes[0 .. ageFileHeader.length] == ageFileHeader;
+}
+
+/// Decrypt the age file at `agePath` with the standard identity
+/// resolution (`explicitIdentity` from `--identity`, then
+/// `AGE_IDENTITY`, then `~/.ssh/id_ed25519`).  For `file` sources
+/// marked `age = true`, running where the identity lives — the
+/// controller.
+package(tachy) string decryptAgeFile(string agePath, string explicitIdentity,
+    string where) @trusted
+{
+    const AgeIdentity identity = resolveAgeIdentity(explicitIdentity, where);
+    try
+        return ageDecrypt(agePath, identity, where);
+    catch (TachyError e)
+        throw new TachyError(where ~ ": " ~ e.msg);
+}
+
 /// Decryption hook — the default runs the age binary; unittests replace
-/// it so the suite does not depend on age being installed.
 string delegate(string agePath, in AgeIdentity identity, string where) ageDecrypt =
     (string agePath, in AgeIdentity identity, string where) =>
         defaultAgeDecrypt(agePath, identity, where);
@@ -117,8 +145,8 @@ private Val resolveEnvVal(in Val v, string where, string context,
         }
         catch (Exception)
             throw new TachyError(where ~ ": decrypted content of '" ~ agePath
-                ~ "' is not valid UTF-8 (binary secrets are not supported"
-                ~ " in variables)");
+                ~ "' is not valid UTF-8 (binary secrets do not fit variables"
+                ~ " — deploy them with a file src marked age = true)");
         // Secret files are usually created with one trailing newline;
         // strip it (and a CR before it) so templates see the secret.
         if (value.length && value[$ - 1] == '\n')

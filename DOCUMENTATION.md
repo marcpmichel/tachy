@@ -136,9 +136,9 @@ Example: `tachy apply @web req/web`, `tachy check all`,
 | `--direct-report P` | With `--direct`: write `ok changed failed` counters to P. |
 | `--events` | Print one JSON event per line on stdout instead of text (machine mode). |
 | `--settings PATH` | Optional settings file (see [settings](#settings-settingspravic)); default: `TACHY_SETTINGS`, then `./settings.pravic`, then `~/.config/tachy/settings.pravic`. |
-| `--identity PATH` | Age identity for `{ age = ... }` inventory vars; default: `AGE_IDENTITY` (path or key material), then `~/.ssh/id_ed25519` (age accepts ssh keys). |
+| `--identity PATH` | Age identity for `{ age = ... }` inventory vars and `file` sources marked `age = true`; default: `AGE_IDENTITY` (path or key material), then `~/.ssh/id_ed25519` (age accepts ssh keys). |
 | `--color` | Force colored statuses even when stdout is not a tty. |
-| `--address ADDR`, `--port PORT` | Webui/webdoc only: address (default 127.0.0.1) and port (default 8080; 0 picks a free port) to listen on. |
+| `--address ADDR`, `--port PORT` | Webui/webdoc only: address (default 127.0.0.1) and port to listen on. The default port (and `0`) is a random port between 10000 and 65534 — both commands are localhost conveniences; the bound URL is printed, and tachy tries to open it in the local browser (`gio open`, best-effort). |
 
 ### generate
 
@@ -148,10 +148,10 @@ never contacts a host and never overwrites an existing file.
 - `tachy generate key <path>` — a new age key pair: the `age-keygen`
   binary writes the identity to `<path>` (mode 0600; it refuses to
   overwrite) and tachy relays the public key. The identity decrypts
-  `{ age = ... }` inventory vars (pass it with `--identity <path>` or
-  `AGE_IDENTITY`); encrypt secrets with the printed public key:
-  `age -r <pubkey> -o secret.age`. Requires `age-keygen` (it ships with
-  the age package) on the controller.
+  `{ age = ... }` inventory vars and `age = true` file sources (pass it
+  with `--identity <path>` or `AGE_IDENTITY`); encrypt secrets with the
+  printed public key: `age -r <pubkey> -o secret.age`. Requires
+  `age-keygen` (it ships with the age package) on the controller.
 - `tachy generate task <path>` — a commented sample tasks file exercising
   the common directives (`var`, `directory`, `file`, `check`, composition
   hints), loadable as-is.
@@ -217,8 +217,10 @@ files into the bundle.
 ### Web UI (tachy webui)
 
 `tachy webui [--address ADDR] [--port PORT]` starts a local web server
-(default `http://127.0.0.1:8080`) that is a graphical version of the
-CLI:
+(a random port between 10000 and 65534 by default — the bound
+`http://127.0.0.1:<port>` URL is printed, and tachy tries to open it in
+the local browser, `gio open`, best-effort) that is a graphical version
+of the CLI:
 
 - **Projects**: the `webui` `projects` list of settings.pravic becomes
   a clickable sidebar (a directory is a project entered through its
@@ -255,7 +257,9 @@ the port can run tachy.
 ### Web docs (tachy webdoc)
 
 `tachy webdoc [--address ADDR] [--port PORT]` serves this documentation
-as a small web site (default `http://127.0.0.1:8080`) — the same
+as a small web site (a random port between 10000 and 65534 by default,
+like the webui — the URL is printed and the browser open is attempted)
+— the same
 ad-hoc web server as the webui and its stylesheet (`webui/app.css`:
 one CSS for both sites, so the docs share the console's dark theme),
 read-only:
@@ -488,6 +492,7 @@ file /tmp/stale.conf {              # removal of whatever is there
 | `state` | `"file"` | `"file"`, `"link"` (`src` is the link target), `"absent"` (removes the path). |
 | `content` | — | The exact file content; `{{ }}` rendered inline. |
 | `src` | — | Copy this project file verbatim — byte-exact, binary files (keyrings, archives) included. Presence/drift is detected by comparing sha256 checksums, so file content never travels back over the transport. |
+| `age` | — | Boolean marking `src` as age-encrypted: the plaintext is decrypted on the controller (identity from `--identity`/`AGE_IDENTITY`/`~/.ssh/id_ed25519`, like `{ age = ... }` vars) and deployed byte-exact — binary secrets fit, unlike in variables. Not templated, no newline stripping. Requires `src`, `state = "file"` only; in bundled runs the controller ships the plaintext inside the temporary bundle over the ciphertext copy (the identity never travels). See [Secrets (age)](#secrets-age). |
 | `template` | — | Path to a template file (like `src`, resolved relative to the defining tasks file); its content is rendered with the variable scope and becomes the managed content. |
 | `line` | — | Ensure this line is present anywhere in the file (whole-line match); appended, newline-terminated, only when missing. |
 | `block` | — | Same for a contiguous block of lines, in order. |
@@ -495,7 +500,8 @@ file /tmp/stale.conf {              # removal of whatever is there
 | `owner`, `group` | — | Enforced after content. |
 
 With no content source at all, the entry only ensures the file exists.
-`src` and `template` resolve inside the project (also in bundled runs).
+`src` and `template` resolve inside the project (also in bundled runs);
+so must an `age`-marked `src`, for the same reason.
 
 ---
 
@@ -740,6 +746,55 @@ check "version format" {
 | `run` | required | The shell command; templated like every string. |
 | `exit_status` | `0` | An integer, `{ not = N }`, or `{ cond = "OP N" }` with OP one of `==`, `!=`, `<`, `<=`, `>`, `>=`. |
 | `output` | — | A string (exact match on the trimmed output), `{ contains = "..." }`, or `{ matches = "regex" }` (invalid patterns are load-time errors). |
+
+## Secrets (age)
+
+Secrets never sit in plain tasks or inventory files. Two mechanisms,
+one identity: `--identity PATH`, the `AGE_IDENTITY` environment
+variable (an existing file path, or raw key material — fed to age on
+stdin, never written to disk), or by default `~/.ssh/id_ed25519`
+(age accepts ed25519 ssh keys natively, so the deployment key can
+double as the decryption key; encrypt with
+`age -R ~/.ssh/id_ed25519.pub`). Decryption happens on the controller
+only — the identity never travels inside a bundle.
+
+**Vars** (inventory only — tasks-file vars resolve on hosts, which hold
+no identity): an entry of the form `{ age = "file.age" }` is replaced
+by the decrypted content of the named file (path relative to the
+inventory; one trailing newline stripped, so
+`echo secret | age -r … > f.age` files work as-is). Plaintext must be
+valid UTF-8; markers cannot combine with `env`/`default`/`from`, and a
+failed decryption is a load-time error naming the entry and file.
+
+```pravic
+vars {
+    db_password = { age = "secrets/db_password.age" },
+}
+```
+
+**Files** (binary-safe): a `file` source marked `age = true` is
+decrypted on the controller and deployed byte-exact — keyrings, TLS
+keys and other binary secrets that cannot fit variables. The plaintext
+is not templated and nothing is stripped.
+
+```pravic
+file /etc/tls/web1.key {
+    src = "secrets/web1.key.age"
+    age = true
+    mode = "0600"
+}
+```
+
+In bundled runs the controller decrypts the source when building each
+host's temporary bundle and writes the plaintext over the ciphertext
+copy — the same trust the generated inventory already extends to
+decrypted vars, and `--keep-bundle` retains it. With `--direct` (no
+bundle) the source is decrypted in-process with the same identity
+resolution, so a still-encrypted source there is an error naming the
+identity options. The source path resolves like `src` (relative to the
+defining tasks file) and must live inside the project; secrets inside
+includes that only exist under an `import` destination are not
+supported, since the controller cannot see them to decrypt.
 
 ## Editor syntax
 

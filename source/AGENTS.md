@@ -19,7 +19,13 @@ This doc owns the source tree's structure and conventions;
     `assets/*.txt` and are embedded with `import()`, one source for
     both outputs); delegates to `runner.d`, `generate.d`,
     `web.d` and `webdoc.d`
-  - `runner.d` — per-host orchestration; direct mode and bundled mode (default: the tasks file's parent directory is the project, copied with the tachy binary to each host and run there with `--direct --events`); the job loop produces `JobEvent`s consumed by one renderer
+  - `runner.d` — per-host orchestration; direct mode and bundled mode
+    (default: the tasks file's parent directory is the project, copied
+    with the tachy binary to each host and run there with `--direct
+    --events`); the job loop produces `JobEvent`s consumed by one
+    renderer; bundled mode also decrypts `age = true` file sources on
+    the controller (`collectDecryptedFiles`) and ships the plaintext
+    through the bundle
   - `models.d` — tasks-file composition: Pravic statements in source
     order (`include` composes its file at the statement's position;
     vars/import statements are file-wide, not jobs), duplicate-target
@@ -27,15 +33,21 @@ This doc owns the source tree's structure and conventions;
     paths (bundled-mode external files; includes under an import
     landing missing locally defer to the host)
   - `events.d` — execution events (producer/consumer split): `JobEvent` + builders, `foldCounters`, `TextRenderer` (the one renderer for both modes), NDJSON `eventLine`/`parseEventLine` for the stream between inner runs and the controller
-  - `vars.d` — variable scopes, `{ env, default, from }` resolution (environment or dotenv file), `{ age }` secret markers (controller-side age decryption, inventory vars only), `{{ expr }}` templating
+  - `vars.d` — variable scopes, `{ env, default, from }` resolution
+    (environment or dotenv file), `{ age }` secret markers
+    (controller-side age decryption, inventory vars only), `{{ expr }}`
+    templating, plus the age file helpers `file` sources use
+    (`isAgeCiphertext`, `decryptAgeFile` — the same identity
+    resolution and swappable decrypt hook)
   - `value.d` — `Val` trees, the Pravic parser (`loadPractic` →
     ordered statements, `file: line N:` errors, duplicate-key
     detection) and the validated accessors; the grammar is specified
     in the root `LANGUAGE.md`
   - `transport.d` — `local` and `ssh` transports (abstract class; `runStreaming` delivers output lines live — POSIX `read`, not buffered `rawRead`, so streams are not batched), `shQuote`, stat helpers
   - `project.d` — project bundles (project copy plus `import` sources
-    under their base name), generated one-host inventory, Val → Pravic
-    serialization
+    under their base name, controller-decrypted `age = true` sources
+    written over their ciphertext copies, generated one-host
+    inventory), Val → Pravic serialization
   - `generate.d` — the `generate` command: age key pairs (`age-keygen`),
     sample tasks/settings files (controller-side scaffolding)
   - `settings.d` — the optional settings.pravic (discovery: `--settings`,
@@ -44,15 +56,17 @@ This doc owns the source tree's structure and conventions;
   - `web.d` — the `webui` command AND the shared ad-hoc HTTP layer:
     a tiny server (thread per connection, `Connection: close`, a
     Router with `:param` segments — `Request`/`Response`/`Router`/
-    `asset`/`bindListener`/`serveForever` are public for `webdoc.d`)
-    plus the run registry; each run spawns this binary as
-    `tachy <mode> --events ...` and relays its NDJSON stream as
+    `asset`/`bindListener`/`bindListenerAuto` (the random-port
+    default, [10000, 65534])/`webListener`/`serveForever` are public
+    for `webdoc.d`) plus the run registry; each run spawns this binary
+    as `tachy <mode> --events ...` and relays its NDJSON stream as
     Server-Sent Events (`/api/events/<id>`, resumable via
     `Last-Event-ID`, terminated by an `event: end` frame); child stderr
-    and non-event stdout become `log` records. The browser application
-    in `webui/` (plain index.html/app.js/app.css) is embedded at
-    compile time with `import("...")` — no framework, no asset
-    pipeline, one binary
+    and non-event stdout become `log` records. Both web commands try
+    to open the bound URL in the local browser (`tryOpenBrowser`,
+    `gio open`, best-effort). The browser application in `webui/`
+    (plain index.html/app.js/app.css) is embedded at compile time with
+    `import("...")` — no framework, no asset pipeline, one binary
   - `webdoc.d` — the `webdoc` command: serves the compiled-in
     DOCUMENTATION.md (embedded via the `.` string-import path) as a
     multi-page HTML site — `##` groups become menu groups (their page
@@ -62,7 +76,8 @@ This doc owns the source tree's structure and conventions;
     lists, inline code/bold/italic/links), styled by the webui's own
     `app.css` (one stylesheet for both sites; the doc rules scope
     under `body.webdoc`, so the docs share the console's dark theme);
-    read-only, same `--address`/`--port` as the webui
+    read-only, same `--address`/`--port` as the webui (random-port
+    default, browser-open attempt)
 - Errors carry file context (`"<file>: <section> \"<key>\": ...`) and are raised at load time wherever possible, before any host is contacted
 - The event stream (`eventLine`/`parseEventLine`) is the internal protocol between inner runs and the controller (and the webui, which spawns `--events` runs); changes must round-trip and keep `--direct` and bundled output identical — byte-compare both before/after any renderer or event change
 - Deterministic everywhere: job lists sorted by key, directives processed sorted by path, hosts in selection order; per-host failure isolation (a failing host is dropped, others continue, exit 1)

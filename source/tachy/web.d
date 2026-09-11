@@ -62,7 +62,7 @@ int runWebUi(const RunOptions opts) @trusted
     const Settings settings = loadSettings(opts.settings);
     auto app = new WebApp(opts, settings);
 
-    auto listener = bindListener(opts.webAddress, cast(ushort) opts.webPort);
+    auto listener = webListener(opts);
     auto addr = cast(InternetAddress) listener.localAddress();
     stdout.writefln("tachy webui listening on http://%s — Ctrl-C to stop",
         addr.toString());
@@ -71,8 +71,19 @@ int runWebUi(const RunOptions opts) @trusted
             : "none configured (webui projects in settings.pravic)");
     stdout.flush();
 
+    tryOpenBrowser(browserUrl(addr.toAddrString(), addr.port));
+
     serveForever(listener, app.router);
     return 0;
+}
+
+/// The listener for either web command: an explicit --port binds that
+/// port; the default (and 0) picks a random one in [10000, 65534].
+package(tachy) TcpSocket webListener(const RunOptions opts) @trusted
+{
+    return opts.webPort == 0
+        ? bindListenerAuto(opts.webAddress)
+        : bindListener(opts.webAddress, cast(ushort) opts.webPort);
 }
 
 // ---------------------------------------------------------------------------
@@ -496,6 +507,27 @@ final class Router
     }
 }
 
+/// Bind a listener on a random port in [10000, 65534] — the webui and
+/// webdoc default, since both are localhost conveniences and a fixed
+/// default port only ever collides.  A few random candidates are tried
+/// before falling back to a kernel-picked free port (port 0).
+public TcpSocket bindListenerAuto(string address) @trusted
+{
+    import std.random : Random, uniform, unpredictableSeed;
+
+    auto rng = Random(unpredictableSeed);
+    TachyError last;
+    foreach (_; 0 .. 16)
+    {
+        const ushort port = cast(ushort) uniform!"[]"(10000, 65534, rng);
+        try
+            return bindListener(address, port);
+        catch (TachyError e)
+            last = e;
+    }
+    return bindListener(address, 0); // kernel-picked free port
+}
+
 public TcpSocket bindListener(string address, ushort port) @trusted
 {
     import std.socket : SocketOption, SocketOptionLevel;
@@ -512,6 +544,39 @@ public TcpSocket bindListener(string address, ushort port) @trusted
     listener.listen(64);
     return listener;
 }
+
+/// The URL a browser should open for a listener bound to `address`:
+/// every-interface binds still open on the loopback.
+package(tachy) string browserUrl(string address, ushort port) @safe pure
+{
+    import std.conv : text;
+    const string host = address == "0.0.0.0" ? "127.0.0.1" : address;
+    return "http://" ~ host ~ ":" ~ text(port) ~ "/";
+}
+
+/// Best-effort browser open: `gio open <url>` in a daemon thread (it is
+/// waited for, so it cannot zombie; its output goes to /dev/null).
+/// Linux is the only supported platform and gio is the freedesktop
+/// opener; failures are silent — the listening URL is printed anyway.
+package(tachy) void tryOpenBrowser(string url) @trusted
+{
+    auto t = new Thread({
+        try
+        {
+            import std.process : spawnProcess, wait;
+            import std.stdio : File;
+            auto devNull = File("/dev/null", "w");
+            auto p = spawnProcess(["gio", "open", url], devNull, devNull, devNull);
+            wait(p);
+        }
+        catch (Exception)
+        {
+        }
+    });
+    t.isDaemon = true;
+    t.start();
+}
+
 
 public void serveForever(TcpSocket listener, Router router) @trusted
 {

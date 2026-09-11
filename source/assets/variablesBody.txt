@@ -12,4 +12,7 @@ bundled mode).  An unset variable without a default is an error.
 Inventory vars may also hold { age = "file.age" }: replaced by that
 file's age-decrypted content (one trailing newline stripped), on the
 controller, with the identity from --identity, AGE_IDENTITY or
-~/.ssh/id_ed25519.  Binary secrets are not supported in variables.
+~/.ssh/id_ed25519.  Binary secrets do not fit variables — deploy
+them with a file src marked age = true instead: the source is
+age-encrypted, decrypted on the controller (same identity) and
+written byte-exact, so it may be binary; it is not templated.

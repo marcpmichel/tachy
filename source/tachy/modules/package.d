@@ -29,6 +29,8 @@ struct TaskContext
     string hostName;
     string tasksFileDir;  // base dir for relative `file.src` paths
     Val[string] vars;     // rendered variable scope, for template rendering
+    string ageIdentity;   // explicit --identity for `file` src decryption
+                          // (empty: AGE_IDENTITY, then ~/.ssh/id_ed25519)
 }
 
 struct TaskResult
@@ -53,10 +55,20 @@ void validateModuleParams(string moduleName, in Val[string] params, string conte
     {
         case "file":
             checkKeys(params, ["path", "state", "src", "content", "line", "block",
-                "template", "mode", "owner", "group"],
+                "template", "mode", "owner", "group", "age"],
                 context ~ " (file)");
             if ("path" !in params)
                 throw new TachyError(context ~ " (file): 'path' is required");
+            if (auto p = "age" in params)
+            {
+                if ((*p).kind != Val.Kind.boolean_)
+                    throw new TachyError(context ~ " (file): 'age' must be a"
+                        ~ " boolean marking 'src' as age-encrypted, not a "
+                        ~ (*p).typeName());
+                if ((*p).boolean_ && "src" !in params)
+                    throw new TachyError(context ~ " (file): 'age' requires"
+                        ~ " 'src' (it marks that source file as age-encrypted)");
+            }
             break;
         case "check":
         {

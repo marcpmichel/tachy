@@ -33,7 +33,8 @@ import std.string : strip, stripLeft;
 
 import tachy.errors;
 import tachy.runner : RunOptions;
-import tachy.web : Request, Response, Router, asset, bindListener, serveForever;
+import tachy.web : Request, Response, Router, asset, bindListener,
+    browserUrl, serveForever, tryOpenBrowser, webListener;
 
 package(tachy) enum string docSource = import("DOCUMENTATION.md");
 
@@ -44,13 +45,15 @@ int runWebDoc(const RunOptions opts) @trusted
 
     auto site = new DocSite(docSource);
 
-    auto listener = bindListener(opts.webAddress, cast(ushort) opts.webPort);
+    auto listener = webListener(opts);
     auto addr = cast(InternetAddress) listener.localAddress();
     stdout.writefln("tachy webdoc listening on http://%s — Ctrl-C to stop",
         addr.toString());
     stdout.writefln("serving the compiled-in DOCUMENTATION.md (%d sections)",
         site.sections.length);
     stdout.flush();
+
+    tryOpenBrowser(browserUrl(addr.toAddrString(), addr.port));
 
     serveForever(listener, site.router);
     return 0;
