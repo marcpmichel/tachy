@@ -229,10 +229,13 @@ tachy — Pravic-driven configuration management (Ansible-like)
   Commands:
     apply       apply tasks to the selected hosts
     check       check mode: report changes without applying them
-    generate    create something: "generate key <path>" writes a new
-                age key pair, "generate task <path>" a sample tasks
-                file, "generate settings <path>" a sample settings
-                file (all refuse to overwrite)
+    hosts       inspect hosts: "hosts list <selection>" lists the hosts
+                matching a selection, "hosts info <host>" shows one
+                host's attributes
+    generate    key <path> : writes a new age key pair
+                task <path> : write a sample tasks file
+                settings <path> : write a sample settings file
+                (note: all refuse to overwrite)
     webui       start a local web server: a graphical version of this
                 CLI
     webdoc      start a local web server serving this documentation as
@@ -243,7 +246,6 @@ tachy — Pravic-driven configuration management (Ansible-like)
   Options:
     -i, --inventory PATH   Inventory file (default: inventory.pravic)
     -v, --verbose          Show executed commands and change details
-        --list-hosts       List hosts matching the selection, then exit
         --direct           Apply tasks files directly in this process,
                            without bundling a project (this is how the
                            copied binary runs on each host)

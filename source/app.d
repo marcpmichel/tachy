@@ -17,6 +17,7 @@ enum Cmd
 {
     apply,
     check,
+    hosts,
     generate,
     webui,
     webdoc,
@@ -33,6 +34,8 @@ Cmd parseCommand(string word)
             return Cmd.apply;
         case "check":
             return Cmd.check;
+        case "hosts":
+            return Cmd.hosts;
         case "generate":
             return Cmd.generate;
         case "webui":
@@ -45,9 +48,11 @@ Cmd parseCommand(string word)
             return Cmd.help;
         default:
             throw new TachyError("unknown command '" ~ word
-                ~ "' (commands: apply, check, generate, webui, webdoc, man, help)");
+                ~ "' (commands: apply, check, hosts, generate, webui,"
+                ~ " webdoc, man, help)");
     }
 }
+
 
 // Under `dub test` (the "unittest" configuration) the silly test
 // runner provides main; app.d then contributes only its module — its
@@ -93,6 +98,8 @@ int main(string[] args)
                     throw new TachyError("--direct-report requires --direct");
 
                 return runTachy(opts);
+            case Cmd.hosts:
+                return runHosts(args[2 .. $], opts);
             case Cmd.webui:
                 // webui takes no positional arguments: the projects
                 // come from settings.pravic (webui projects) and runs
@@ -245,7 +252,6 @@ void parseOptions(ref string[] args, ref RunOptions opts, ref bool wantHelp)
         args,
         "i|inventory", "PATH  inventory file (default: inventory.pravic)", &opts.inventoryPath,
         "v|verbose", "show executed commands and change details", &opts.verbose,
-        "list-hosts", "list hosts matching the selection, then exit", &opts.listHosts,
         "color", "force colored statuses even when stdout is not a tty", &opts.forceColor,
         "direct", "apply tasks files directly in this process, without bundling a project", &opts.direct,
         "direct-report", "PATH  with --direct: write \"ok changed failed\" counters to PATH", &opts.directReport,

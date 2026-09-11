@@ -13,13 +13,17 @@ This doc owns the source tree's structure and conventions;
 # Local Contracts
 
 - Layering, top-down:
-  - `app.d` — CLI surface only (command word: apply/check/generate/
-    webui/webdoc/man/help; `help` prints the short form, `man` the
+  - `app.d` — CLI surface only (command word: apply/check/hosts/
+    generate/webui/webdoc/man/help; `help` prints the short form, `man` the
     full manual, man-page style — the text blocks live in
     `assets/*.txt` and are embedded with `import()`, one source for
     both outputs); delegates to `runner.d`, `generate.d`,
     `web.d` and `webdoc.d`
-  - `runner.d` — per-host orchestration; direct mode and bundled mode
+  - `runner.d` — per-host orchestration and the read-only `hosts`
+    command (`runHosts`: `hosts list <selection>` prints the former
+    --list-hosts output, `hosts info <host>` one host's attributes
+    plus effective vars, values via project.d's `pravicValue`);
+    direct mode and bundled mode
     (default: the tasks file's parent directory is the project, copied
     with the tachy binary to each host and run there with `--direct
     --events`); the job loop produces `JobEvent`s consumed by one

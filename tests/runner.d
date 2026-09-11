@@ -228,3 +228,135 @@ assert(exists(buildPath(root, "src", "land", "s.age")));
 assert(exists(buildPath(root, "src", "land", "x.pravic")));
 assert(exists(buildPath(root, "proj", "main.pravic")));
 }
+@("hosts list and info text from an inventory")
+unittest
+{
+import std.file : rmdirRecurse;
+import tachy.inventory : HostConfig, Inventory;
+
+auto dir = buildPath(tempDir, "tachy_runner_hosts_ut");
+if (exists(dir)) rmdirRecurse(dir);
+mkdirRecurse(dir);
+scope (exit) rmdirRecurse(dir);
+
+const string invPath = buildPath(dir, "inventory.pravic");
+{
+    auto f = File(invPath, "w");
+    f.write(`
+var admin = "root"
+
+host web1 {
+    address = "10.0.0.1"
+    user = "deploy"
+    port = 2222
+    key = "~/.ssh/id_web1"
+    tags = ["web", "front"]
+    vars { http_port = 81 }
+}
+
+host buildbox {
+    connection = "local"
+}
+`);
+    f.close();
+}
+
+auto inv = Inventory.load(invPath);
+
+// list: selection header, one line per host, sorted by name, with the
+// connection target (the former --list-hosts output)
+const string listAll = hostsListText("all", inv.select("all"));
+assert(listAll == "== all | hosts: buildbox, web1\n"
+    ~ "  buildbox (local)\n"
+    ~ "  web1 (ssh deploy@10.0.0.1:2222)\n", listAll);
+
+// info: header, set attributes plus connection/port defaults, then
+// effective vars (global < host, sorted, no inventory_hostname)
+auto vars = inv.varsFor("web1");
+vars.remove("inventory_hostname");
+const string info = hostInfoText(inv.select("web1")[0], vars);
+assert(info == "== web1 (ssh deploy@10.0.0.1:2222)\n"
+    ~ "  connection  ssh\n"
+    ~ "  address     10.0.0.1\n"
+    ~ "  user        deploy\n"
+    ~ "  port        2222\n"
+    ~ "  key         ~/.ssh/id_web1\n"
+    ~ "  tags        web, front\n"
+    ~ "  vars:\n"
+    ~ "    admin = \"root\"\n"
+    ~ "    http_port = 81\n", info);
+
+// info on a bare local host: defaults and the global var only
+auto bvars = inv.varsFor("buildbox");
+bvars.remove("inventory_hostname");
+const string bare = hostInfoText(inv.select("buildbox")[0], bvars);
+assert(bare == "== buildbox (local)\n"
+    ~ "  connection  local\n"
+    ~ "  port        22\n"
+    ~ "  vars:\n"
+    ~ "    admin = \"root\"\n", bare);
+
+// a bare host with no vars at all gets no vars section
+const string none = hostInfoText(HostConfig("x"), null);
+assert(none == "== x (ssh x)\n"
+    ~ "  connection  ssh\n"
+    ~ "  port        22\n", none);
+}
+
+@("hosts command: sub-command validation and unknown hosts")
+unittest
+{
+import std.file : rmdirRecurse;
+import tachy.errors : TachyError;
+import tachy.inventory : Inventory;
+
+// argument shapes are rejected before the inventory is even read
+foreach (args; [cast(string[])[], ["ls"], ["list"], ["list", "a", "b"],
+    ["info"], ["info", "a", "b"], ["nonsense", "x"]])
+{
+    string msg;
+    try
+    {
+        runHosts(args, RunOptions("no-such-inventory.pravic"));
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(canFind(msg, "hosts"), msg);
+}
+
+// info resolves through the inventory: unknown names list the known
+auto dir = buildPath(tempDir, "tachy_runner_hostscmd_ut");
+if (exists(dir)) rmdirRecurse(dir);
+mkdirRecurse(dir);
+scope (exit) rmdirRecurse(dir);
+const string invPath = buildPath(dir, "inventory.pravic");
+{
+    auto f = File(invPath, "w");
+    f.write("host web1 { address = \"10.0.0.1\" }\n");
+    f.close();
+}
+
+assert(runHosts(["info", "web1"], RunOptions(invPath)) == 0);
+
+string msg;
+try
+{
+    runHosts(["info", "nope"], RunOptions(invPath));
+    assert(false, "expected TachyError");
+}
+catch (TachyError e)
+    msg = e.msg;
+assert(canFind(msg, "unknown host 'nope'"), msg);
+assert(canFind(msg, "known: web1"), msg);
+
+// list rejects an empty selection the same way apply does
+try
+{
+    runHosts(["list", ""], RunOptions(invPath));
+    assert(false, "expected TachyError");
+}
+catch (TachyError e)
+    msg = e.msg;
+assert(canFind(msg, "matched no hosts"), msg);
+}

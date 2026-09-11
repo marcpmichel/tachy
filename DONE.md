@@ -1440,3 +1440,39 @@
      runs, 0 failures (previously ~1 in 2); convention recorded in
      source/AGENTS.md.
 
+
+45. add a "hosts" command (list/info sub-commands) and drop
+    --list-hosts; re-work the "generate" help entry
+   - CLI: new `hosts` command word (app.d: Cmd enum, parseCommand,
+     dispatch, command list in the unknown-command error). `tachy
+     hosts list <selection>` prints exactly the former --list-hosts
+     output (`hostsListText`); `tachy hosts info <host>` prints the
+     host line (name + connection target) then its attributes —
+     connection/port always, address/user/key/tags when set — and
+     effective variables (global < host, sorted, values as Pravic via
+     project.d's `pravicValue`, now package(tachy)); the injected
+     `inventory_hostname` builtin is dropped (the header restates
+     it). inventory.d gained a `host(name)` lookup (unknown names
+     list the known hosts); `runHosts` validates its arguments before
+     the inventory is read. `--list-hosts` is gone entirely: getopt
+     registration, `RunOptions.listHosts`, the runTachy branch and
+     its --direct conflict check removed.
+   - generate help entry reformatted as requested: one line per thing
+     ("key <path> : writes a new age key pair", …) plus a
+     "(note: all refuse to overwrite)" line, in commandEntries.txt —
+     one asset feeding --help, README and man.
+   - Unittests: tests/app.d (eight command words, hosts in the
+     unknown-command list, --list-hosts now rejected the way --check
+     was); tests/runner.d (hostsListText/hostInfoText exact output —
+     ssh host with every attribute, bare local host, host without
+     vars; runHosts argument shapes, unknown host listing the known
+     ones, empty selection). `dub test`: 134 passed, 0 failed.
+   - E2E (local — the command never contacts hosts, so no VM run):
+     `hosts list all`/`@front` and `hosts info` of an ssh and a local
+     host against a scratch inventory; every error path exits 1 with
+     its message; `--list-hosts` rejected with the help; `tachy man`
+     COMMANDS carries the new entries (same embedded asset); webdoc
+     serves the new hosts page (25 sections). Docs trio updated
+     (README commands+options blocks, DOCUMENTATION command table /
+     options table / new "### hosts" section); AGENTS.md CLI shape
+     and source/AGENTS.md layering bullets refreshed.

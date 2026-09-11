@@ -46,7 +46,6 @@ struct RunOptions
     string selection;      // host names / @tags / all, comma separated
     bool checkMode;
     bool verbose;
-    bool listHosts;
     bool forceColor;       // color statuses even when stdout is not a tty
     bool keepBundle;      // keep the deployed bundle on each host (debugging)
     bool direct;           // apply jobs in this process, no project bundling
@@ -80,25 +79,103 @@ int runTachy(const RunOptions opts)
 {
     if (!opts.selection.length)
         throw new TachyError("missing hosts selection (comma-separated host names or @tags, or \"all\")");
-    if (opts.direct && opts.listHosts)
-        throw new TachyError("--list-hosts cannot be combined with --direct");
 
     auto inventory = Inventory.load(opts.inventoryPath, opts.identity);
     auto hosts = inventory.select(opts.selection);
     if (hosts.length == 0)
         throw new TachyError(text("selection '", opts.selection, "' matched no hosts"));
 
-    if (opts.listHosts)
-    {
-        writefln("== %s | hosts: %s", opts.selection, hosts.mapHosts().join(", "));
-        foreach (ref h; hosts)
-            writefln("  %s (%s)", h.name, describeHost(h));
-        return 0;
-    }
-
     if (opts.direct)
         return runDirect(opts, inventory, hosts);
     return runBundled(opts, inventory, hosts);
+}
+
+// ---------------------------------------------------------------------------
+// The hosts command: inventory inspection, read-only.
+// ---------------------------------------------------------------------------
+
+/// `tachy hosts <sub-command> ...`: `hosts list <selection>` prints the
+/// hosts a selection matches, `hosts info <host>` one host's attributes
+/// with its effective variables.  No host is contacted and no tasks
+/// file is needed.
+int runHosts(in string[] args, const RunOptions opts)
+{
+    if (!args.length)
+        throw new TachyError("hosts: expected 'list <selection>' or"
+            ~ " 'info <host>' — examples: tachy hosts list all,"
+            ~ " tachy hosts info web1");
+    if (!args[0].among!("list", "info"))
+        throw new TachyError("hosts: unknown sub-command '" ~ args[0]
+            ~ "' (expected 'list' or 'info')");
+    if (args.length != 2)
+        throw new TachyError("hosts " ~ args[0] ~ ": expected exactly one"
+            ~ (args[0] == "list" ? " selection (host names, @tags or \"all\")"
+                : " host name"));
+
+    auto inventory = Inventory.load(opts.inventoryPath, opts.identity);
+    if (args[0] == "list")
+    {
+        auto hosts = inventory.select(args[1]);
+        if (!hosts.length)
+            throw new TachyError(text("selection '", args[1], "' matched no hosts"));
+        writeln(hostsListText(args[1], hosts));
+    }
+    else
+    {
+        const HostConfig h = inventory.host(args[1]);
+        auto vars = inventory.varsFor(h.name);
+        vars.remove("inventory_hostname"); // builtin, restated by the header
+        writeln(hostInfoText(h, vars));
+    }
+    return 0;
+}
+
+/// Text of `hosts list`: the selection header line, then one line per
+/// host (the output of the former --list-hosts option, unchanged).
+package(tachy) string hostsListText(string selection, HostConfig[] hosts)
+{
+    string out_ = format("== %s | hosts: %s\n", selection,
+        hosts.mapHosts().join(", "));
+    foreach (ref h; hosts)
+        out_ ~= format("  %s (%s)\n", h.name, describeHost(h));
+    return out_;
+}
+
+/// Text of `hosts info`: the host line (name plus connection target),
+/// then its attributes — connection and port always (they have
+/// defaults), address/user/key/tags when set — and its effective
+/// variables (global < host, keys sorted, values as Pravic).
+package(tachy) string hostInfoText(in HostConfig h, in Val[string] vars)
+{
+    import std.algorithm.sorting : sort;
+    import std.array : array;
+
+    string info = format("== %s (%s)\n", h.name, describeHost(h));
+    info ~= attrLine("connection", h.connection);
+    if (h.address.length)
+        info ~= attrLine("address", h.address);
+    if (h.user.length)
+        info ~= attrLine("user", h.user);
+    info ~= attrLine("port", text(h.port));
+    if (h.key.length)
+        info ~= attrLine("key", h.key);
+    if (h.tags.length)
+        info ~= attrLine("tags", h.tags.join(", "));
+    if (vars.length)
+    {
+        info ~= "  vars:\n";
+        auto keys = vars.byKey.array;
+        keys.sort();
+        foreach (k; keys)
+            info ~= format("    %s = %s\n", k, pravicValue(vars[k]));
+    }
+    return info;
+}
+
+/// One `hosts info` attribute line: name padded to ten columns.
+private string attrLine(string name, string value) @safe pure
+{
+    return format("  %-10s  %s\n", name, value);
 }
 
 // ---------------------------------------------------------------------------

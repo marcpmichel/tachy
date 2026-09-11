@@ -239,7 +239,7 @@ private string indentOf(int depth) @safe pure
     return "    ".replicate(depth);
 }
 
-private string pravicValue(in Val v)
+package(tachy) string pravicValue(in Val v)
 {
     final switch (v.kind)
     {

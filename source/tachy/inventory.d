@@ -134,6 +134,16 @@ class Inventory
         return names.map!(n => hosts_[n]).array;
     }
 
+    /// One host by exact name; an unknown name is an error listing the
+    /// known hosts (tags and `all` are selection syntax, not names).
+    HostConfig host(string name)
+    {
+        if (auto h = name in hosts_)
+            return *h;
+        throw new TachyError("unknown host '" ~ name ~ "' (known: "
+            ~ knownNames().join(", ") ~ ")");
+    }
+
     /// Effective variables for a host: global < host.
     /// `inventory_hostname` is injected as a builtin.
     Val[string] varsFor(string hostName) const

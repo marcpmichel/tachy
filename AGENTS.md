@@ -1,13 +1,4 @@
 
-# Remember
-
-- a "testing.internal" host is available for remote and safe testing via ssh using root@testing.internal
-- if something is not clear enough, ask the human operator
-- use the DOX framework described below
-- prefer K&R curly braces placement when adding new code
-- unit testing: silly can use a annotation as a test name (i.e. `@("test it works")` ) just before every `unittest` block. use that instead of comments.
-- do not write python code to make changes to the source code : prefer D or unix tools (sed, awk, vi).
-
 
 # DOX framework
 
@@ -108,7 +99,9 @@ When the user requests a durable behavior change, record it here or in the relev
   and TOML support is gone (no dual reader ever shipped)
 - CLI shape: `tachy <command> [options] <selection> [<tasks.pravic>...]`;
  command is one of `apply`, `check` (check mode; the old `-c` option is
- gone), `generate` (`generate key <path>`, `generate task <path>`),
+ gone), `hosts` (`hosts list <selection>`, `hosts info <host>`; the old
+ `--list-hosts` option is gone), `generate` (`generate key <path>`,
+ `generate task <path>`, `generate settings <path>`),
  `webui` (local web console; no selection — projects come from
  settings.pravic `webui` projects, runs start from the browser),
  `webdoc` (serves the compiled-in DOCUMENTATION.md as a multi-page

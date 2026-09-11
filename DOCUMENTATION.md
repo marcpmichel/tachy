@@ -103,6 +103,7 @@ tachy <command> [options] <selection> [<tasks.pravic>...]
   |---|---|
   | `apply` | Apply the tasks files to the selected hosts. |
   | `check` | Check mode: report the changes that would be made, apply nothing. `check` jobs still run — they are checks by nature. |
+  | `hosts` | Inspect hosts without running anything — see [hosts](#hosts). |
   | `generate` | Create something new — see [generate](#generate). |
   | `webui` | Start a local web server, a graphical version of the CLI — see [Web UI](#web-ui-tachy-webui). |
   | `webdoc` | Serve this documentation as a browsable web site — see [Web docs](#web-docs-tachy-webdoc). |
@@ -130,7 +131,6 @@ Example: `tachy apply @web req/web`, `tachy check all`,
 |---|---|
 | `-i, --inventory PATH` | Inventory file (default: `inventory.pravic`). |
 | `-v, --verbose` | Show executed commands and change details under each job line. |
-| `--list-hosts` | List the hosts matching the selection, then exit. |
 | `--keep-bundle` | Keep each host's temporary bundle directory after the run (project copy, generated inventory, report) and print its location — for debugging. |
 | `--direct` | Apply tasks files directly in this process, without bundling a project (this is how the copied binary runs on each host). |
 | `--direct-report P` | With `--direct`: write `ok changed failed` counters to P. |
@@ -139,6 +139,25 @@ Example: `tachy apply @web req/web`, `tachy check all`,
 | `--identity PATH` | Age identity for `{ age = ... }` inventory vars and `file` sources marked `age = true`; default: `AGE_IDENTITY` (path or key material), then `~/.ssh/id_ed25519` (age accepts ssh keys). |
 | `--color` | Force colored statuses even when stdout is not a tty. |
 | `--address ADDR`, `--port PORT` | Webui/webdoc only: address (default 127.0.0.1) and port to listen on. The default port (and `0`) is a random port between 10000 and 65534 — both commands are localhost conveniences; the bound URL is printed, and tachy tries to open it in the local browser (`gio open`, best-effort). |
+
+### hosts
+
+`tachy hosts` inspects the inventory; it never contacts a host and
+needs no tasks file. It honours `-i/--inventory` and `--identity`
+like every other command.
+
+- `tachy hosts list <selection>` — lists the hosts a selection
+  matches, one line per host with its connection target. This replaces
+  the former `--list-hosts` option (removed).
+- `tachy hosts info <host>` — one host's attributes: `connection`,
+  `address`, `user`, `port`, `key` and `tags` (set keys plus the
+  connection/port defaults), then its effective variables — global
+  `<` host, sorted by name, values in Pravic syntax. Age-marked vars
+  are decrypted on the controller like in a run, so pass
+  `--identity`/`AGE_IDENTITY` to see them.
+
+Example: `tachy hosts list @web`, `tachy hosts info web1`.
+
 
 ### generate
 

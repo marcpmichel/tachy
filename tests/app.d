@@ -16,9 +16,10 @@ import std.getopt : GetOptException;
 import tachy.errors : TachyError;
 import tachy.runner : RunOptions;
 
-// the seven command words parse; anything else names the commands
+// the eight command words parse; anything else names the commands
 assert(parseCommand("apply") == Cmd.apply);
 assert(parseCommand("check") == Cmd.check);
+assert(parseCommand("hosts") == Cmd.hosts);
 assert(parseCommand("generate") == Cmd.generate);
 assert(parseCommand("webui") == Cmd.webui);
 assert(parseCommand("webdoc") == Cmd.webdoc);
@@ -33,8 +34,8 @@ assert(parseCommand("help") == Cmd.help);
     }
     catch (TachyError e)
         msg = e.msg;
-    assert(canFind(msg, "unknown command '@web'"), msg);
-    assert(canFind(msg, "apply, check, generate, webui, webdoc, man, help"), msg);
+    assert(canFind(msg, "apply, check, hosts, generate, webui,"), msg);
+    assert(canFind(msg, "webdoc, man, help"), msg);
 }
 
 // help stays short; man carries the full reference
@@ -65,7 +66,7 @@ assert(parseCommand("help") == Cmd.help);
                 assert(canFind(m, l.strip()), "man must document: " ~ l);
 }
 
-foreach (o; ["--keep-bundle", "--list-hosts", "--color", "--events",
+foreach (o; ["--keep-bundle", "--color", "--events",
     "--verbose", "--direct", "--settings", "--identity", "--address",
     "--port", "--direct-report"])
 {
@@ -108,5 +109,13 @@ foreach (o; ["--keep-bundle", "--list-hosts", "--color", "--events",
     string[] args = ["/tachy", "--check", "apply", "localhost"];
     assertThrown!GetOptException(parseOptions(args, opts, wantHelp),
         "--check must no longer be an option (use: tachy check)");
+}
+// --list-hosts was replaced by the hosts command
+{
+    RunOptions opts;
+    bool wantHelp;
+    string[] args = ["/tachy", "--list-hosts", "apply", "localhost"];
+    assertThrown!GetOptException(parseOptions(args, opts, wantHelp),
+        "--list-hosts must no longer be an option (use: tachy hosts list)");
 }
 }

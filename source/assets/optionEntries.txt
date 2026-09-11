@@ -1,6 +1,5 @@
     -i, --inventory PATH   Inventory file (default: inventory.pravic)
     -v, --verbose          Show executed commands and change details
-        --list-hosts       List hosts matching the selection, then exit
         --direct           Apply tasks files directly in this process,
                            without bundling a project (this is how the
                            copied binary runs on each host)
