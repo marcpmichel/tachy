@@ -3,6 +3,7 @@
 module tachy.tests.vars;
 
 import tachy.vars;
+import tachy.tests.envsync : envM;
 import tachy.value : Val;
 import tachy.errors : TachyError;
 import std.algorithm.searching : canFind;
@@ -22,7 +23,8 @@ Val tbl(Val[string] t)
     return v;
 }
 
-unittest // resolveEnvVars: { env = "NAME" } markers
+@("resolveEnvVars: { env = \"NAME\" } markers")
+unittest
 {
 import std.exception : assertThrown;
 import tachy.errors : TachyError;
@@ -129,7 +131,8 @@ badtype["x"] = tbl(table("env", Val(1L)));
 assertThrown!(TachyError)(resolveEnvVars(badtype, "ctx.toml"));
 }
 
-unittest // resolveEnvVars: { env, from } dotenv markers
+@("resolveEnvVars: { env, from } dotenv markers")
+unittest
 {
 import std.algorithm.searching : canFind;
 import std.array : join;
@@ -294,7 +297,8 @@ assert(r["nested"].table_["inner"].str_ == "s3cret");
 }
 }
 
-unittest // dotenv parsing errors name file and line
+@("dotenv parsing errors name file and line")
+unittest
 {
 import std.file : exists, mkdirRecurse, rmdirRecurse, tempDir;
 import std.path : buildPath;
@@ -340,7 +344,8 @@ expectError("afterquote.env", "K=\"a\" junk\n",
     [":1: unexpected content after quoted value"]);
 }
 
-unittest // deepMerge precedence and nested table merge
+@("deepMerge precedence and nested table merge")
+unittest
 {
 Val[string] base;
 base["a"] = Val("base-a");
@@ -361,7 +366,8 @@ auto m2 = deepMerge(base, table("a", Val("over-a")));
 assert(m2["a"].str_ == "over-a");
 }
 
-unittest // renderTemplate basics
+@("renderTemplate basics")
+unittest
 {
 Val[string] vars;
 vars["name"] = Val("web1");
@@ -378,7 +384,8 @@ assert(renderTemplate("r={{ ratio }}", vars) == "r=1.5");
 assert(renderTemplate("{{ nginx.worker }} workers", vars) == "4 workers");
 }
 
-unittest // var referencing var, and cycle detection
+@("var referencing var, and cycle detection")
+unittest
 {
 Val[string] vars;
 vars["a"] = Val("{{ b }}-suffix");
@@ -393,7 +400,8 @@ import std.exception : assertThrown;
 assertThrown!(TachyError)(renderTemplate("{{ x }}", cyclic));
 }
 
-unittest // undefined variable and unterminated template
+@("undefined variable and unterminated template")
+unittest
 {
 import std.exception : assertThrown;
 Val[string] vars;
@@ -403,7 +411,8 @@ assertThrown!(TachyError)(renderTemplate("{{ known ", vars));
 assertThrown!(TachyError)(renderTemplate("{{}}", vars));
 }
 
-unittest // renderParams deep rendering
+@("renderParams deep rendering")
+unittest
 {
 Val[string] params;
 params["path"] = Val("/srv/{{ site }}");
@@ -419,7 +428,10 @@ assert(r["opts"].table_["title"].str_ == "example page");
 assert(r["port"].integer_ == 80);
 }
 
-unittest // { age = "..." } markers: resolution, stripping, combinations
+@("{ age = \"...\" } markers: resolution, stripping, combinations")
+unittest
+{
+synchronized (envM)
 {
 import std.algorithm.searching : canFind;
 import std.file : exists, mkdirRecurse, rmdirRecurse, tempDir, write;
@@ -636,8 +648,10 @@ environment.remove("AGE_IDENTITY");
     assert(canFind(msg, "'age' must be a string"), msg);
 }
 }
+}
 
-unittest // isAgeCiphertext: the age v1 header decides ciphertext vs plaintext
+@("isAgeCiphertext: the age v1 header decides ciphertext vs plaintext")
+unittest
 {
 import tachy.vars : isAgeCiphertext;
 

@@ -14,7 +14,8 @@ import tachy.errors : TachyError;
 import tachy.value : Val;
 import std.path : isAbsolute;
 
-unittest // hostInventoryPravic round-trips through the Pravic parser
+@("hostInventoryPravic round-trips through the Pravic parser")
+unittest
 {
     Val[string] vars;
     vars["str"] = Val("it's \"quoted\"\n");
@@ -55,7 +56,8 @@ unittest // hostInventoryPravic round-trips through the Pravic parser
     assert(got["list"].array_[1].str_ == "two");
 }
 
-unittest // empty vars still produce a valid inventory
+@("empty vars still produce a valid inventory")
+unittest
 {
     auto text = hostInventoryPravic("plain", null);
     auto doc = parsePractic(text, "generated-inventory.pravic");
@@ -65,7 +67,8 @@ unittest // empty vars still produce a valid inventory
     assert("vars" in host);
 }
 
-unittest // parseReport
+@("parseReport")
+unittest
 {
     ulong ok, changed, failed;
     assert(parseReport("3 2 1\n", ok, changed, failed));
@@ -76,7 +79,8 @@ unittest // parseReport
     assert(!parseReport("1 2 3 4", ok, changed, failed));
 }
 
-unittest // deployProject + removeBundle over the local transport
+@("deployProject + removeBundle over the local transport")
+unittest
 {
     auto dir = buildPath(tempDir, "tachy_project_ut", "proj");
     if (!exists(dir)) mkdirRecurse(dir);
@@ -121,7 +125,8 @@ unittest // deployProject + removeBundle over the local transport
     assert(!canFind(cmd, " --check"));
 }
 
-unittest // imports are copied into the bundle; collisions are errors
+@("imports are copied into the bundle; collisions are errors")
+unittest
 {
 import std.algorithm.searching : canFind;
 import std.exception : assertThrown;

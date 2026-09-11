@@ -25,7 +25,8 @@ private string writeTemp(string sub, string content)
     return p;
 }
 
-unittest // both statement forms, param injection, defaults
+@("both statement forms, param injection, defaults")
+unittest
 {
 writeTemp("inner.pravic", `
 directory /srv/app { mode = "0755" }
@@ -60,7 +61,8 @@ assert(loaded.jobs[2].params["name"].str_ == "nginx");
 assert(loaded.jobs[2].params["enabled"].boolean_);
 }
 
-unittest // check: name injection, source order, validation
+@("check: name injection, source order, validation")
+unittest
 {
 import std.exception : assertThrown;
 auto p = writeTemp("check.pravic", `
@@ -98,7 +100,8 @@ assertThrown!(TachyError)(loadTasksFile(writeTemp("check_bad.pravic",
     "check \"x\" { run = \"true\", exit_status = \"0\" }\n")));
 }
 
-unittest // source order: no fixed order, no sorting
+@("source order: no fixed order, no sorting")
+unittest
 {
 auto p = writeTemp("order.pravic", `
 file /srv/tree/leaf.conf { content = "x" }
@@ -127,7 +130,8 @@ assert(order == [
 ], order.join(", "));
 }
 
-unittest // groups and users: statement order, validation
+@("groups and users: statement order, validation")
+unittest
 {
 import std.exception : assertThrown;
 auto p = writeTemp("accounts.pravic", `
@@ -162,7 +166,8 @@ assertThrown!(TachyError)(loadTasksFile(writeTemp("acc_state.pravic",
     "group x { state = \"maybe\" }\n")));
 }
 
-unittest // include: vars = { ... } sub-table binding
+@("include: vars = { ... } sub-table binding")
+unittest
 {
 import std.exception : assertThrown;
 writeTemp("ap_files.pravic", `
@@ -195,7 +200,8 @@ include "ap_files.pravic" { vars = "nope" }
 `)));
 }
 
-unittest // includes: position, var layering, path resolution
+@("includes: position, var layering, path resolution")
+unittest
 {
 writeTemp("one.pravic", `
 var from_one = "1"
@@ -241,7 +247,8 @@ assert(loaded.jobs[2].overlay["extra"].str_ == "e");          // flowed from inc
 assert(loaded.jobs[2].overlay["override_me"].str_ == "one");  // last include wins
 }
 
-unittest // a statement before an include does not see its contribution
+@("a statement before an include does not see its contribution")
+unittest
 {
 writeTemp("post.pravic", `
 var from_post = "p"
@@ -281,7 +288,8 @@ assertThrown!(TachyError)(loadTasksFile(buildPath(
     dirName(writeTemp("cyc_seed.pravic", "")), "cyc_a.pravic")));
 }
 
-unittest // errors
+@("errors")
+unittest
 {
 import std.exception : assertThrown;
 // duplicate target across files
@@ -315,7 +323,8 @@ assertThrown!(TachyError)(loadTasksFile(writeTemp("unk3.pravic",
     "file /tmp/x { bogus = 1 }\n")));
 }
 
-unittest // tasks-file vars may read the environment
+@("tasks-file vars may read the environment")
+unittest
 {
 import std.algorithm.searching : canFind;
 import std.process : environment;
@@ -345,7 +354,8 @@ assert(canFind(msg, "vars.x"));
 assert(canFind(msg, "TACHY_UT_MODEL_NOPE"));
 }
 
-unittest // vars { env, from } reads a dotenv file next to the file
+@("vars { env, from } reads a dotenv file next to the file")
+unittest
 {
 import std.algorithm.searching : canFind;
 
@@ -375,7 +385,8 @@ assert(canFind(msg, "cannot read dotenv file"));
 assert(canFind(msg, "nope.env"));
 }
 
-unittest // vars { age } is rejected in tasks files: decryption is controller-side
+@("vars { age } is rejected in tasks files: decryption is controller-side")
+unittest
 {
 import std.algorithm.searching : canFind;
 string msg;
@@ -391,7 +402,8 @@ assert(canFind(msg, "only supported in inventory"), msg);
 assert(canFind(msg, "vars.x"), msg);
 }
 
-unittest // services with src / template / vars (unit file management)
+@("services with src / template / vars (unit file management)")
+unittest
 {
 import std.algorithm.searching : canFind;
 auto loaded = loadTasksFile(writeTemp("svc_unit.pravic", `
@@ -445,7 +457,8 @@ catch (TachyError e)
 assert(canFind(msg, "'vars' must be a table"));
 }
 
-unittest // import: collection, errors, direct-mode tolerance
+@("import: collection, errors, direct-mode tolerance")
+unittest
 {
 import std.algorithm.searching : canFind;
 import std.path : baseName, buildPath, dirName, isAbsolute;
@@ -505,7 +518,8 @@ p = writeTemp("imp_jobs.pravic", "import a_dir { }\n");
 assert(loadTasksFile(p).jobs.length == 0);
 }
 
-unittest // composition into an import destination: deferral
+@("composition into an import destination: deferral")
+unittest
 {
 import std.algorithm.searching : canFind;
 import std.exception : assertThrown;
@@ -560,7 +574,8 @@ assertThrown!TachyError(loadTasksFile(writeTemp("defer_missing.pravic",
     "include nowhere_lib/x.pravic { }\n")));
 }
 
-unittest // import search paths: settings.pravic resolution order
+@("import search paths: settings.pravic resolution order")
+unittest
 {
 import std.algorithm.searching : canFind;
 import std.file : mkdirRecurse, rmdirRecurse, tempDir, write;
@@ -606,7 +621,8 @@ foreach (src; loaded.imports)
     assert(canFind(src, buildPath(base, "proj")), src);
 }
 
-unittest // include naming the import landing itself (a dir)
+@("include naming the import landing itself (a dir)")
+unittest
 {
 import std.algorithm.searching : canFind;
 import std.file : mkdirRecurse, rmdirRecurse, tempDir, write;
@@ -655,7 +671,8 @@ assert(loaded.jobs.length == 1);
 assert(loaded.jobs[0].target == "/tmp/direct-owned");
 }
 
-unittest // compose: wiring, order, injection and validation
+@("compose: wiring, order, injection and validation")
+unittest
 {
 import std.exception : assertThrown;
 auto p = writeTemp("compose.pravic", `
@@ -728,7 +745,8 @@ assertThrown!(TachyError)(loadTasksFile(writeTemp("compose_to.pravic",
     "compose /srv/app { file = \"a.yml\", timeout = 0 }\n")));
 }
 
-unittest // file age = true: load-time validation
+@("file age = true: load-time validation")
+unittest
 {
 import tachy.value : Val;
 // the boolean marks src as age-encrypted and rides along as a param

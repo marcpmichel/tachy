@@ -256,12 +256,33 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
             foreach (src; loaded.imports)
                 imports ~= ImportSpec(src, baseName(src));
 
+            // Secret sources may also live inside includes that defer
+            // to an import destination — they exist only inside the
+            // bundle, so the composition above never saw them.  Mirror
+            // the bundle's project layout in a staging directory (every
+            // top-level project entry plus each import landed under its
+            // base name, as symlinks to the real files) and compose the
+            // entry file again there: a shadow composition that, like
+            // the on-host inner run, sees the landed imports — so its
+            // `age = true` sources are collected too.
+            LoadedTasks secretLoaded = loaded;
+            string secretProjectDir = projectDir;
+            string staging; // the mirror lives for the whole tasks file
+            scope (exit) removeStaging(staging);
+            if (loaded.deferred.length)
+            {
+                staging = makeStaging(projectDir, imports);
+                secretProjectDir = staging;
+                secretLoaded = loadTasksFile(
+                    buildPath(staging, baseName(absTasks)), settings);
+            }
+
             // Controller-side decryption of `file` sources marked
             // `age = true`: the identity never travels inside a bundle,
             // so the plaintext does — each secret is decrypted once and
             // shipped over its ciphertext copy (exactly like decrypted
             // inventory vars travel in the generated inventory).
-            const bool anyAgeSrc = hasAgeSrc(loaded);
+            const bool anyAgeSrc = hasAgeSrc(secretLoaded);
             string[string] decryptedCache; // resolved source path -> plaintext
 
 
@@ -294,8 +315,8 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
                     // age-marked sources differ.
                     DecryptedFile[] decrypted;
                     if (anyAgeSrc)
-                        decrypted = collectDecryptedFiles(loaded,
-                            inventory.varsFor(host.name), projectDir,
+                        decrypted = collectDecryptedFiles(secretLoaded,
+                            inventory.varsFor(host.name), secretProjectDir,
                             opts.identity, decryptedCache);
                     const string key = host.name ~ "\0" ~ projectDir
                         ~ "\0" ~ importsSignature(imports)
@@ -494,6 +515,80 @@ package(tachy) DecryptedFile[] collectDecryptedFiles(in LoadedTasks loaded,
         out_ ~= DecryptedFile(rel, plain);
     }
     return out_;
+}
+
+/// A temporary mirror of the bundle's project layout, for the shadow
+/// composition of deferred includes: one symlink per top-level project
+/// entry, plus one per import under its base name (skipping names
+/// already mirrored — a landing that exists for real deferred
+/// nothing).  Composing the entry file inside the mirror sees exactly
+/// what the on-host inner run will see — the same directory shape, so
+/// relative paths, `..` escapes back into the project and nested
+/// includes under the landing all resolve identically.
+package(tachy) string makeStaging(string projectDir, in ImportSpec[] imports)
+    @trusted
+{
+    import std.conv : text;
+    import std.file : FileException, SpanMode, dirEntries, mkdir, symlink;
+    import std.random : Random, uniform, unpredictableSeed;
+
+    auto rng = Random(unpredictableSeed);
+    string staging;
+    foreach (_; 0 .. 16)
+    {
+        import std.file : tempDir;
+        const string candidate = buildPath(tempDir, "tachy.stage."
+            ~ text(uniform!"[]"(0, int.max, rng)));
+        try
+        {
+            mkdir(candidate);
+            staging = candidate;
+            break;
+        }
+        catch (FileException e)
+        {
+        }
+    }
+    if (!staging.length)
+        throw new TachyError("cannot create a staging directory for the"
+            ~ " deferred-include mirror in the system temp dir");
+
+    try
+    {
+        bool[string] mirrored;
+        foreach (e; dirEntries(projectDir, SpanMode.shallow))
+        {
+            const string link = buildPath(staging, baseName(e.name));
+            symlink(e.name, link);
+            mirrored[baseName(e.name)] = true;
+        }
+        foreach (ref const ImportSpec imp; imports)
+        {
+            if (imp.dest in mirrored)
+                continue;
+            symlink(imp.src, buildPath(staging, imp.dest));
+        }
+    }
+    catch (Exception e)
+    {
+        removeStaging(staging);
+        throw new TachyError("cannot mirror project '" ~ projectDir
+            ~ "' for deferred-include secret collection: " ~ e.msg);
+    }
+    return staging;
+}
+
+/// Best-effort staging removal; symlinks are unlinked, never followed
+/// into the real project or import sources.  Never throws.
+package(tachy) void removeStaging(string staging) @trusted
+{
+    import std.file : rmdirRecurse;
+    if (!staging.length)
+        return; // nothing was mirrored (no deferred includes)
+    try rmdirRecurse(staging);
+    catch (Exception)
+    {
+    }
 }
 
 /// A project must be self-contained: every file of the composition has

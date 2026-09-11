@@ -19,7 +19,8 @@ TaskContext fakeCtx(ref FakeTransport t)
     return ctx;
 }
 
-unittest // group: create, idempotence, removal
+@("group: create, idempotence, removal")
+unittest
 {
     {
         auto t = new FakeTransport;
@@ -50,7 +51,8 @@ unittest // group: create, idempotence, removal
     assertThrown!(TachyError)(runGroupModule(P2("name", "x", "state", "maybe"), fakeCtx(t)));
 }
 
-unittest // user: creation with defaults and with attributes
+@("user: creation with defaults and with attributes")
+unittest
 {
     // defaults: /bin/sh shell, home created, per-user group
     {
@@ -123,7 +125,8 @@ unittest // user: creation with defaults and with attributes
     }
 }
 
-unittest // user: existing — drift repair and idempotence
+@("user: existing — drift repair and idempotence")
+unittest
 {
     const string passwd = "deploy:x:1000:1000:epices user:/home/deploy:/bin/bash\n";
     const string group1000 = "deploy:x:1000:\n";
@@ -183,7 +186,8 @@ unittest // user: existing — drift repair and idempotence
     }
 }
 
-unittest // user: removal
+@("user: removal")
+unittest
 {
     // absent + existing
     {

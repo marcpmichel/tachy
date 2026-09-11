@@ -27,7 +27,8 @@ Val[string] SP(string name, string state)
     return p;
 }
 
-unittest // started + already active -> unchanged
+@("started + already active -> unchanged")
+unittest
 {
 auto t = new FakeTransport;
 t.replies ~= [CommandResult(0, "/usr/bin/systemctl\n", ""), CommandResult(0, "active\n", "")];
@@ -37,7 +38,8 @@ assert(t.commands.length == 2);
 assert(t.commands[1].indexOf("is-active") >= 0);
 }
 
-unittest // started + inactive -> start, changed
+@("started + inactive -> start, changed")
+unittest
 {
 auto t = new FakeTransport;
 t.replies ~= [CommandResult(0, "/usr/bin/systemctl\n", ""), CommandResult(3, "inactive\n", ""), CommandResult(0, "", "")];
@@ -46,7 +48,8 @@ assert(r.changed);
 assert(t.commands.length == 3 && t.commands[2].indexOf("systemctl start") >= 0);
 }
 
-unittest // stopped + active -> stop, changed; stopped + inactive -> unchanged
+@("stopped + active -> stop, changed; stopped + inactive -> unchanged")
+unittest
 {
 auto t = new FakeTransport;
 t.replies ~= [CommandResult(0, "/usr/bin/systemctl\n", ""), CommandResult(0, "active\n", ""), CommandResult(0, "", "")];
@@ -57,7 +60,8 @@ t2.replies ~= [CommandResult(0, "/usr/bin/systemctl\n", ""), CommandResult(3, "i
 assert(!runServiceModule(SP("nginx", "stopped"), fakeCtx(t2)).changed);
 }
 
-unittest // restart always acts
+@("restart always acts")
+unittest
 {
 auto t = new FakeTransport;
 t.replies ~= [CommandResult(0, "/usr/bin/systemctl\n", ""), CommandResult(0, "active\n", ""), CommandResult(0, "", "")];
@@ -65,7 +69,8 @@ auto r = runServiceModule(SP("nginx", "restarted"), fakeCtx(t));
 assert(r.changed && t.commands[2].indexOf("systemctl restart") >= 0);
 }
 
-unittest // enable when disabled
+@("enable when disabled")
+unittest
 {
 auto t = new FakeTransport;
 t.replies ~= [CommandResult(0, "/usr/bin/systemctl\n", ""), CommandResult(1, "disabled\n", ""), CommandResult(0, "", "")];
@@ -76,7 +81,8 @@ auto r = runServiceModule(p, fakeCtx(t));
 assert(r.changed && t.commands[2].indexOf("systemctl enable") >= 0);
 }
 
-unittest // already enabled -> unchanged
+@("already enabled -> unchanged")
+unittest
 {
 auto t = new FakeTransport;
 t.replies ~= [CommandResult(0, "/usr/bin/systemctl\n", ""), CommandResult(0, "enabled\n", "")];
@@ -86,7 +92,8 @@ p["enabled"] = Val(true);
 assert(!runServiceModule(p, fakeCtx(t)).changed);
 }
 
-unittest // error paths
+@("error paths")
+unittest
 {
 import std.exception : assertThrown;
 // no systemctl on target
@@ -154,7 +161,8 @@ Val utTbl(Val[string] t)
     return v;
 }
 
-unittest // template: local vars win over the host scope; create + daemon-reload
+@("template: local vars win over the host scope; create + daemon-reload")
+unittest
 {
 auto dir = buildPath(tempDir, "tachy_svcmod_ut");
 if (exists(dir)) rmdirRecurse(dir);
@@ -193,7 +201,8 @@ assert(canFind(t.commands[2], "/etc/systemd/system/app.service"));
 assert(canFind(t.commands[3], "daemon-reload"));
 }
 
-unittest // template: checksum match + active -> fully idempotent
+@("template: checksum match + active -> fully idempotent")
+unittest
 {
 auto dir = buildPath(tempDir, "tachy_svcmod_ut2");
 if (exists(dir)) rmdirRecurse(dir);
@@ -218,7 +227,8 @@ assert(!r.changed, r.msg);
 assert(t.commands.length == 4, t.commands.join(" | "));
 }
 
-unittest // template drift: updated unit file, daemon-reload, no restart
+@("template drift: updated unit file, daemon-reload, no restart")
+unittest
 {
 auto dir = buildPath(tempDir, "tachy_svcmod_ut3");
 if (exists(dir)) rmdirRecurse(dir);
@@ -245,7 +255,8 @@ foreach (c; t.commands)
     assert(!canFind(c, "systemctl restart"), c); // restart is explicit
 }
 
-unittest // src: verbatim copy + unit-file-only management (no state)
+@("src: verbatim copy + unit-file-only management (no state)")
+unittest
 {
 auto dir = buildPath(tempDir, "tachy_svcmod_ut4");
 if (exists(dir)) rmdirRecurse(dir);
@@ -269,7 +280,8 @@ assert(t.commands.length == 4, t.commands.join(" | "));
 assert(t.lastInput == "[Service]\nExecStart=/bin/true\n");
 }
 
-unittest // state = "enabled": enable without touching the running state
+@("state = \"enabled\": enable without touching the running state")
+unittest
 {
 // disabled -> enable
 {
@@ -307,7 +319,8 @@ unittest // state = "enabled": enable without touching the running state
 }
 }
 
-unittest // check mode: unit file write and daemon-reload recorded, not run
+@("check mode: unit file write and daemon-reload recorded, not run")
+unittest
 {
 auto dir = buildPath(tempDir, "tachy_svcmod_ut5");
 if (exists(dir)) rmdirRecurse(dir);
@@ -329,7 +342,8 @@ assert(r.changed && canFind(r.msg, "created unit file"), r.msg);
 assert(t.commands.length == 2, t.commands.join(" | ")); // nothing executed
 }
 
-unittest // missing template / src files are errors naming the path
+@("missing template / src files are errors naming the path")
+unittest
 {
 import std.exception : assertThrown;
 auto dir = buildPath(tempDir, "tachy_svcmod_ut6");

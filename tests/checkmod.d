@@ -16,7 +16,8 @@ private TaskContext ctxLocal()
     return ctx;
 }
 
-unittest // passing assertions
+@("passing assertions")
+unittest
 {
     auto ctx = ctxLocal;
 
@@ -76,7 +77,8 @@ unittest // passing assertions
     assert(!runCheckModule(p6, ctx).changed);
 }
 
-unittest // run executes in the defining tasks file's directory
+@("run executes in the defining tasks file's directory")
+unittest
 {
     import std.file : exists, mkdirRecurse, tempDir, write;
     import std.path : buildPath;
@@ -93,7 +95,8 @@ unittest // run executes in the defining tasks file's directory
     assert(!r.changed && r.msg == "exit 0", r.msg);
 }
 
-unittest // failing assertions
+@("failing assertions")
+unittest
 {
     auto ctx = ctxLocal;
 
@@ -154,7 +157,8 @@ unittest // failing assertions
     assert(canFind(msg, "match of /^deb.*$/"), msg);
 }
 
-unittest // parse errors
+@("parse errors")
+unittest
 {
     import std.algorithm.searching : canFind;
 

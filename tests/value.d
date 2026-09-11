@@ -27,7 +27,8 @@ import tachy.errors : TachyError;
     return text(v);
 }
 
-unittest // values of every kind
+@("values of every kind")
+unittest
 {
     auto t = varsTable(`
 var a = "x"
@@ -57,7 +58,8 @@ var k = "tab\t\"q\" é"
     assert(t["d"].scalarToString() == "true");
 }
 
-unittest // multi-line strings: escapes, trims, line continuation, quote runs
+@("multi-line strings: escapes, trims, line continuation, quote runs")
+unittest
 {
     auto t = varsTable(`
 var m = """
@@ -82,7 +84,8 @@ continued
     assert(quotes["q2"].str_ == "word \"\"", quotes["q2"].str_);
 }
 
-unittest // group form expands to ordered statements; both forms merge
+@("group form expands to ordered statements; both forms merge")
+unittest
 {
     auto stmts = parseStmts(`
 vars {
@@ -117,7 +120,8 @@ import "../shared/tool" { }
     assert(stmts[3].line < stmts[4].line && stmts[4].line < stmts[5].line);
 }
 
-unittest // an omitted block is the empty block: no attributes, no braces
+@("an omitted block is the empty block: no attributes, no braces")
+unittest
 {
     auto stmts = parseStmts(`
 directory /tmp/two
@@ -154,7 +158,8 @@ hosts {
         && g[1].value.table_["address"].str_ == "10.0.0.2");
 }
 
-unittest // inventory and settings shapes
+@("inventory and settings shapes")
+unittest
 {
     auto stmts = parseStmts(`
 host web1 {
@@ -184,7 +189,8 @@ webui {
     assert(stmts[3].kind == "webui" && stmts[3].key == "projects");
 }
 
-unittest // strictness: the errors a typo produces
+@("strictness: the errors a typo produces")
+unittest
 {
     import std.algorithm.searching : canFind;
     import std.exception : assertThrown;
@@ -236,7 +242,8 @@ unittest // strictness: the errors a typo produces
         assert(canFind(e.msg, "test.pravic: line 3"), e.msg);
 }
 
-unittest // empty and comment-only files parse to nothing
+@("empty and comment-only files parse to nothing")
+unittest
 {
     assert(parseStmts("").length == 0);
     assert(parseStmts("# nothing\n\n# more\n").length == 0);
@@ -247,6 +254,7 @@ unittest // empty and comment-only files parse to nothing
     assert(t["check"].integer_ == 1 && t["vars"].integer_ == 2);
 }
 
+@("validated accessors: checkKeys and optString")
 unittest
 {
     auto t = varsTable("var a = 1\nvar bad = 2");

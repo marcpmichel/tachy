@@ -45,7 +45,8 @@ string failMsg(scope void delegate() dg)
     assert(false, "expected TachyError");
 }
 
-unittest // running and fully conformant -> unchanged
+@("running and fully conformant -> unchanged")
+unittest
 {
 auto t = new FakeTransport;
 t.replies ~= [
@@ -66,7 +67,8 @@ assert(t.commands[5] == "docker inspect --format '{{.Name}} {{.State.Status}} {{
     t.commands[5]);
 }
 
-unittest // config hash drift -> up, then converging re-probe
+@("config hash drift -> up, then converging re-probe")
+unittest
 {
 auto t = new FakeTransport;
 t.replies ~= [
@@ -87,7 +89,8 @@ assert(t.commands[4] == "docker compose -f '/srv/app/compose.yml' -p 'app' --pro
 assert(t.commands.length == 7, t.commands.join(" | "));
 }
 
-unittest // stopped container and policy flags -> exact up, no post-probe without wait
+@("stopped container and policy flags -> exact up, no post-probe without wait")
+unittest
 {
 auto t = new FakeTransport;
 t.replies ~= [
@@ -111,7 +114,8 @@ assert(t.commands[4] == "docker compose -f '/srv/app/compose.yml' -p 'app' --pro
 assert(t.commands.length == 5, t.commands.join(" | "));
 }
 
-unittest // unhealthy container -> up; wait flags; converging health
+@("unhealthy container -> up; wait flags; converging health")
+unittest
 {
 auto t = new FakeTransport;
 t.replies ~= [
@@ -133,7 +137,8 @@ assert(t.commands[5] == "docker compose -f '/opt/stacks/my.yml' -p 'app' --proje
     t.commands[5]);
 }
 
-unittest // services subset: unknown name is an error, subset reaches the command
+@("services subset: unknown name is an error, subset reaches the command")
+unittest
 {
 {
     auto t = new FakeTransport;
@@ -167,7 +172,8 @@ unittest // services subset: unknown name is an error, subset reaches the comman
 }
 }
 
-unittest // stopped: stop selected running services, remove orphans via the engine
+@("stopped: stop selected running services, remove orphans via the engine")
+unittest
 {
 auto t = new FakeTransport;
 t.replies ~= [
@@ -190,7 +196,8 @@ assert(t.commands[3] == "docker compose -f '/srv/app/compose.yml' -p 'app' --pro
 assert(t.commands[4] == "docker rm -f 'app-old-1'", t.commands[4]);
 }
 
-unittest // stopped and already stopped -> unchanged
+@("stopped and already stopped -> unchanged")
+unittest
 {
 auto t = new FakeTransport;
 t.replies ~= [
@@ -206,7 +213,8 @@ assert(r.msg == "already stopped", r.msg);
 assert(t.commands.length == 3, t.commands.join(" | "));
 }
 
-unittest // absent: down with optional volume/image removal, then verified
+@("absent: down with optional volume/image removal, then verified")
+unittest
 {
 auto t = new FakeTransport;
 t.replies ~= [
@@ -230,7 +238,8 @@ assert(t.commands[2] == "docker compose -f '/srv/app/compose.yml' -p 'app' --pro
     t.commands[2]);
 }
 
-unittest // absent and nothing left -> unchanged, no compose invocation
+@("absent and nothing left -> unchanged, no compose invocation")
+unittest
 {
 auto t = new FakeTransport;
 t.replies ~= [
@@ -246,7 +255,8 @@ assert(r.msg == "already absent", r.msg);
 assert(t.commands.length == 3, t.commands.join(" | "));
 }
 
-unittest // failure and parameter errors
+@("failure and parameter errors")
+unittest
 {
 {
     // docker compose unavailable
@@ -316,7 +326,8 @@ unittest // failure and parameter errors
 }
 }
 
-unittest // check mode: drift is reported, nothing runs
+@("check mode: drift is reported, nothing runs")
+unittest
 {
 auto t = new FakeTransport;
 t.replies ~= [

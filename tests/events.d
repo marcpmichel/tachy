@@ -18,7 +18,8 @@ private string[] rendered(JobEvent[] events, bool tty = false, bool verbose = fa
     return lines;
 }
 
-unittest // renderer: exact classic output
+@("renderer: exact classic output")
+unittest
 {
     auto lines = rendered([
         evFileStart("main.toml", ["localhost"]),
@@ -45,7 +46,8 @@ unittest // renderer: exact classic output
     assert(multi[1] == "web1     | ok              | service ssh: up to date", multi[1]);
 }
 
-unittest // renderer: verbose details, check suffix, colors
+@("renderer: verbose details, check suffix, colors")
+unittest
 {
     auto lines = rendered([
         evFileStart("f.toml", ["h"]),
@@ -64,7 +66,8 @@ unittest // renderer: verbose details, check suffix, colors
     assert(canFind(coloredChk[0], "\033[33m"), coloredChk[0]);
 }
 
-unittest // foldCounters
+@("foldCounters")
+unittest
 {
     ulong ok, changed, failed;
     foreach (ev; [
@@ -78,7 +81,8 @@ unittest // foldCounters
     assert(ok == 1 && changed == 2 && failed == 1);
 }
 
-unittest // eventLine/parseEventLine round trip, incl. escaping
+@("eventLine/parseEventLine round trip, incl. escaping")
+unittest
 {
     JobEvent[] events = [
         evFileStart("main.toml", ["web1", "web2"]),

@@ -4,7 +4,8 @@ module tachy.tests.app;
 
 import app;
 
-unittest // commands and options keep their contract
+@("commands and options keep their contract")
+unittest
 {
 import std.algorithm.comparison : among;
 import std.algorithm.searching : canFind, startsWith;

@@ -10,7 +10,8 @@ import std.file : exists, mkdirRecurse, readText, rmdirRecurse, tempDir;
 import std.path : buildPath;
 import tachy.errors : TachyError;
 
-unittest // runGenerate argument validation
+@("runGenerate argument validation")
+unittest
 {
     foreach (args; [cast(string[])[], ["key"], ["key", "a", "b"],
         ["cert", "x"]])
@@ -30,7 +31,8 @@ unittest // runGenerate argument validation
     assertThrown!TachyError(runGenerate(["task", ""]));
 }
 
-unittest // generateTask writes a loadable sample and never overwrites
+@("generateTask writes a loadable sample and never overwrites")
+unittest
 {
     import tachy.models : loadTasksFile;
 
@@ -60,7 +62,8 @@ unittest // generateTask writes a loadable sample and never overwrites
     assert(canFind(msg, "already exists"), msg);
 }
 
-unittest // generate settings: loadable sample, no overwrite
+@("generate settings: loadable sample, no overwrite")
+unittest
 {
     import tachy.settings : loadSettings;
 

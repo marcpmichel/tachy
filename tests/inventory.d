@@ -21,7 +21,8 @@ string writeTemp(string name, string content)
     return p;
 }
 
-unittest // hosts, tags, selection, vars precedence
+@("hosts, tags, selection, vars precedence")
+unittest
 {
 auto inv = Inventory.load(writeTemp("basic.pravic", `
 var admin = "root"
@@ -61,7 +62,8 @@ assert(vars1["admin"].str_ == "root");                  // global var
 assert(vars1["http_port"].integer_ == 81);              // host var wins
 }
 
-unittest // vars may read the environment: { env = "NAME" }
+@("vars may read the environment: { env = \"NAME\" }")
+unittest
 {
 import std.exception : assertThrown;
 import std.process : environment;
@@ -98,7 +100,8 @@ assert(canFind(msg, "vars.x"));
 assert(canFind(msg, "TACHY_UT_INV_NOPE"));
 }
 
-unittest // vars may read a dotenv file: { env, from }
+@("vars may read a dotenv file: { env, from }")
+unittest
 {
 import std.algorithm.searching : canFind;
 import std.process : environment;
@@ -136,7 +139,8 @@ catch (TachyError e)
 assert(canFind(msg, "cannot read dotenv file"));
 }
 
-unittest // vars may be age-encrypted: { age } (controller side)
+@("vars may be age-encrypted: { age } (controller side)")
+unittest
 {
 import std.algorithm.searching : canFind;
 import std.file : tempDir;
@@ -189,7 +193,8 @@ assert(canFind(msg, "vars.x"), msg);
 assert(canFind(msg, "no identity matched"), msg);
 }
 
-unittest // both host spellings, group form, validation errors
+@("both host spellings, group form, validation errors")
+unittest
 {
 import std.exception : assertThrown;
 auto inv = Inventory.load(writeTemp("forms.pravic", `

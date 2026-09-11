@@ -25,7 +25,10 @@ This doc owns the source tree's structure and conventions;
     --events`); the job loop produces `JobEvent`s consumed by one
     renderer; bundled mode also decrypts `age = true` file sources on
     the controller (`collectDecryptedFiles`) and ships the plaintext
-    through the bundle
+    through the bundle — for includes deferred to an import landing it
+    first shadow-composes the entry file in a staging mirror of the
+    bundle layout (`makeStaging`, symlinks; removed after the tasks
+    file)
   - `models.d` — tasks-file composition: Pravic statements in source
     order (`include` composes its file at the statement's position;
     vars/import statements are file-wide, not jobs), duplicate-target
@@ -78,12 +81,13 @@ This doc owns the source tree's structure and conventions;
     under `body.webdoc`, so the docs share the console's dark theme);
     read-only, same `--address`/`--port` as the webui (random-port
     default, browser-open attempt)
+
 - Errors carry file context (`"<file>: <section> \"<key>\": ...`) and are raised at load time wherever possible, before any host is contacted
 - The event stream (`eventLine`/`parseEventLine`) is the internal protocol between inner runs and the controller (and the webui, which spawns `--events` runs); changes must round-trip and keep `--direct` and bundled output identical — byte-compare both before/after any renderer or event change
 - Deterministic everywhere: job lists sorted by key, directives processed sorted by path, hosts in selection order; per-host failure isolation (a failing host is dropped, others continue, exit 1)
 - Anything user-visible ships with its three doc updates (`--help` in `app.d`, `README.md`, `DOCUMENTATION.md`) and unit tests
 
-- Follow the existing file's style: module doc comment stating purpose and semantics, private helpers below; the module's unit tests live in `tests/<module>.d` (module `tachy.tests.<name>`, fixtures local to the test file) — production modules carry no unittests
+- Follow the existing file's style: module doc comment stating purpose and semantics, private helpers below; the module's unit tests live in `tests/<module>.d` (module `tachy.tests.<name>`, fixtures local to the test file) — production modules carry no unittests, and every unittest block is named with a silly attribute, `@("what it checks")`, on the line before `unittest` (the runner prints these names)
 
 - `@trusted` only where the boundary demands it (file/process IO wrappers); keep pure/@safe elsewhere
 - No new abstractions around `Val`/`Job` — extend the existing accessors (`optString`, `optTable`, `checkKeys`) and registries instead
@@ -93,7 +97,7 @@ This doc owns the source tree's structure and conventions;
   duplicate targets stay loader errors)
 - Linux/amd64 only for bundled mode (the controller copies its own executable); hosts need GNU coreutils + tar
 
-- `dub build` compiles; `dub test` runs the test suite in `tests/` through the silly runner (must pass). The runner is threaded by default: tests must be parallel-safe — unique scratch directories, no cross-test shared state (see `freshDir` in `tests/filemod.d`)
+- `dub build` compiles; `dub test` runs the test suite in `tests/` through the silly runner (must pass). The runner is threaded by default: tests must be parallel-safe — unique scratch directories, no cross-test shared state (see `freshDir` in `tests/filemod.d`); tests that read or mutate shared environment variables (HOME, AGE_IDENTITY, ...) hold the lock from `tests/envsync.d` around the whole span
 
 
 # Child DOX Index

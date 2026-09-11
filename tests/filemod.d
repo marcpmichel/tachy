@@ -43,7 +43,8 @@ Val[string] P(string k, string v)
     return p;
 }
 
-unittest // directory lifecycle: create, idempotence, mode fix, idempotence
+@("directory lifecycle: create, idempotence, mode fix, idempotence")
+unittest
 {
 import std.file : isDir;
 import tachy.transport : statPath;
@@ -70,7 +71,8 @@ auto r4 = runFileModule(p, ctx);
 assert(!r4.changed);
 }
 
-unittest // file content lifecycle: create, idempotence, drift, repair
+@("file content lifecycle: create, idempotence, drift, repair")
+unittest
 {
 import std.file : readText, write;
 auto dir = freshDir;
@@ -97,7 +99,8 @@ auto r4 = runFileModule(p, ctxLocal(dir, true));
 assert(r4.changed && readText(f) == "tampered\n");
 }
 
-unittest // src = binary file: byte-exact copy, checksum compare, idempotent
+@("src = binary file: byte-exact copy, checksum compare, idempotent")
+unittest
 {
 import std.file : read, write;
 auto dir = freshDir;
@@ -125,7 +128,8 @@ auto r3 = runFileModule(p, ctx);
 assert(r3.changed && read(f) == key, "binary drift repaired");
 }
 
-unittest // template = <path>: render that file with the host scope
+@("template = <path>: render that file with the host scope")
+unittest
 {
 import std.exception : assertThrown;
 import std.file : readText, write;
@@ -186,7 +190,8 @@ auto rc = runFileModule(p, ctxLocal(dir, true, vars));
 assert(rc.changed && readText(f) == "drifted\n");
 }
 
-unittest // template = <path>: combination errors
+@("template = <path>: combination errors")
+unittest
 {
 import std.exception : assertThrown;
 auto dir = freshDir;
@@ -235,7 +240,8 @@ auto ctx = ctxLocal(dir);
     assertThrown!(TachyError)(runFileModule(p, ctx));
 }
 }
-unittest // line lifecycle: create, idempotence, append, mid-line non-match
+@("line lifecycle: create, idempotence, append, mid-line non-match")
+unittest
 {
 import std.file : readText, write;
 auto dir = freshDir;
@@ -274,7 +280,8 @@ auto r7 = runFileModule(p, ctxLocal(dir, true));
 assert(r7.changed && readText(f) == "other\n");
 }
 
-unittest // block lifecycle: append contiguous lines, idempotence, mid-file match
+@("block lifecycle: append contiguous lines, idempotence, mid-file match")
+unittest
 {
 import std.file : readText, write;
 auto dir = freshDir;
@@ -312,7 +319,8 @@ write(f, "/tmp none none\n# tachy: managed\n");
 assert(runFileModule(p2, ctx).changed);
 }
 
-unittest // state=absent
+@("state=absent")
+unittest
 {
 import std.file : exists, write;
 auto dir = freshDir;
@@ -330,7 +338,8 @@ assert(runFileModule(p, ctx).changed && !exists(f));
 assert(!runFileModule(p, ctx).changed);
 }
 
-unittest // symlink lifecycle
+@("symlink lifecycle")
+unittest
 {
 import std.file : symlink, readLink;
 auto dir = freshDir;
@@ -351,7 +360,8 @@ p["src"] = Val("/bin/sh");
 assert(runFileModule(p, ctx).changed && readLink(link) == "/bin/sh");
 }
 
-unittest // error cases
+@("error cases")
+unittest
 {
 import std.exception : assertThrown;
 import std.file : mkdirRecurse;
@@ -440,7 +450,8 @@ mkdirRecurse(d);
 
 }
 
-unittest // check mode before creation: attrs on a suppressed creation
+@("check mode before creation: attrs on a suppressed creation")
+unittest
 {
 import std.file : mkdirRecurse, rmdirRecurse, tempDir;
 import std.path : buildPath;
@@ -477,7 +488,8 @@ const string sub = buildPath(dir, "never");
 assert(!exists(sub));
 }
 
-unittest // src + age = true: decrypt, byte-exact deploy, idempotence
+@("src + age = true: decrypt, byte-exact deploy, idempotence")
+unittest
 {
 import std.exception : assertThrown;
 import std.file : read, write;
@@ -522,7 +534,8 @@ auto rc = runFileModule(p, ctxc);
 assert(rc.changed && read(f) == "tampered");
 }
 
-unittest // src + age = true, pre-decrypted source: used as-is, no identity
+@("src + age = true, pre-decrypted source: used as-is, no identity")
+unittest
 {
 import std.file : readText, write;
 
@@ -545,7 +558,8 @@ assert(readText(buildPath(dir, "out.conf")) == "already plaintext\n");
 assert(!runFileModule(p, ctxLocal(dir)).changed);
 }
 
-unittest // src + age = true: error paths
+@("src + age = true: error paths")
+unittest
 {
 import std.exception : assertThrown;
 import std.algorithm.searching : canFind;

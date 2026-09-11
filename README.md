@@ -619,7 +619,10 @@ copy (the identity never travels — the same trust the generated
 inventory already extends to decrypted vars; `--keep-bundle` retains
 it). With `--direct` the source is decrypted in-process with the same
 identity resolution. The path resolves like `src`, must live inside
-the project, and requires `state = "file"`.
+the project, and requires `state = "file"`. Secrets inside includes
+deferred to an `import` destination work too: the controller mirrors
+the bundle's layout (project plus landed imports, as symlinks) and
+shadow-composes the entry file there to collect them.
 
 ## Architecture
 

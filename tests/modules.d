@@ -11,7 +11,8 @@ import tachy.transport : CommandResult;
 import tachy.errors : TachyError;
 import tachy.value : Val;
 
-unittest // runModule dispatches every name moduleNames() registers
+@("runModule dispatches every name moduleNames() registers")
+unittest
 {
     auto t = new FakeTransport;
     TaskContext ctx = TaskContext(t, false, "fakehost", "/tmp");
@@ -26,7 +27,8 @@ unittest // runModule dispatches every name moduleNames() registers
     }
 }
 
-unittest // "package" reaches its executor through runModule
+@("\"package\" reaches its executor through runModule")
+unittest
 {
     auto t = new FakeTransport;
     t.replies ~= [CommandResult(1, "", ""), CommandResult(0, "", "")];

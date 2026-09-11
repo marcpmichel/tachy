@@ -18,7 +18,8 @@ r.path = path;
 return r;
 }
 
-unittest // slugify and compact aliases match the file's link spellings
+@("slugify and compact aliases match the file's link spellings")
+unittest
 {
 assert(slugify("`[compose]` — Docker Compose stacks")
     == "compose-docker-compose-stacks");
@@ -29,7 +30,8 @@ assert(slugify("Purpose") == "purpose");
 assert(slugify("A b") == "a-b");
 }
 
-unittest // inline markdown: escaping, code, bold, italic, links
+@("inline markdown: escaping, code, bold, italic, links")
+unittest
 {
 string[string] anchors;
 anchors["generate"] = "4-generate";
@@ -52,7 +54,8 @@ assert(inlineMd("[x](https://example.invalid/a?b=1&c)", null)
     == `<a href="https://example.invalid/a?b=1&amp;c">x</a>`);
 }
 
-unittest // block rendering: fences, tables, lists, wrapped paragraphs
+@("block rendering: fences, tables, lists, wrapped paragraphs")
+unittest
 {
 string[string] anchors;
 auto rend = MdRenderer("1-x", anchors);
@@ -92,7 +95,8 @@ auto rend = MdRenderer("1-x", anchors);
 }
 }
 
-unittest // section splitting: reading order, group pages, anchors
+@("section splitting: reading order, group pages, anchors")
+unittest
 {
 string[string] anchors;
 auto secs = splitSections(
@@ -118,7 +122,8 @@ assert(anchors["options"] == "4-options");
 assert(anchors["command-line"] == "3-command-line");
 }
 
-unittest // the site: dispatch, menu, 404
+@("the site: dispatch, menu, 404")
+unittest
 {
 auto site = new DocSite("# t\n\n## Group One\n\nintro\n\n### Sub A\n\na body\n\n### Sub B\n\nb body\n");
 
@@ -135,7 +140,8 @@ auto nf = site.router.dispatch(getReq("/doc/nope"));
 assert(nf.status == 404 && nf.body.canFind("No such section"));
 }
 
-unittest // the real file: every section and every internal link resolves
+@("the real file: every section and every internal link resolves")
+unittest
 {
 string[string] anchors;
 auto secs = splitSections(docSource, anchors);

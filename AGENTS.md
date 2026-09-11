@@ -4,6 +4,10 @@
 - a "testing.internal" host is available for remote and safe testing via ssh using root@testing.internal
 - if something is not clear enough, ask the human operator
 - use the DOX framework described below
+- prefer K&R curly braces placement when adding new code
+- unit testing: silly can use a annotation as a test name (i.e. `@("test it works")` ) just before every `unittest` block. use that instead of comments.
+- do not write python code to make changes to the source code : prefer D or unix tools (sed, awk, vi).
+
 
 # DOX framework
 

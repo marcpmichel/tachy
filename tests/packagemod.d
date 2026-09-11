@@ -28,7 +28,8 @@ private Val[string] PK(string key, string ver = null)
     return p;
 }
 
-unittest // install when missing, idempotence when installed
+@("install when missing, idempotence when installed")
+unittest
 {
     {
         auto t = new FakeTransport;
@@ -54,7 +55,8 @@ unittest // install when missing, idempotence when installed
     }
 }
 
-unittest // version pinning
+@("version pinning")
+unittest
 {
     // differing version -> install pkg=version with downgrade allowed
     {
@@ -83,7 +85,8 @@ unittest // version pinning
     }
 }
 
-unittest // removal
+@("removal")
+unittest
 {
     {
         auto t = new FakeTransport;
@@ -107,7 +110,8 @@ unittest // removal
     }
 }
 
-unittest // key and parameter errors
+@("key and parameter errors")
+unittest
 {
     auto t = new FakeTransport;
     string msg;

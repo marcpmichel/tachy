@@ -1373,3 +1373,70 @@
      absent from PATH the servers start and print the URL unchanged.
      Docs trio updated alongside 41.
 
+
+43. avoid the limitation on secrets inside included projects/tasks
+    (requested directly in chat — "option 1" from the follow-up
+    discussion; no TODO.md entry)
+   - Mechanism: instead of translating paths, the controller builds a
+     *staging mirror* of the bundle's project layout — `makeStaging`
+     (runner.d): a temp dir with one symlink per top-level project
+     entry plus one per import under its base name (names already
+     mirrored are skipped — such landings exist for real and deferred
+     nothing). Composing the entry file inside the mirror with the
+     unmodified `loadTasksFile` sees exactly what the on-host inner
+     run sees (same directory shape: relative paths, `..` escapes
+     back into the project, nested includes under the landing), so
+     the shadow composition's `age = true` sources flow through the
+     existing `collectDecryptedFiles` unchanged — no new composition
+     rules to keep in sync.
+   - Wiring (runner.d, runBundled): when `loaded.deferred.length`, the
+     mirror is composed once per tasks file (with the controller's
+     settings) and replaces the real composition for secret
+     collection only — execution, validation and the runDirect skip
+     messages still use the real `loaded`. The mirror is removed with
+     the tasks file (`scope (exit)` at the loop-body level — the first
+     cut bound it to the `if` block and the E2E caught the mirror
+     being deleted before decryption, ENOENT from age). Side effect,
+     documented: errors in a deferred subtree now surface on the
+     controller during deploy (per-host isolation as before) instead
+     of only on the host mid-run.
+   - Unittest (tests/runner.d): import source with a deferred include
+     + nested include + two age sources — real composition sees no
+     secrets (the old limit reproduced), the mirror composes both
+     jobs, collects both `land/*.age` plaintexts with staging-space
+     paths, and `removeStaging` unlinks without touching the real
+     files.
+   - E2E with real age: local bundled run through a deferred include
+     (byte-exact via cmp, mode 0600, idempotent rerun, drift repair,
+     check mode untouched, no staging leftovers) and the same project
+     over ssh on the Debian 12 VM (sha256 match); `--keep-bundle`
+     shows the plaintext written over the ciphertext copy at the
+     bundle's import landing. VM and scratch cleaned.
+   - Docs: DOCUMENTATION.md Secrets section (limitation sentence
+     replaced by the staging-mirror behavior), README Secrets
+     paragraph; source/AGENTS.md runner.d bullet. `--help`/man
+     untouched — no CLI change.
+
+
+44. name unit tests with silly attributes instead of comments
+    (requested directly in chat; no TODO.md entry)
+   - Every unittest block in `tests/` now carries `@("what it checks")`
+     on the line before `unittest` (silly reads string attributes as
+     test names); the runner output shows descriptions instead of
+     `__unittest_L<line>_C<col>`. Mechanical rewrite of all 131
+     `unittest // name` blocks (quotes escaped in the five names that
+     carry them) plus the one nameless block (tests/value.d), which
+     got "validated accessors: checkKeys and optString".
+   - Follow-up, exposed while hammering the suite: a pre-existing race
+     between threaded tests mutating process-global env — vars' age
+     test and settings' discovery/webui tests all touch HOME, so
+     `~`-expansion assertions intermittently compared against another
+     test's transient HOME (~50% failure rate across repeated runs).
+     New `tests/envsync.d` (`envM`, a shared mutex); settings'
+     `withEnv` holds it across the whole set/run/restore span, the
+     webui-projects test locks its hermetic-HOME span, vars' age test
+     wraps its body. Tests using unique per-test names
+     (TACHY_UT_*) stay lock-free. Verified: 20 consecutive full-suite
+     runs, 0 failures (previously ~1 in 2); convention recorded in
+     source/AGENTS.md.
+

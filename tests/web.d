@@ -10,7 +10,8 @@ import tachy.errors : TachyError;
 import std.format;
 import core.thread : Thread;
 
-unittest // parseHead: request line, headers, query
+@("parseHead: request line, headers, query")
+unittest
 {
     auto req = parseHead("GET /api/events/r3?since=9 HTTP/1.1\r\n"
         ~ "Host: localhost\r\n"
@@ -27,7 +28,8 @@ unittest // parseHead: request line, headers, query
         assertThrown!TachyError(parseHead(bad), bad);
 }
 
-unittest // splitPath + router: literals, params, 404, 405
+@("splitPath + router: literals, params, 404, 405")
+unittest
 {
     assert(splitPath("/") == []);
     assert(splitPath("/api/events/r1") == ["api", "events", "r1"]);
@@ -51,7 +53,8 @@ unittest // splitPath + router: literals, params, 404, 405
     assert(router.dispatch(mk("GET", "/a/b/x")).status == 404);
 }
 
-unittest // parseStringObject: happy paths and every error
+@("parseStringObject: happy paths and every error")
+unittest
 {
     auto f = parseStringObject(`{"project":"/p","selection":"all","mode":"check"}`);
     assert(f["project"] == "/p" && f["selection"] == "all" && f["mode"] == "check");
@@ -70,7 +73,8 @@ unittest // parseStringObject: happy paths and every error
         assertThrown!TachyError(parseStringObject(bad), bad);
 }
 
-unittest // Run: folding, wire records, finish is the last record
+@("Run: folding, wire records, finish is the last record")
+unittest
 {
     import tachy.events : evFileStart, evJob;
 
@@ -99,12 +103,14 @@ unittest // Run: folding, wire records, finish is the last record
     assert(canFind(runJson(run), `"failed":1`));
 }
 
-unittest // sseFrame shape
+@("sseFrame shape")
+unittest
 {
     assert(sseFrame(7, `{"a":1}`) == "id: 7\ndata: {\"a\":1}\n\n");
 }
 
-unittest // loopback: end-to-end request/response over a real socket
+@("loopback: end-to-end request/response over a real socket")
+unittest
 {
     import std.socket : InternetAddress, TcpSocket;
 
@@ -172,7 +178,8 @@ unittest // loopback: end-to-end request/response over a real socket
     assert(canFind(roundtrip("garbage\r\n\r\n"), "400"));
 }
 
-unittest // bindListenerAuto and webListener: the random-port default
+@("bindListenerAuto and webListener: the random-port default")
+unittest
 {
 import std.socket : InternetAddress, TcpSocket;
 import tachy.runner : RunOptions;
@@ -202,7 +209,8 @@ assert(a3.port == 19023, a3.toString());
 l3.close();
 }
 
-unittest // browserUrl: every-interface binds open on the loopback
+@("browserUrl: every-interface binds open on the loopback")
+unittest
 {
 assert(browserUrl("127.0.0.1", 8080) == "http://127.0.0.1:8080/");
 assert(browserUrl("0.0.0.0", 12345) == "http://127.0.0.1:12345/");

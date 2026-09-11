@@ -8,9 +8,11 @@ import std.algorithm.searching : canFind;
 import std.file : exists, mkdirRecurse, rmdirRecurse, tempDir, write;
 import std.path : buildPath;
 import std.process : environment;
+import tachy.tests.envsync : envM;
 import tachy.errors : TachyError;
 
-unittest // discovery: explicit, env, cwd, xdg (first found wins)
+@("discovery: explicit, env, cwd, xdg (first found wins)")
+unittest
 {
     auto base = buildPath(tempDir, "tachy_settings_ut");
     if (exists(base)) rmdirRecurse(base);
@@ -83,23 +85,35 @@ unittest // discovery: explicit, env, cwd, xdg (first found wins)
     }
 }
 
-unittest // webui projects: resolution and shapes
+@("webui projects: resolution and shapes")
+unittest
 {
     auto base = buildPath(tempDir, "tachy_settings_webui_ut");
     if (exists(base)) rmdirRecurse(base);
     mkdirRecurse(buildPath(base, "cfg"));
     mkdirRecurse(buildPath(base, "site"));
-    scope (exit) rmdirRecurse(base);
+    // hermetic + serialized HOME: `~` expansion is asserted against a
+    // controlled value, and other threaded tests mutate HOME — the
+    // whole span (set, load, assert, restore) holds the env lock.
+    // Everything after the first load is explicit-path and reads no
+    // environment.
+    Settings s;
+    synchronized (envM)
+    {
+        const string savedHome = environment.get("HOME");
+        environment["HOME"] = buildPath(base, "home");
+        scope (exit) environment["HOME"] = savedHome;
 
-    write(buildPath(base, "cfg", "s.pravic"),
-        "webui { projects = [\"site\", \"~/home-site\", \"/abs/task.pravic\"] }\n");
-    auto s = loadSettings(buildPath(base, "cfg", "s.pravic"));
-    assert(s.webuiProjects.length == 3);
-    assert(s.webuiProjects[0] == buildPath(base, "cfg", "site"),
-        s.webuiProjects[0]); // relative to the settings file
-    assert(s.webuiProjects[1] == buildPath(environment.get("HOME"),
-        "home-site"), s.webuiProjects[1]); // ~ expanded
-    assert(s.webuiProjects[2] == "/abs/task.pravic"); // absolute kept
+        write(buildPath(base, "cfg", "s.pravic"),
+            "webui { projects = [\"site\", \"~/home-site\", \"/abs/task.pravic\"] }\n");
+        s = loadSettings(buildPath(base, "cfg", "s.pravic"));
+        assert(s.webuiProjects.length == 3);
+        assert(s.webuiProjects[0] == buildPath(base, "cfg", "site"),
+            s.webuiProjects[0]); // relative to the settings file
+        assert(s.webuiProjects[1] == buildPath(base, "home", "home-site"),
+            s.webuiProjects[1]); // ~ expanded
+        assert(s.webuiProjects[2] == "/abs/task.pravic"); // absolute kept
+    }
     // alongside imports, and missing entries are fine (the webui
     // reports existence per project)
     write(buildPath(base, "cfg", "both.pravic"),
@@ -133,26 +147,31 @@ unittest // webui projects: resolution and shapes
     }
 }
 
-// run `dg()` with environment variables temporarily overridden
+// run `dg()` with environment variables temporarily overridden; holds
+// the env lock so threaded tests cannot observe the transient values
 private Settings withEnv(string[] names, string[] values,
     Settings delegate() dg) @trusted
 {
-    string[] saved;
-    foreach (i, n; names)
+    synchronized (envM) // set, run and restore are one atomic span
     {
-        saved ~= environment.get(n);
-        environment[n] = values[i];
-    }
-    scope (exit)
+        string[] saved;
         foreach (i, n; names)
         {
-            if (saved[i].length) environment[n] = saved[i];
-            else environment.remove(n);
+            saved ~= environment.get(n);
+            environment[n] = values[i];
         }
-    return dg();
+        scope (exit)
+            foreach (i, n; names)
+            {
+                if (saved[i].length) environment[n] = saved[i];
+                else environment.remove(n);
+            }
+        return dg();
+    }
 }
 
-unittest // parse errors: unknown keys, wrong shapes
+@("parse errors: unknown keys, wrong shapes")
+unittest
 {
     auto base = buildPath(tempDir, "tachy_settings_err_ut");
     if (exists(base)) rmdirRecurse(base);

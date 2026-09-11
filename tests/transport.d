@@ -4,7 +4,8 @@ module tachy.tests.transport;
 
 import tachy.transport;
 
-unittest // local execution
+@("local execution")
+unittest
 {
     auto t = new LocalTransport;
     auto r = t.run("echo hi");
@@ -14,7 +15,8 @@ unittest // local execution
     assert(!bad.ok && bad.status == 3);
 }
 
-unittest // runStreaming: lines arrive while the command runs
+@("runStreaming: lines arrive while the command runs")
+unittest
 {
     import std.conv : text;
     import std.datetime.stopwatch : StopWatch;
@@ -55,7 +57,8 @@ unittest // runStreaming: lines arrive while the command runs
     assert(stamps[iTwo] > stamps[iOne] + 300_000, text(stamps)); // usecs
 }
 
-unittest // stdin round trip
+@("stdin round trip")
+unittest
 {
     auto t = new LocalTransport;
     auto r = t.runWithInput("cat > /tmp/.tachy_ut_pipe && cat /tmp/.tachy_ut_pipe", "payload-é\n");
@@ -65,7 +68,8 @@ unittest // stdin round trip
     remove("/tmp/.tachy_ut_pipe");
 }
 
-unittest // shell quoting
+@("shell quoting")
+unittest
 {
     assert(shQuote("plain") == "'plain'");
     assert(shQuote("it's") == "'it'\\''s'");
@@ -75,7 +79,8 @@ unittest // shell quoting
     assert(r.outText == "a b'c d$e\n");
 }
 
-unittest // statPath via local transport
+@("statPath via local transport")
+unittest
 {
     import std.file : exists, mkdirRecurse, rmdirRecurse, symlink, write;
     import std.path : buildPath;

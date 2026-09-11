@@ -792,9 +792,15 @@ decrypted vars, and `--keep-bundle` retains it. With `--direct` (no
 bundle) the source is decrypted in-process with the same identity
 resolution, so a still-encrypted source there is an error naming the
 identity options. The source path resolves like `src` (relative to the
-defining tasks file) and must live inside the project; secrets inside
-includes that only exist under an `import` destination are not
-supported, since the controller cannot see them to decrypt.
+defining tasks file) and must live inside the project — or under an
+`import` destination: when the composition defers includes there, the
+controller mirrors the bundle's layout in a temporary staging directory
+(project entries plus landed imports, as symlinks) and composes the
+entry file again in that mirror — a shadow composition that sees the
+deferred subtree exactly as the on-host run will, so its `age = true`
+sources are decrypted and shipped like any other (and errors in the
+deferred subtree surface on the controller, before hosts are
+contacted).
 
 ## Editor syntax
 
