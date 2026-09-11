@@ -24,7 +24,7 @@ Core ideas:
 - **Source order.** Jobs run in the order their statements appear in the
   file — dependencies are yours to sequence: a `directory` statement above
   the files that live in it, a user's primary `group` above the `user`, a
-  health `check` between the statements it checks.
+  health `ensure` between the statements it checks.
 - **Everything is shell.** All inspection and mutation is expressed as
   POSIX shell commands with strict quoting, built and executed through one
   transport; nothing is decoded or interpreted in between (file copies are
@@ -67,7 +67,7 @@ file /srv/www/index.html {
     mode = "0644"
 }
 
-check "content rendered" {
+ensure "content rendered" {
     run = "cat /srv/www/index.html"
     output = { contains = "hello" }
 }
@@ -80,10 +80,10 @@ $ tachy apply '@web'
 == main.pravic | hosts: web1, web2
 web1 | changed         | directory /srv/www: created directory; owner root -> www-data
 web1 | changed         | file /srv/www/index.html: created file
-web1 | ok              | check content rendered: exit 0
+web1 | ok              | ensure content rendered: exit 0
 web2 | changed         | directory /srv/www: created directory; owner root -> www-data
 web2 | changed         | file /srv/www/index.html: created file
-web2 | ok              | check content rendered: exit 0
+web2 | ok              | ensure content rendered: exit 0
 -- main.pravic: ok=2 changed=4 failed=0
 ```
 
@@ -102,7 +102,7 @@ tachy <command> [options] <selection> [<tasks.pravic>...]
   | Command | Description |
   |---|---|
   | `apply` | Apply the tasks files to the selected hosts. |
-  | `check` | Check mode: report the changes that would be made, apply nothing. `check` jobs still run — they are checks by nature. |
+  | `check` | Check mode: report the changes that would be made, apply nothing. `ensure` jobs still run — they are checks by nature. |
   | `hosts` | Inspect hosts without running anything — see [hosts](#hosts). |
   | `generate` | Create something new — see [generate](#generate). |
   | `webui` | Start a local web server, a graphical version of the CLI — see [Web UI](#web-ui-tachy-webui). |
@@ -147,9 +147,9 @@ Example: `tachy apply @web req/web`, `tachy check all`,
 needs no tasks file. It honours `-i/--inventory` and `--identity`
 like every other command.
 
-- `tachy hosts list <selection>` — lists the hosts a selection
-  matches, one line per host with its connection target. This replaces
-  the former `--list-hosts` option (removed).
+- `tachy hosts list [<selection>]` — lists the hosts a selection
+  matches (default: `all`), one line per host with its connection
+  target. This replaces the former `--list-hosts` option (removed).
 - `tachy hosts info <host>` — one host's attributes: `connection`,
   `address`, `user`, `port`, `key` and `tags` (set keys plus the
   connection/port defaults), then its effective variables — global
@@ -158,7 +158,8 @@ like every other command.
   `--identity`, the settings `identity` entry or `AGE_IDENTITY` to
   see them.
 
-Example: `tachy hosts list @web`, `tachy hosts info web1`.
+Example: `tachy hosts list`, `tachy hosts list @web`,
+`tachy hosts info web1`.
 
 
 ### generate
@@ -174,8 +175,7 @@ never contacts a host and never overwrites an existing file.
   printed public key: `age -r <pubkey> -o secret.age`. Requires
   `age-keygen` (it ships with the age package) on the controller.
 - `tachy generate task <path>` — a commented sample tasks file exercising
-  the common directives (`var`, `directory`, `file`, `check`, composition
-  hints), loadable as-is.
+  the common directives (`var`, `directory`, `file`, `ensure`, composition
 - `tachy generate settings <path>` — a commented sample settings file
   (see [settings](#settings-settingspravic)).
 
@@ -250,7 +250,7 @@ host (execution metadata — per-job duration — travels in the events;
 `--events` exposes the same stream for machine consumption). The bundle
 is removed when the run finishes — check mode deploys and removes a
 bundle too but manages nothing. A project must be
-self-contained: includes and `file.src`/`template` paths resolve inside
+self-contained: applies and `file.src`/`template` paths resolve inside
 the copied project — `import` is the sanctioned way to pull external
 files into the bundle.
 
@@ -347,7 +347,7 @@ are `#`. An instruction with no attributes may omit the braces
 order they execute, and `var`/`import` statements are not jobs — they
 take effect file-wide. What a fixed order used to guarantee is now the
 author's to express: a `directory` statement above the files that live
-in it, a user's primary `group` above the `user`, a health `check`
+in it, a user's primary `group` above the `user`, a health `ensure`
 between the statements it checks.
 
 Every string — parameter values **and statement keys** — is templated with
@@ -356,14 +356,14 @@ always holds the current host's name. Unknown variables and reference
 cycles are hard errors.
 
 Managing the same target twice for the same kind anywhere in a composition
-(includes, the same file) is a load-time error.
+(applies, the same file) is a load-time error.
 
 ---
 
 ### `var` / `vars` — variables
 
 Variables for this file's jobs and everything it composes. Precedence:
-global `var` (inventory) < host vars < include chain < this file's own
+global `var` (inventory) < host vars < apply chain < this file's own
 statements. Entries may read the environment of the process loading the
 file — the controller for inventory vars, the host for tasks-file vars in
 bundled runs:
@@ -384,24 +384,24 @@ var secret_var = { env = "SECRET_VAR", from = ".env" }   # from a dotenv file
 
 ---
 
-### `include` — composition
+### `apply` — composition
 
 Composes another tasks file **at the statement's position**, binding
 variables for it:
 
 ```pravic
-include "tasks/base.pravic" {       # bindings as the entry's keys
+apply "tasks/base.pravic" {          # bindings as the entry's keys
     env = "prod"
 }
 
-include "tasks/net.pravic" {        # ...or grouped under vars (the same thing)
+apply "tasks/net.pravic" {           # ...or grouped under vars (the same thing)
     vars { iface = "eth0" }
 }
 ```
 
-Scopes chain and flow forward through the composition: an included
+Scopes chain and flow forward through the composition: an applied
 file's own vars and its bindings are visible to every statement after
-the include (statements *before* it do not see them). Composition
+the apply (statements *before* it do not see them). Composition
 cycles are detected and reported. An entry naming an existing directory
 uses its `main.pravic` — the same entry-point convention as a directory
 argument on the command line.
@@ -437,19 +437,19 @@ overwrite anything). Direct runs (`--direct`, including the on-host
 inner run, where the copies already sit inside the project) parse and
 ignore the directive.
 
-**Composing imported tasks files.** An `include` whose path falls
+**Composing imported tasks files.** An `apply` whose path falls
 under — or names — a declared import's destination does not exist on the
 controller — so it *defers*: the controller skips it at load time, and
 the on-host inner run composes it there, with its variable binding, at
-the include's position in the file (a directory entry resolves to its
+the apply's position in the file (a directory entry resolves to its
 `main.pravic`, as everywhere). If the file is readable locally
 after all, it composes normally:
 
 ```pravic
 import ../tasks/install_gogs
 
-include install_gogs/gogs.pravic {  # deferred: composed on the host
-    gogs_user = "deployer"          # bindings flow into it
+apply install_gogs/gogs.pravic {     # deferred: composed on the host
+    gogs_user = "deployer"           # bindings flow into it
 }
 ```
 
@@ -740,42 +740,42 @@ unreachable engine is reported even in check mode.
 
 ---
 
-### `check` — command checks
+### `ensure` — command checks
 
 Keyed by a unique task name. Runs a shell command **in the defining tasks
 file's directory** (relative paths resolve next to the file that declares
 the job) and asserts on its exit status and/or output. A passing job
 reports `ok` and never `changed`; a failed assertion fails the host with
-the actual status/output. `check` jobs are checks by nature: they run even
+the actual status/output. `ensure` jobs are checks by nature: they run even
 in check mode, so keep mutating commands out of them.
 
 ```pravic
-check "check if debian" {
+ensure "is debian" {
     run = "source /etc/os-release; echo $ID"
     output = "debian"              # exact match on trimmed output
 }
 
-check "port is listening" {
+ensure "port is listening" {
     run = "ss -tln | grep -q ':8080 '"
     exit_status = 0
 }
 
-check "not a crash" {
+ensure "not a crash" {
     run = "pgrep -x app"
     exit_status = { not = 1 }      # anything but 1
 }
 
-check "load is sane" {
+ensure "load is sane" {
     run = "cat /proc/loadavg | cut -d' ' -f1"
     exit_status = { cond = "< 4" } # operator and value
 }
 
-check "mentions version" {
+ensure "mentions version" {
     run = "app --version"
     output = { contains = "1.2." } # substring
 }
 
-check "version format" {
+ensure "version format" {
     run = "app --version"
     output = { matches = "^1\\.\\d+\\.\\d+$" }   # regex
 }
@@ -834,7 +834,7 @@ bundle) the source is decrypted in-process with the same identity
 resolution, so a still-encrypted source there is an error naming the
 identity options. The source path resolves like `src` (relative to the
 defining tasks file) and must live inside the project — or under an
-`import` destination: when the composition defers includes there, the
+`import` destination: when the composition defers applies there, the
 controller mirrors the bundle's layout in a temporary staging directory
 (project entries plus landed imports, as symlinks) and composes the
 entry file again in that mirror — a shadow composition that sees the

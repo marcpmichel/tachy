@@ -1,16 +1,16 @@
-A tasks file may include others; an include composes its file at the
-statement's position, carrying its own vars (outer vars < include
+A tasks file may compose others; an apply composes its file at the
+statement's position, carrying its own vars (outer vars < apply
 bindings < composed file's own vars):
   var domain = "example.org"
 
-  include "tasks/base.pravic" {       # runs AT this position
-      env = "prod"                    # the entry's keys are the
-  }                                   # bindings;
-  include "files.pravic" {
-      vars { three = "three" }        # or grouped under 'vars'
-  }                                   # (the same thing)
+  apply "tasks/base.pravic" {          # runs AT this position
+      env = "prod"                     # the entry's keys are the
+  }                                    # bindings;
+  apply "files.pravic" {
+      vars { three = "three" }         # or grouped under 'vars'
+  }                                    # (the same thing)
 
-  An include naming an existing directory uses its main.pravic, like a
+  An apply naming an existing directory uses its main.pravic, like a
   directory argument on the command line.
 
   import ../tasks/install_gogs         # bundled mode only: copy an
@@ -18,7 +18,7 @@ bindings < composed file's own vars):
                                       # the bundle as its base name
                                       # (project/install_gogs), so
                                       # src/template/run can use it on
-                                      # the host; includes inside it —
+                                      # the host; applies inside it —
                                       # or naming it — that are missing
                                       # locally are composed on the
                                       # host.  A bare name that does

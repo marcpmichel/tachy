@@ -58,7 +58,7 @@ in either form (`directories { /tmp/two }` says the same thing).
 Every plural directive has both forms; they merge (two `var` statements
 and one `vars` block naming the same variable is a duplicate-key error,
 exactly as inside a single block). Directives with no plural —
-`include`, `check`, `compose`, `import` — only ever appear in the
+`apply`, `ensure`, `compose`, `import` — only ever appear in the
 single form, with the key inline, since they are keyed too. `webui` and
 settings' `imports` are group-form blocks whose entries are plain data
 (no keyed targets), so they have no single form. Settings' `identity`
@@ -98,13 +98,12 @@ end of the line, everywhere a space may appear.
 
 **Statements run in source order.** There is no fixed directive order
 and no sorting by key: jobs execute in the order their statements
-appear, and an `include` composes its file at the statement's position
-(what the old `[includes]`-before / `[apply]`-after split used to
-express). `var`/`vars` and `import` are not jobs — they take effect
+appear, and an `apply` composes its file at the statement's position.
+`var`/`vars` and `import` are not jobs — they take effect
 file-wide regardless of position. What the old fixed order used to
 guarantee is now the author's to express: a `directory` statement
 above the files that live in it, a user's primary `group` above the
-`user`, a health `check` simply between the statements it checks.
+`user`, a health `ensure` between the statements it checks.
 Duplicate targets are still load-time errors.
 
 ## Grammar
@@ -126,8 +125,7 @@ GroupKeyword ← ( 'vars' / 'files' / 'directories' / 'packages'
                / 'imports' / 'webui' / 'identity'             ) !KeyChar
 SingleKeyword ← ( 'var' / 'file' / 'directory' / 'package'
                 / 'group' / 'user' / 'service' / 'host'
-                / 'include' / 'check' / 'compose' / 'import'
-                / 'identity'                                  ) !KeyChar
+                / 'apply' / 'ensure' / 'compose' / 'import'
 
 Block        ← '{' WS Entries? WS '}'
 Entries      ← Entry (BSep Entry)* BSep?
@@ -197,7 +195,7 @@ not two statements.
 Same keys and the same validation strictness as before. Which
 directives a file may use is decided by the loader (grammar accepts
 the union, semantic pass rejects strays, e.g. `hosts` in a tasks
-file): unknown keys, duplicate targets, cycles and escaping includes
+file): unknown keys, duplicate targets, cycles and escaping applies
 stay load-time errors with file context.
 
 Tasks files:
@@ -212,8 +210,8 @@ Tasks files:
 | users | `users { ... }` | `user name { ... }` |
 | services | `services { ... }` | `service unit { ... }` |
 | compose stacks | — | `compose /srv/stack { ... }` |
-| command checks | — | `check "task name" { run = "..." }` — asserts on exit status/output; runs even in dry-run mode |
-| composition | — | `include "path" { bindings }` — composes at its position; bindings as entry keys or grouped in a `vars` sub-block; a path under an `import` destination composes on the host |
+| command checks | — | `ensure "task name" { run = "..." }` — asserts on exit status/output; runs even in dry-run mode |
+| composition | — | `apply "path" { bindings }` — composes at its position; bindings as entry keys or grouped in a `vars` sub-block; a path under an `import` destination composes on the host |
 | bundle imports | — | `import "path"` — no parameters (the braces are optional) |
 
 Inventory files add `hosts { name { ... } }` / `host name { ... }`
@@ -232,7 +230,7 @@ vars {
     domain = "example.org",
 }
 
-include "base.pravic" {
+apply "base.pravic" {
     site_name = "main",
 }
 
@@ -266,12 +264,12 @@ directory "{{ doc_root }}" {
 Checks between jobs, environment variables, imports:
 
 ```pravic
-check "is debian" {
+ensure "is debian" {
     run = "source /etc/os-release; echo $ID"
     output = "debian"
 }
 
-check "not a crash" {
+ensure "not a crash" {
     run = "pgrep -x app"
     exit_status = { not = 1 }
 }
@@ -280,7 +278,7 @@ service nginx {
     state = "started",
 }
 
-check "answers on port 80" {          # sits between jobs: source order
+ensure "answers on port 80" {          # sits between jobs: source order
     run = "curl -fsS http://localhost/",
     exit_status = 0,
 }
@@ -340,14 +338,14 @@ webui {
    file (any mix of forms) is a parse error naming both lines — which
    makes duplicate targets and variables impossible to state within a
    file; across a composition the loader's duplicate-target detection
-   still applies.  The same file included from two different files
+   still applies.  The same file applied from two different files
    remains legal.
 2. **Implementation.** A hand-written recursive-descent parser in
    `source/tachy/value.d` (the grammar above maps 1:1; chosen over
    `pegged` for `file: line N:` errors and zero dependencies) feeding
    the existing `Val` trees plus an ordered statement list.  One hard
    cutover: `loadToml` became `loadPravic`, the fixed per-file job
-   order, its key sorting, the hooks and `[apply]` are gone (jobs run
-   in statement order), `joinInlineTables`/`quotePathKeys` and the
+   order, its key sorting and the hooks are gone (jobs run in
+   statement order), `joinInlineTables`/`quotePathKeys` and the
    `toml` dependency were deleted, and `generate` output, fixtures and
    the doc trio switched in the same change.

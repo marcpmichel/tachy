@@ -1,0 +1,29 @@
+# tachy settings — optional, read once at the start of every run.
+# Discovery, first found wins: --settings PATH, the TACHY_SETTINGS
+# variable, settings.pravic in the current directory, then
+# ~/.config/tachy/settings.pravic. Relative paths below resolve against
+# this file's directory; ~ is expanded.
+
+# The age identity decrypting { age = ... } inventory vars and
+# age = true file sources; superseded by --identity when that flag is
+# passed (default otherwise: AGE_IDENTITY, then ~/.ssh/id_ed25519).
+# identity "key.txt"
+
+imports {
+    # Directories searched for import statements that do not resolve
+    # relative to their defining tasks file, in order; the first
+    # existing match wins.
+    paths = [
+        # "libs",
+        # "~/.config/tachy/imports",
+    ]
+}
+
+webui {
+    # Projects offered by "tachy webui" in the browser: a directory is a
+    # project entered through its main.pravic, a plain file is the entry
+    # point itself.
+    projects = [
+        # "~/Code/site",
+    ]
+}

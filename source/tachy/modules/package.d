@@ -9,13 +9,13 @@ module tachy.modules;
  */
 public import tachy.modules.accounts : runGroupModule, runUserModule;
 public import tachy.modules.composemod : runComposeModule;
-public import tachy.modules.checkmod : runCheckModule;
+public import tachy.modules.ensuremod : runEnsureModule;
 public import tachy.modules.filemod : runFileModule;
 public import tachy.modules.packagemod : runPackageModule;
 public import tachy.modules.servicemod : runServiceModule;
 
 import tachy.modules.composemod : validateComposeParams;
-import tachy.modules.checkmod : parseExitStatus, parseOutput;
+import tachy.modules.ensuremod : parseExitStatus, parseOutput;
 import tachy.modules.packagemod : validatePackageKey;
 
 import tachy.errors;
@@ -40,7 +40,7 @@ struct TaskResult
     string[] details;  // commands executed + change details (shown with -v)
 }
 
-private immutable string[] allModules = ["file", "service", "check", "group", "user", "package", "compose"];
+private immutable string[] allModules = ["file", "service", "ensure", "group", "user", "package", "compose"];
 
 /// Registered module names.
 string[] moduleNames() @safe pure nothrow
@@ -70,16 +70,16 @@ void validateModuleParams(string moduleName, in Val[string] params, string conte
                         ~ " 'src' (it marks that source file as age-encrypted)");
             }
             break;
-        case "check":
+        case "ensure":
         {
             checkKeys(params, ["name", "run", "exit_status", "output"],
-                context ~ " (check)");
+                context ~ " (ensure)");
             if ("run" !in params)
-                throw new TachyError(context ~ " (check): 'run' is required");
+                throw new TachyError(context ~ " (ensure): 'run' is required");
             if (auto p = "exit_status" in params)
-                parseExitStatus(*p, context ~ " (check)");
+                parseExitStatus(*p, context ~ " (ensure)");
             if (auto p = "output" in params)
-                parseOutput(*p, context ~ " (check)");
+                parseOutput(*p, context ~ " (ensure)");
             break;
         }
         case "group":
@@ -168,7 +168,7 @@ TaskResult runModule(string moduleName, Val[string] params, TaskContext ctx)
     {
         case "file": return runFileModule(params, ctx);
         case "service": return runServiceModule(params, ctx);
-        case "check": return runCheckModule(params, ctx);
+        case "ensure": return runEnsureModule(params, ctx);
         case "group": return runGroupModule(params, ctx);
         case "user": return runUserModule(params, ctx);
         case "package": return runPackageModule(params, ctx);

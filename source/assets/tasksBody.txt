@@ -62,7 +62,7 @@
                                       # remove_volumes/remove_images for
                                       # stopped/absent teardowns
 
-  check "check if debian" {           # run a shell command and check it
+  ensure "is debian" {                # run a shell command and check it
       run = "source /etc/os-release; echo $ID"
                                       # (runs in the defining file's dir)
       exit_status = 0                 # int | { not = N } | { cond = "< 1" }

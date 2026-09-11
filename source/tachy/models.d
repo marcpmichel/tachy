@@ -14,7 +14,7 @@ module tachy.models;
  *     directory /srv/app { mode = "0755" }
  *     file /srv/app/conf { content = "x", mode = "0644" }
  *     package apt:nginx { state = "present" }
- *     check "answers on port 80" { run = "curl -fsS http://localhost/" }
+ *     ensure "answers on port 80" { run = "curl -fsS http://localhost/" }
  *
  * Kinds and their parameters:
  *     file PATH          state (default "file"; also "link"/"absent"),
@@ -27,13 +27,13 @@ module tachy.models;
  *                        state (running/stopped/absent), pull, build,
  *                        recreate, wait, wait_timeout, timeout,
  *                        remove_orphans, remove_volumes, remove_images
- *     check NAME         run (required), exit_status, output
+ *     ensure NAME        run (required), exit_status, output
  *
- * `include "path" { bindings }` composes another tasks file **at the
+ * `apply "path" { bindings }` composes another tasks file **at the
  * statement's position**, carrying its own variables; a `vars`
  * sub-table in the binding is the grouped spelling of the entry keys.
  * Scopes chain (outer vars < binding < composed file's own vars) and
- * flow forward: statements after an include see everything it
+ * flow forward: statements after an apply see everything it
  * contributed.  `vars`/`var` and `import` statements are not jobs —
  * they take effect file-wide regardless of position.  Duplicate
  * targets anywhere in a composition are load-time errors.
@@ -53,13 +53,13 @@ import tachy.vars : deepMerge, resolveEnvVars;
 
 struct Job
 {
-    string kind;           // "file", "directory", "service", "check", ... (display)
-    string moduleName;     // "file", "service", "check", ... (dispatch)
+    string kind;           // "file", "directory", "service", "ensure", ... (display)
+    string moduleName;     // "file", "service", "ensure", ... (dispatch)
     string target;         // path, unit name or task name (the statement key)
     string origin;         // "file: kind \"target\"" for error messages
     string tasksFileDir;   // dir of the defining file, for relative file.src
     Val[string] params;    // module params (path/name injected); rendered per host
-    Val[string] overlay;   // include-chain + own vars, merged over host vars at run time
+    Val[string] overlay;   // apply-chain + own vars, merged over host vars at run time
 }
 
 struct LoadedTasks
@@ -70,13 +70,13 @@ struct LoadedTasks
     string[] imports;     // import sources, resolved absolute paths,
                           // deduplicated; bundled mode copies them into
                           // the bundle (direct runs parse and ignore)
-    string[] deferred;    // include entries under an import destination
+    string[] deferred;    // apply entries under an import destination
                           // that do not exist locally: the on-host inner
                           // run composes them (the import only lands
                           // inside the bundle)
 }
 
-/// Load a tasks file, recursively resolving includes.  The entry path is
+/// Load a tasks file, recursively resolving applies.  The entry path is
 /// used as spelled (error origins read like the command line); composed
 /// files are recorded normalized in `sourceFiles`.  `settings` supplies
 /// the import search paths (settings.pravic).
@@ -84,7 +84,7 @@ LoadedTasks loadTasksFile(string path, in Settings settings = Settings.init)
 {
     LoadedTasks loaded;
     string[][string] seen; // (module \0 target) -> origins
-    string[] active;       // include chain, for cycle detection
+    string[] active;       // apply chain, for cycle detection
     string[] importLandings; // where each import lands in the project
     const string projectDir = dirName(buildNormalizedPath(absolutePath(path)));
     loadInto(path, null, projectDir, importLandings, settings, active, loaded, seen);
@@ -92,9 +92,9 @@ LoadedTasks loadTasksFile(string path, in Settings settings = Settings.init)
 }
 
 /// Returns the file's exported scope: outer vars + own vars + everything
-/// its includes contributed, in statement order.  The scope grows
-/// monotonically through the composition, so statements after an include
-/// can use variables defined by the files it includes.
+/// its applies contributed, in statement order.  The scope grows
+/// monotonically through the composition, so statements after an apply
+/// can use variables defined by the files it composes.
 private Val[string] loadInto(string path, Val[string] outerVars,
     string projectDir, ref string[] importLandings, in Settings settings,
     ref string[] active, ref LoadedTasks loaded, ref string[][string] seen)
@@ -108,7 +108,7 @@ private Val[string] loadInto(string path, Val[string] outerVars,
     // Pre-passes over statements that take effect file-wide: vars (the
     // whole file's scope, resolved before any job) and imports (their
     // landing directories drive composition deferral below, whatever the
-    // statement order).  Only job and include statements consume order.
+    // statement order).  Only job and apply statements consume order.
     Val[string] ownVars;
     foreach (const ref s; doc.stmts)
     {
@@ -118,20 +118,20 @@ private Val[string] loadInto(string path, Val[string] outerVars,
             addImport(loaded, path, projectDir, importLandings, settings, s);
         else if (s.kind != "files" && s.kind != "directories" && s.kind != "packages"
                 && s.kind != "groups" && s.kind != "users" && s.kind != "services"
-                && s.kind != "compose" && s.kind != "check" && s.kind != "include")
+                && s.kind != "compose" && s.kind != "ensure" && s.kind != "apply")
             throw new TachyError(path ~ ": line " ~ text(s.line) ~ ": '"
                 ~ s.kind ~ "' is not valid in a tasks file");
     }
 
     auto scopeVars = deepMerge(outerVars, resolveEnvVars(ownVars, path));
 
-    // Walk in source order: includes compose at their position, every
+    // Walk in source order: applies compose at their position, every
     // other statement appends one job.
     foreach (ref s; doc.stmts)
     {
-        if (s.kind == "include")
+        if (s.kind == "apply")
         {
-            processInclude(s, path, projectDir, importLandings, settings,
+            processApply(s, path, projectDir, importLandings, settings,
                 scopeVars, active, loaded, seen);
         }
         else if (s.kind != "vars" && s.kind != "import")
@@ -203,16 +203,16 @@ private bool underImportLanding(string resolved, in string[] importLandings)
     return false;
 }
 
-/// One `include` statement: bind variables for the composed file and
+/// One `apply` statement: bind variables for the composed file and
 /// recurse at the statement's position.  The subtree's resulting scope
-/// flows on, so later statements (and the includer, when the include
+/// flows on, so later statements (and the applier, when the apply
 /// comes first) see everything it contributed.
-private void processInclude(in PracticStmt s, string path,
+private void processApply(in PracticStmt s, string path,
     string projectDir, ref string[] importLandings, in Settings settings,
     ref Val[string] scopeVars, ref string[] active, ref LoadedTasks loaded,
     ref string[][string] seen)
 {
-    const string ctx = path ~ ": line " ~ text(s.line) ~ ": include \""
+    const string ctx = path ~ ": line " ~ text(s.line) ~ ": apply \""
         ~ s.key ~ "\"";
     if (s.value.kind != Val.Kind.table_)
         throw new TachyError(ctx ~ " must map to a block of variables, not a "
@@ -239,7 +239,7 @@ private void processInclude(in PracticStmt s, string path,
     if (!isAbsolute(resolved))
         resolved = buildNormalizedPath(
             absolutePath(buildPath(dirName(path), resolved)));
-    // An include inside — or naming — a declared import destination
+    // An apply inside — or naming — a declared import destination
     // exists only inside the bundle (the import has not landed here):
     // defer it to the host — the on-host inner run composes it there,
     // with its binding, at the statement's position.  When it is
@@ -250,7 +250,7 @@ private void processInclude(in PracticStmt s, string path,
             loaded.deferred ~= resolved;
         return;
     }
-    // An include naming an existing directory names its entry point,
+    // An apply naming an existing directory names its entry point,
     // exactly like a directory argument on the command line.
     if (exists(resolved) && isDir(resolved))
         resolved = buildPath(resolved, "main.pravic");
@@ -281,7 +281,7 @@ private void addJob(ref LoadedTasks loaded, ref string[][string] seen,
         case "users": moduleName = "user"; break;
         case "services": moduleName = "service"; break;
         case "compose": moduleName = "compose"; break;
-        case "check": moduleName = "check"; break;
+        case "ensure": moduleName = "ensure"; break;
         default: assert(0, "not a job statement: " ~ s.kind);
     }
 
@@ -346,7 +346,7 @@ private string kindFor(string kind) @safe pure nothrow
         case "users": return "user";
         case "services": return "service";
         case "compose": return "compose";
-        case "check": return "check";
+        case "ensure": return "ensure";
         default: assert(0, "unknown kind " ~ kind);
     }
 }

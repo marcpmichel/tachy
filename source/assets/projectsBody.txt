@@ -2,7 +2,7 @@ The parent directory of a tasks file is its project.  For every
 selected host, tachy copies the project (and the tachy binary itself)
 to a temporary directory on the host and runs the copied binary
 there, where it applies the copied tasks file over a local connection.
-A project must be self-contained: includes and file src paths are
+A project must be self-contained: applies and file src paths are
 resolved inside the copied project; the import statement is the
 sanctioned way to pull in files from outside.  Bundles are removed
 after the run (--keep-bundle leaves them in place for inspection);

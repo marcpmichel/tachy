@@ -1,5 +1,7 @@
 tachy — Pravic-driven configuration management (Ansible-like)
 
   tachy <command> [options] <selection> [<tasks.pravic>...]
+  tachy host list|info
   tachy webui [options]
   tachy webdoc [options]
+  tachy man

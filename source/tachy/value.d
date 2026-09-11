@@ -19,7 +19,7 @@ module tachy.value;
  * Group-form blocks expand to one statement per entry, in source order;
  * a single-form statement names its key inline.  The canonical `kind` is
  * the plural directive ("vars", "files", ...) or the directive itself
- * ("include", "check", "compose", "import").  Values are strings,
+ * ("apply", "ensure", "compose", "import").  Values are strings,
  * integers, floats, booleans, arrays and tables; block entries may be
  * separated by commas and/or newlines (trailing commas allowed).
  */
@@ -107,7 +107,7 @@ struct Val
 /// to one statement per entry (the entry's line is kept).
 struct PracticStmt
 {
-    string kind;   // canonical directive: "vars", "files", ..., "include", "check", "compose", "import", "hosts", "imports", "webui"
+    string kind;   // canonical directive: "vars", "files", ..., "apply", "ensure", "compose", "import", "hosts", "imports", "webui"
     string key;    // the entry's key (target, variable, path, ...)
     Val value;     // the entry's value: parameter table (block) or scalar (`= value`)
     size_t line;   // 1-based source line of the entry, for error context
@@ -246,7 +246,7 @@ private struct Parser
          "users", "services", "hosts", "imports", "webui", "identity"];
     private static immutable string[] singleKeywords =
         ["var", "file", "directory", "package", "group", "user",
-         "service", "host", "include", "check", "compose", "import",
+         "service", "host", "apply", "ensure", "compose", "import",
          "identity"];
 
     /// Canonical directive names for the single-form keywords (group-form
@@ -263,7 +263,7 @@ private struct Parser
             case "user": return "users";
             case "service": return "services";
             case "host": return "hosts";
-            default: return kw; // include, check, compose, import
+            default: return kw; // apply, ensure, compose, import
         }
     }
 

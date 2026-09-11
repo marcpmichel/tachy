@@ -6,7 +6,7 @@ module tachy.vars;
  *
  * Precedence (lowest to highest), mirroring the intuitive Ansible order:
  *   global vars  <  host vars
- *   <  requirement vars  <  include vars
+ *   <  apply-chain vars  <  file vars
  *
  * Rendering is lazy: variables may reference other variables; cycles are
  * detected and reported with the full reference chain.

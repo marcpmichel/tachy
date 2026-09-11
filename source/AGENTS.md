@@ -23,8 +23,9 @@ This doc owns the source tree's structure and conventions;
     member `Cmd.showVersion`); delegates to `runner.d`, `generate.d`,
     `web.d` and `webdoc.d`
   - `runner.d` — per-host orchestration and the read-only `hosts`
-    command (`runHosts`: `hosts list <selection>` prints the former
-    --list-hosts output, `hosts info <host>` one host's attributes
+    command (`runHosts`: `hosts list [<selection>]` prints the former
+    --list-hosts output — `all` when the selection is omitted,
+    `hosts info <host>` one host's attributes
     plus effective vars, values via project.d's `pravicValue`);
     direct mode and bundled mode
     (default: the tasks file's parent directory is the project, copied
@@ -32,15 +33,15 @@ This doc owns the source tree's structure and conventions;
     --events`); the job loop produces `JobEvent`s consumed by one
     renderer; bundled mode also decrypts `age = true` file sources on
     the controller (`collectDecryptedFiles`) and ships the plaintext
-    through the bundle — for includes deferred to an import landing it
+    through the bundle — for applies deferred to an import landing it
     first shadow-composes the entry file in a staging mirror of the
     bundle layout (`makeStaging`, symlinks; removed after the tasks
     file)
   - `models.d` — tasks-file composition: Pravic statements in source
-    order (`include` composes its file at the statement's position;
+    order (`apply` composes its file at the statement's position;
     vars/import statements are file-wide, not jobs), duplicate-target
     and cycle detection, `import` collection with settings search
-    paths (bundled-mode external files; includes under an import
+    paths (bundled-mode external files; applies under an import
     landing missing locally defer to the host)
   - `events.d` — execution events (producer/consumer split): `JobEvent` + builders, `foldCounters`, `TextRenderer` (the one renderer for both modes), NDJSON `eventLine`/`parseEventLine` for the stream between inner runs and the controller
   - `vars.d` — variable scopes, `{ env, default, from }` resolution
@@ -60,7 +61,9 @@ This doc owns the source tree's structure and conventions;
     written over their ciphertext copies, generated one-host
     inventory), Val → Pravic serialization
   - `generate.d` — the `generate` command: age key pairs (`age-keygen`),
-    sample tasks/settings files (controller-side scaffolding)
+    sample tasks/settings files (controller-side scaffolding; the sample
+    texts are assets — `sampleTask.txt`/`sampleSettings.txt` — embedded
+    with `import()` like app.d's help/man blocks)
   - `settings.d` — the optional settings.pravic (discovery: `--settings`,
     `TACHY_SETTINGS`, ./settings.pravic, XDG; the `identity` age entry
     — both spellings, `effectiveIdentity` makes the `--identity` flag

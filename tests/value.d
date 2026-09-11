@@ -98,7 +98,7 @@ files {
     "/tmp/y" = { owner = "app" }
 }
 file /tmp/z { mode = "0600" }
-check "is debian" {
+ensure "is debian" {
     run = "true"
     exit_status = 0
 }
@@ -113,7 +113,7 @@ import "../shared/tool" { }
         && stmts[3].value.table_["mode"].str_ == "0644");
     assert(stmts[4].key == "/tmp/y" && stmts[4].value.table_["owner"].str_ == "app");
     assert(stmts[5].kind == "files" && stmts[5].key == "/tmp/z");
-    assert(stmts[6].kind == "check" && stmts[6].key == "is debian"
+    assert(stmts[6].kind == "ensure" && stmts[6].key == "is debian"
         && stmts[6].value.table_["run"].str_ == "true");
     assert(stmts[7].kind == "import" && stmts[7].key == "../shared/tool");
     // statement order is source order
@@ -212,9 +212,9 @@ unittest
     fails("var x 1", "expected '{', '=' or end of line");
     fails("vars", "expected '{'");
     fails("vars = { a = 1 }", "opens a block");
-    fails("check { run = \"x\" }", "expected a key");
+    fails("ensure { run = \"x\" }", "expected a key");
     fails("includes { a = 1 }", "unknown directive");
-    fails("apply \"x.pravic\" { }", "unknown directive");
+    fails("hook \"x.pravic\" { }", "unknown directive");
     fails("before packages { }", "unknown directive");
     fails("var a = 1, b = 2", "expected end of line");
     fails("vars { a = 1 b = 2 }", "expected ',' or a newline");
@@ -250,8 +250,8 @@ unittest
     assert(parseStmts("group app { }").length == 1);
     assert(parseStmts("vars { }").length == 0);
     // keywords are plain data in key position
-    auto t = varsTable("var check = 1\nvar vars = 2");
-    assert(t["check"].integer_ == 1 && t["vars"].integer_ == 2);
+    auto t = varsTable("var ensure = 1\nvar vars = 2");
+    assert(t["ensure"].integer_ == 1 && t["vars"].integer_ == 2);
 }
 
 @("validated accessors: checkKeys and optString")

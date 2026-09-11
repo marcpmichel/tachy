@@ -1,8 +1,8 @@
-/// Tests for tachy.modules.checkmod, moved from the module's in-file
+/// Tests for tachy.modules.ensuremod, moved from the module's in-file
 /// unittest blocks (tests/ is compiled only under `dub test`).
-module tachy.tests.checkmod;
+module tachy.tests.ensuremod;
 
-import tachy.modules.checkmod;
+import tachy.modules.ensuremod;
 
 import std.exception : assertThrown;
 import tachy.transport : LocalTransport;
@@ -26,14 +26,14 @@ unittest
     p["run"] = Val("printf 'debian\\n'");
     p["exit_status"] = Val(0L);
     p["output"] = Val("debian");
-    auto r = runCheckModule(p, ctx);
+    auto r = runEnsureModule(p, ctx);
     assert(!r.changed && r.msg == "exit 0");
 
     // default expectation is exit 0
     Val[string] p2;
     p2["name"] = Val("true");
     p2["run"] = Val("true");
-    assert(!runCheckModule(p2, ctx).changed);
+    assert(!runEnsureModule(p2, ctx).changed);
 
     // contains
     Val[string] p3;
@@ -43,7 +43,7 @@ unittest
     c.kind = Val.Kind.table_;
     c.table_["contains"] = Val("deb");
     p3["output"] = c;
-    assert(!runCheckModule(p3, ctx).changed);
+    assert(!runEnsureModule(p3, ctx).changed);
 
     // matches
     Val[string] p4;
@@ -53,7 +53,7 @@ unittest
     m.kind = Val.Kind.table_;
     m.table_["matches"] = Val("^debian-\\d+$");
     p4["output"] = m;
-    assert(!runCheckModule(p4, ctx).changed);
+    assert(!runEnsureModule(p4, ctx).changed);
 
     // { not = 1 } accepts other codes
     Val[string] p5;
@@ -63,7 +63,7 @@ unittest
     n.kind = Val.Kind.table_;
     n.table_["not"] = Val(1L);
     p5["exit_status"] = n;
-    auto r5 = runCheckModule(p5, ctx);
+    auto r5 = runEnsureModule(p5, ctx);
     assert(!r5.changed && r5.msg == "exit 3");
 
     // { cond = "<= 2" } range
@@ -74,7 +74,7 @@ unittest
     cd.kind = Val.Kind.table_;
     cd.table_["cond"] = Val("<= 2");
     p6["exit_status"] = cd;
-    assert(!runCheckModule(p6, ctx).changed);
+    assert(!runEnsureModule(p6, ctx).changed);
 }
 
 @("run executes in the defining tasks file's directory")
@@ -91,7 +91,7 @@ unittest
     p["name"] = Val("rel");
     p["run"] = Val("cat marker.txt");
     p["output"] = Val("next-to-the-tasks-file");
-    auto r = runCheckModule(p, ctx);
+    auto r = runEnsureModule(p, ctx);
     assert(!r.changed && r.msg == "exit 0", r.msg);
 }
 
@@ -104,7 +104,7 @@ unittest
     {
         try
         {
-            runCheckModule(p, ctx);
+            runEnsureModule(p, ctx);
             return null;
         }
         catch (TachyError e)

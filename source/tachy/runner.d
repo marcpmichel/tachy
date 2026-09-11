@@ -100,33 +100,36 @@ int runTachy(RunOptions optsIn)
 // The hosts command: inventory inspection, read-only.
 // ---------------------------------------------------------------------------
 
-/// `tachy hosts <sub-command> ...`: `hosts list <selection>` prints the
-/// hosts a selection matches, `hosts info <host>` one host's attributes
-/// with its effective variables.  No host is contacted and no tasks
+/// `tachy hosts <sub-command> ...`: `hosts list [<selection>]` prints
+/// the hosts a selection matches (`all` when the selection is omitted),
+/// `hosts info <host>` one host's attributes with its effective
+/// variables.  No host is contacted and no tasks
 /// file is needed.
 int runHosts(in string[] args, const RunOptions opts)
 {
     if (!args.length)
-        throw new TachyError("hosts: expected 'list <selection>' or"
-            ~ " 'info <host>' — examples: tachy hosts list all,"
-            ~ " tachy hosts info web1");
+        throw new TachyError("hosts: expected 'list [<selection>]' or"
+            ~ " 'info <host>' — examples: tachy hosts list,"
+            ~ " tachy hosts list @web, tachy hosts info web1");
     if (!args[0].among!("list", "info"))
         throw new TachyError("hosts: unknown sub-command '" ~ args[0]
             ~ "' (expected 'list' or 'info')");
-    if (args.length != 2)
-        throw new TachyError("hosts " ~ args[0] ~ ": expected exactly one"
-            ~ (args[0] == "list" ? " selection (host names, @tags or \"all\")"
-                : " host name"));
+    if (args[0] == "list" && args.length > 2)
+        throw new TachyError("hosts list: expected at most one selection"
+            ~ " (host names, @tags or \"all\"), not " ~ text(args.length - 1));
+    if (args[0] == "info" && args.length != 2)
+        throw new TachyError("hosts info: expected exactly one host name");
 
+    const string selection = args.length == 2 ? args[1] : "all";
     const Settings settings = loadSettings(opts.settings);
     auto inventory = Inventory.load(opts.inventoryPath,
         effectiveIdentity(opts.identity, settings));
     if (args[0] == "list")
     {
-        auto hosts = inventory.select(args[1]);
+        auto hosts = inventory.select(selection);
         if (!hosts.length)
-            throw new TachyError(text("selection '", args[1], "' matched no hosts"));
-        writeln(hostsListText(args[1], hosts));
+            throw new TachyError(text("selection '", selection, "' matched no hosts"));
+        writeln(hostsListText(selection, hosts));
     }
     else
     {
@@ -342,7 +345,7 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
             foreach (src; loaded.imports)
                 imports ~= ImportSpec(src, baseName(src));
 
-            // Secret sources may also live inside includes that defer
+            // Secret sources may also live inside applies that defer
             // to an import destination — they exist only inside the
             // bundle, so the composition above never saw them.  Mirror
             // the bundle's project layout in a staging directory (every
@@ -604,13 +607,13 @@ package(tachy) DecryptedFile[] collectDecryptedFiles(in LoadedTasks loaded,
 }
 
 /// A temporary mirror of the bundle's project layout, for the shadow
-/// composition of deferred includes: one symlink per top-level project
+/// composition of deferred applies: one symlink per top-level project
 /// entry, plus one per import under its base name (skipping names
 /// already mirrored — a landing that exists for real deferred
 /// nothing).  Composing the entry file inside the mirror sees exactly
 /// what the on-host inner run will see — the same directory shape, so
 /// relative paths, `..` escapes back into the project and nested
-/// includes under the landing all resolve identically.
+/// applies under the landing all resolve identically.
 package(tachy) string makeStaging(string projectDir, in ImportSpec[] imports)
     @trusted
 {
@@ -637,7 +640,7 @@ package(tachy) string makeStaging(string projectDir, in ImportSpec[] imports)
     }
     if (!staging.length)
         throw new TachyError("cannot create a staging directory for the"
-            ~ " deferred-include mirror in the system temp dir");
+            ~ " deferred-apply mirror in the system temp dir");
 
     try
     {
@@ -659,7 +662,7 @@ package(tachy) string makeStaging(string projectDir, in ImportSpec[] imports)
     {
         removeStaging(staging);
         throw new TachyError("cannot mirror project '" ~ projectDir
-            ~ "' for deferred-include secret collection: " ~ e.msg);
+            ~ "' for deferred-apply secret collection: " ~ e.msg);
     }
     return staging;
 }
@@ -670,7 +673,7 @@ package(tachy) void removeStaging(string staging) @trusted
 {
     import std.file : rmdirRecurse;
     if (!staging.length)
-        return; // nothing was mirrored (no deferred includes)
+        return; // nothing was mirrored (no deferred applies)
     try rmdirRecurse(staging);
     catch (Exception)
     {
@@ -685,7 +688,7 @@ private void checkProjectContained(in LoadedTasks loaded, string projectDir)
     const string prefix = projectDir ~ "/";
     foreach (f; loaded.sourceFiles)
         if (!startsWith(f, prefix))
-            throw new TachyError("composition includes '" ~ f
+            throw new TachyError("the composition applies '" ~ f
                 ~ "', which is outside the project directory '" ~ projectDir
                 ~ "'; a project (the tasks file's parent directory) must be"
                 ~ " self-contained");

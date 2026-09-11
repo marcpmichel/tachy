@@ -61,43 +61,43 @@ assert(loaded.jobs[2].params["name"].str_ == "nginx");
 assert(loaded.jobs[2].params["enabled"].boolean_);
 }
 
-@("check: name injection, source order, validation")
+@("ensure: name injection, source order, validation")
 unittest
 {
 import std.exception : assertThrown;
-auto p = writeTemp("check.pravic", `
-check "probe thing" {
+auto p = writeTemp("ensure.pravic", `
+ensure "probe thing" {
     run = "true"
     exit_status = { not = 1 }
 }
 
 file /tmp/x { mode = "0400" }
 
-check "check os" { run = "echo debian", exit_status = 0, output = "debian" }
+ensure "check os" { run = "echo debian", exit_status = 0, output = "debian" }
 `);
 auto loaded = loadTasksFile(p);
 assert(loaded.jobs.length == 3);
 // statement order: probe thing first, file between, check os last
 assert(loaded.jobs[0].target == "probe thing");
 assert(loaded.jobs[1].kind == "file");
-assert(loaded.jobs[2].kind == "check" && loaded.jobs[2].target == "check os");
-assert(loaded.jobs[2].moduleName == "check");
+assert(loaded.jobs[2].kind == "ensure" && loaded.jobs[2].target == "check os");
+assert(loaded.jobs[2].moduleName == "ensure");
 assert(loaded.jobs[2].params["name"].str_ == "check os");    // injected
 assert("exit_status" in loaded.jobs[0].params);
 
-// duplicate check names are a load-time error (single + group form)
-assertThrown!(TachyError)(loadTasksFile(writeTemp("check_dup.pravic",
-    "check \"same\" { run = \"false\" }\nvar x = 1\n"
-    ~ "check \"same\" { run = \"true\" }\n")));
+// duplicate ensure names are a load-time error (single + group form)
+assertThrown!(TachyError)(loadTasksFile(writeTemp("ensure_dup.pravic",
+    "ensure \"same\" { run = \"false\" }\nvar x = 1\n"
+    ~ "ensure \"same\" { run = \"true\" }\n")));
 // missing run
-assertThrown!(TachyError)(loadTasksFile(writeTemp("check_norun.pravic",
-    "check \"x\" { output = \"y\" }\n")));
+assertThrown!(TachyError)(loadTasksFile(writeTemp("ensure_norun.pravic",
+    "ensure \"x\" { output = \"y\" }\n")));
 // unknown attribute
-assertThrown!(TachyError)(loadTasksFile(writeTemp("check_unk.pravic",
-    "check \"x\" { run = \"true\", bogus = 1 }\n")));
+assertThrown!(TachyError)(loadTasksFile(writeTemp("ensure_unk.pravic",
+    "ensure \"x\" { run = \"true\", bogus = 1 }\n")));
 // bad exit_status shape
-assertThrown!(TachyError)(loadTasksFile(writeTemp("check_bad.pravic",
-    "check \"x\" { run = \"true\", exit_status = \"0\" }\n")));
+assertThrown!(TachyError)(loadTasksFile(writeTemp("ensure_bad.pravic",
+    "ensure \"x\" { run = \"true\", exit_status = \"0\" }\n")));
 }
 
 @("source order: no fixed order, no sorting")
@@ -106,7 +106,7 @@ unittest
 auto p = writeTemp("order.pravic", `
 file /srv/tree/leaf.conf { content = "x" }
 
-check "leaf exists" { run = "test -f /srv/tree/leaf.conf" }
+ensure "leaf exists" { run = "test -f /srv/tree/leaf.conf" }
 
 directory /srv/tree { mode = "0755" }
 
@@ -123,7 +123,7 @@ foreach (j; loaded.jobs)
     order ~= j.kind ~ " " ~ j.target;
 assert(order == [
     "file /srv/tree/leaf.conf",
-    "check leaf exists",
+    "ensure leaf exists",
     "directory /srv/tree",
     "service ssh",
     "directory /srv/other",
@@ -166,7 +166,7 @@ assertThrown!(TachyError)(loadTasksFile(writeTemp("acc_state.pravic",
     "group x { state = \"maybe\" }\n")));
 }
 
-@("include: vars = { ... } sub-table binding")
+@("apply: vars = { ... } sub-table binding")
 unittest
 {
 import std.exception : assertThrown;
@@ -174,7 +174,7 @@ writeTemp("ap_files.pravic", `
 file /tmp/ap-file { content = "{{ three }} {{ direct }} {{ nested.tbl.x }}" }
 `);
 auto p = writeTemp("ap_main.pravic", `
-include "ap_files.pravic" {
+apply "ap_files.pravic" {
     vars { three = "three", nested { tbl { x = "deep" } } }
     direct = "bound"
 }
@@ -189,18 +189,18 @@ assert("vars" !in ov);                                // the sub-table is unwrap
 
 // variable bound both directly and under vars: ambiguous -> error
 assertThrown!(TachyError)(loadTasksFile(writeTemp("ap_dup.pravic", `
-include "ap_files.pravic" {
+apply "ap_files.pravic" {
     vars { three = "a" }
     three = "b"
 }
 `)));
 // non-table vars
 assertThrown!(TachyError)(loadTasksFile(writeTemp("ap_bad.pravic", `
-include "ap_files.pravic" { vars = "nope" }
+apply "ap_files.pravic" { vars = "nope" }
 `)));
 }
 
-@("includes: position, var layering, path resolution")
+@("applies: position, var layering, path resolution")
 unittest
 {
 writeTemp("one.pravic", `
@@ -214,14 +214,14 @@ auto p = writeTemp("compose.pravic", `
 var top = "yes"
 var override_me = "top"
 
-include "one.pravic" { override_me = "one" }
+apply "one.pravic" { override_me = "one" }
 
-include "two.pravic" { extra = "e" }
+apply "two.pravic" { extra = "e" }
 
 file /tmp/top { mode = "0400" }
 `);
 auto loaded = loadTasksFile(p);
-// includes compose at their position, then the includer's own jobs
+// applies compose at their position, then the applier's own jobs
 assert(loaded.jobs.length == 3);
 // every composed file is recorded, entry first, resolved absolute
 assert(loaded.sourceFiles.length == 3);
@@ -233,21 +233,21 @@ assert(loaded.jobs[0].target == "/tmp/one");
 assert(loaded.jobs[1].target == "/tmp/two");
 assert(loaded.jobs[2].target == "/tmp/top");
 
-// overlay: outer vars < include vars < included file's own vars
+// overlay: outer vars < apply vars < applied file's own vars
 assert(loaded.jobs[0].overlay["top"].str_ == "yes");          // outer visible
-assert(loaded.jobs[0].overlay["override_me"].str_ == "one");  // include var wins
+assert(loaded.jobs[0].overlay["override_me"].str_ == "one");  // apply var wins
 assert(loaded.jobs[0].overlay["from_one"].str_ == "1");       // own vars of one.pravic
 assert(loaded.jobs[1].overlay["extra"].str_ == "e");
 
-// flow-through: statements after the includes see everything the
-// includes contributed (child vars and bindings).
+// flow-through: statements after the applies see everything the
+// applies contributed (child vars and bindings).
 assert(loaded.jobs[2].overlay["top"].str_ == "yes");
 assert(loaded.jobs[2].overlay["from_one"].str_ == "1");       // flowed from one.pravic
-assert(loaded.jobs[2].overlay["extra"].str_ == "e");          // flowed from include vars
-assert(loaded.jobs[2].overlay["override_me"].str_ == "one");  // last include wins
+assert(loaded.jobs[2].overlay["extra"].str_ == "e");          // flowed from apply vars
+assert(loaded.jobs[2].overlay["override_me"].str_ == "one");  // last apply wins
 }
 
-@("a statement before an include does not see its contribution")
+@("a statement before an apply does not see its contribution")
 unittest
 {
 writeTemp("post.pravic", `
@@ -259,7 +259,7 @@ var top = "yes"
 
 file /tmp/own { mode = "0400" }
 
-include "post.pravic" { post_var = "pt" }
+apply "post.pravic" { post_var = "pt" }
 
 file /tmp/after { mode = "0400" }
 `);
@@ -269,21 +269,21 @@ assert(loaded.jobs[0].target == "/tmp/own");
 assert(loaded.jobs[1].target == "/tmp/post");
 assert(loaded.jobs[2].target == "/tmp/after");
 
-// the statement before the include sees only outer + own vars
+// the statement before the apply sees only outer + own vars
 assert(loaded.jobs[0].overlay["top"].str_ == "yes");
 assert("from_post" !in loaded.jobs[0].overlay);
-// the include keeps binding semantics for its subtree
+// the apply keeps binding semantics for its subtree
 assert(loaded.jobs[1].overlay["post_var"].str_ == "pt");
 assert(loaded.jobs[1].overlay["from_post"].str_ == "p");
 // statements after it see the flowed-forward scope
 assert(loaded.jobs[2].overlay["from_post"].str_ == "p");
 
-// include participates in duplicate-target and cycle detection
+// apply participates in duplicate-target and cycle detection
 writeTemp("dup_apply_inc.pravic", "file /tmp/x { mode = \"0600\" }\n");
 assertThrown!(TachyError)(loadTasksFile(writeTemp("dup_inc.pravic",
-    "file /tmp/x { mode = \"0644\" }\ninclude \"dup_apply_inc.pravic\" { }\n")));
-writeTemp("cyc_a.pravic", "include \"cyc_b.pravic\" { }\n");
-writeTemp("cyc_b.pravic", "include \"cyc_a.pravic\" { }\n");
+    "file /tmp/x { mode = \"0644\" }\napply \"dup_apply_inc.pravic\" { }\n")));
+writeTemp("cyc_a.pravic", "apply \"cyc_b.pravic\" { }\n");
+writeTemp("cyc_b.pravic", "apply \"cyc_a.pravic\" { }\n");
 assertThrown!(TachyError)(loadTasksFile(buildPath(
     dirName(writeTemp("cyc_seed.pravic", "")), "cyc_a.pravic")));
 }
@@ -295,13 +295,13 @@ import std.exception : assertThrown;
 // duplicate target across files
 writeTemp("dup_inc.pravic", "file /tmp/x { mode = \"0600\" }\n");
 assertThrown!(TachyError)(loadTasksFile(writeTemp("dup.pravic",
-    "include \"dup_inc.pravic\" { }\nfile /tmp/x { mode = \"0644\" }\n")));
+    "apply \"dup_inc.pravic\" { }\nfile /tmp/x { mode = \"0644\" }\n")));
 // duplicate between files and directories
 assertThrown!(TachyError)(loadTasksFile(writeTemp("dup2.pravic",
     "file /tmp/x { mode = \"0600\" }\ndirectory /tmp/x { mode = \"0700\" }\n")));
-// include cycle
-writeTemp("cy_a.pravic", "include \"cy_b.pravic\" { }\n");
-writeTemp("cy_b.pravic", "include \"cy_a.pravic\" { }\n");
+// apply cycle
+writeTemp("cy_a.pravic", "apply \"cy_b.pravic\" { }\n");
+writeTemp("cy_b.pravic", "apply \"cy_a.pravic\" { }\n");
 assertThrown!(TachyError)(loadTasksFile(buildPath(
     dirName(writeTemp("cy_seed.pravic", "")), "cy_a.pravic")));
 // explicit path/name key forbidden (implied by the statement key)
@@ -476,10 +476,10 @@ foreach (src; loaded.imports)
     assert(baseName(src).length);
 }
 
-// the same source imported by an included file deduplicates
+// the same source imported by an applied file deduplicates
 writeTemp("imp_inner.pravic", "import \"../imp_data\" { }\n");
 loaded = loadTasksFile(writeTemp("imp_across.pravic",
-    "import \"../imp_data\" { }\ninclude \"imp_inner.pravic\" { }\n"));
+    "import \"../imp_data\" { }\napply \"imp_inner.pravic\" { }\n"));
 assert(loaded.imports.length == 1);
 
 // an import with no parameters may omit the braces
@@ -542,11 +542,10 @@ import ../gogs_lib { }
 
 file /tmp/defer-entry { content = "entry" }
 
-include gogs_lib/setup.pravic { flavor = "chocolate" }
+apply gogs_lib/setup.pravic { flavor = "chocolate" }
 `);
 
-// controller-side: gogs_lib/setup.pravic does not exist in the
-// project, so the include defers instead of failing to load
+// project, so the apply defers instead of failing to load
 auto loaded = loadTasksFile(buildPath(base, "proj", "main.pravic"));
 assert(loaded.jobs.length == 1);            // only the entry's own job
 assert(loaded.jobs[0].target == "/tmp/defer-entry");
@@ -564,14 +563,14 @@ file /tmp/defer-owned { content = "x" }
 `);
 loaded = loadTasksFile(buildPath(base, "proj", "main.pravic"));
 assert(loaded.deferred.length == 0);
-assert(loaded.jobs.length == 2);            // own job + included job
+assert(loaded.jobs.length == 2);            // own job + applied job
 assert(loaded.jobs[1].target == "/tmp/defer-owned");
 assert(loaded.jobs[1].overlay["flavor"].str_ == "chocolate");
 rmdirRecurse(buildPath(base, "proj", "gogs_lib"));
 
 // missing and NOT under an import landing is still a load error
 assertThrown!TachyError(loadTasksFile(writeTemp("defer_missing.pravic",
-    "include nowhere_lib/x.pravic { }\n")));
+    "apply nowhere_lib/x.pravic { }\n")));
 }
 
 @("import search paths: settings.pravic resolution order")
@@ -621,7 +620,7 @@ foreach (src; loaded.imports)
     assert(canFind(src, buildPath(base, "proj")), src);
 }
 
-@("include naming the import landing itself (a dir)")
+@("apply naming the import landing itself (a dir)")
 unittest
 {
 import std.algorithm.searching : canFind;
@@ -629,7 +628,7 @@ import std.file : mkdirRecurse, rmdirRecurse, tempDir, write;
 import std.path : buildPath;
 
 // base/proj/main.pravic imports ../nvim (a directory of tasks);
-// include "nvim" names the landing itself
+// apply "nvim" names the landing itself
 auto base = buildPath(tempDir, "tachy_import_dir_ut");
 if (exists(base)) rmdirRecurse(base);
 mkdirRecurse(buildPath(base, "proj"));
@@ -643,7 +642,7 @@ import ../nvim { }
 
 file /tmp/direct-entry { content = "entry" }
 
-include nvim { }
+apply nvim { }
 `);
 
 // controller: the landing itself defers (not only paths under it)
@@ -665,7 +664,7 @@ assert(loaded.jobs.length == 2);
 assert(loaded.jobs[1].target == "/tmp/direct-owned");
 
 // a plain (non-import) directory entry also uses its main.pravic
-write(buildPath(base, "proj", "main.pravic"), "include nvim { }\n");
+write(buildPath(base, "proj", "main.pravic"), "apply nvim { }\n");
 loaded = loadTasksFile(buildPath(base, "proj", "main.pravic"));
 assert(loaded.jobs.length == 1);
 assert(loaded.jobs[0].target == "/tmp/direct-owned");
@@ -675,7 +674,7 @@ assert(loaded.jobs[0].target == "/tmp/direct-owned");
 unittest
 {
 import std.exception : assertThrown;
-auto p = writeTemp("compose.pravic", `
+auto p = writeTemp("stack.pravic", `
 service app { state = "started" }
 
 compose /srv/app {
@@ -685,7 +684,7 @@ compose /srv/app {
     pull = "always"
 }
 
-check "probe" { run = "true" }
+ensure "probe" { run = "true" }
 `);
 auto loaded = loadTasksFile(p);
 assert(loaded.jobs.length == 3);
@@ -698,7 +697,7 @@ assert(loaded.jobs[1].params["project"].str_ == "myapp");
 assert(loaded.jobs[1].params["services"].array_.length == 2);
 assert(loaded.jobs[1].params["pull"].str_ == "always");
 assert("state" !in loaded.jobs[1].params);                   // module defaults it
-assert(loaded.jobs[2].kind == "check");
+assert(loaded.jobs[2].kind == "ensure");
 
 // duplicates are load-time errors
 assertThrown!(TachyError)(loadTasksFile(writeTemp("compose_dup.pravic",

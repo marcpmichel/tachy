@@ -1,14 +1,14 @@
-module tachy.modules.checkmod;
+module tachy.modules.ensuremod;
 
 /**
- * `check` module — run a shell command on the host and check its exit
+ * `ensure` module — run a shell command on the host and check its exit
  * status and/or its output:
  *
- *     check.run         = "source /etc/os-release; echo $ID"  (required)
- *     check.exit_status = 0                     # expected status (default 0)
+ *     ensure.run         = "source /etc/os-release; echo $ID"  (required)
+ *     ensure.exit_status = 0                     # expected status (default 0)
  *                           # or { not = 1 }       # anything but 1
  *                           # or { cond = "< 1" }  # an operator and a value
- *     check.output      = "debian"              # exact (trimmed) output
+ *     ensure.output      = "debian"              # exact (trimmed) output
  *                           # or { contains = "deb" }      # substring
  *                           # or { matches = "^debian.*$" } # regular expression
  *
@@ -17,7 +17,7 @@ module tachy.modules.checkmod;
  * file's directory (like `file.src`: relative paths resolve next to the
  * file that declares the job); the job passes ("ok", never "changed")
  * when every assertion holds and fails with a descriptive error
- * otherwise.  Check jobs are checks by
+ * otherwise.  Ensure jobs are checks by
  * nature and run even in check mode — keep mutating commands out of
  * them.  Output is compared after trimming surrounding whitespace.
  */
@@ -204,20 +204,20 @@ OutputExpectation parseOutput(in Val v, string context)
 // The module itself.
 // ---------------------------------------------------------------------------
 
-TaskResult runCheckModule(Val[string] params, TaskContext ctx)
+TaskResult runEnsureModule(Val[string] params, TaskContext ctx)
 {
-    const string name = requireStr(params, "name", "check");
-    const string runCmd = requireStr(params, "run", "check");
+    const string name = requireStr(params, "name", "ensure");
+    const string runCmd = requireStr(params, "run", "ensure");
 
     ExitExpectation exitExp = ExitExpectation.equal(0);
     if (auto p = "exit_status" in params)
-        exitExp = parseExitStatus(*p,  "check '" ~ name ~ "'");
+        exitExp = parseExitStatus(*p,  "ensure '" ~ name ~ "'");
 
     bool checkOutput;
     OutputExpectation outputExp;
     if (auto p = "output" in params)
     {
-        outputExp = parseOutput(*p,  "check '" ~ name ~ "'");
+        outputExp = parseOutput(*p,  "ensure '" ~ name ~ "'");
         checkOutput = true;
     }
 
@@ -231,18 +231,18 @@ TaskResult runCheckModule(Val[string] params, TaskContext ctx)
     string[] details;
     details ~= "cmd: " ~ cmd;
 
-    // Checks by nature: check jobs run even in check mode.
+    // Checks by nature: ensure jobs run even in check mode.
     auto r = ctx.transport.run(cmd);
     const string got = r.outText.strip;
     if (got.length)
         details ~= "output: " ~ excerpt(got);
 
     if (!exitExp.matches(r.status))
-        throw new TachyError( "check '" ~ name ~ "': exit status " ~ text(r.status)
+        throw new TachyError( "ensure '" ~ name ~ "': exit status " ~ text(r.status)
             ~ ", expected " ~ exitExp.describe()
             ~ (got.length ? "; output: '" ~ excerpt(got) ~ "'" : ""));
     if (checkOutput && !outputExp.matches(got))
-        throw new TachyError( "check '" ~ name ~ "': output '" ~ excerpt(got)
+        throw new TachyError( "ensure '" ~ name ~ "': output '" ~ excerpt(got)
             ~ "' does not satisfy " ~ outputExp.describe());
 
     TaskResult res;

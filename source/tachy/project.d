@@ -16,7 +16,7 @@ module tachy.project;
  *
  * The copied binary is executed on the host (over ssh, or locally for
  * `connection = "local"` hosts) with `--direct`: it applies the copied
- * tasks file through a local connection, so includes and `file.src`
+ * tasks file through a local connection, so applies and `file.src`
  * paths resolve inside the copied project — a project must be
  * self-contained.  Host variables travel in the generated inventory, so
  * the inner run sees the same scope (global < host) the controller

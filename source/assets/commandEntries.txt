@@ -1,8 +1,8 @@
     apply       apply tasks to the selected hosts
     check       check mode: report changes without applying them
-    hosts       inspect hosts: "hosts list <selection>" lists the hosts
-                matching a selection, "hosts info <host>" shows one
-                host's attributes
+    hosts       inspect hosts: "hosts list [<selection>]" lists the
+                hosts matching a selection (default: all), "hosts info
+                <host>" shows one host's attributes
     generate    key <path> : writes a new age key pair
                 task <path> : write a sample tasks file
                 settings <path> : write a sample settings file

@@ -19,7 +19,7 @@ tachy apply '@web'     # applies main.pravic; its directory is the project
 
 - **Inventory**: hosts with connection details, tags and variables.
 - **Tasks files**: `file`, `directory`, `service`, `compose` (plus
-  `package`, `group`, `user`, `check`) statements keyed by path, unit
+  `package`, `group`, `user`, `ensure`) statements keyed by path, unit
   name or stack dir — the target *is* the statement key. Two equivalent
   forms, group and single.
 - **Projects**: the tasks file's parent directory is the project; tachy
@@ -28,9 +28,9 @@ tachy apply '@web'     # applies main.pravic; its directory is the project
   directory — its `main.pravic` is the entry point — and with no tasks
   file argument, `main.pravic` in the current directory is used.
 - **Composition**: tasks files compose other tasks files through
-  `include "path" { bindings }`, which composes at the statement's
+  `apply "path" { bindings }`, which composes at the statement's
   position (source order is the run order — there is no before/after
-  split anymore), each include carrying its own variables; scopes chain
+  split anymore), each apply carrying its own variables; scopes chain
   and flow forward. An entry naming an existing directory uses its
   `main.pravic`, like a directory argument on the command line.
 - **Variables** — `vars` statements with precedence and
@@ -57,7 +57,7 @@ tachy apply '@web'     # applies main.pravic; its directory is the project
   (`generate key <path>`) or a commented sample tasks file
   (`generate task <path>`).
 - Strict validation everywhere: unknown keys, undefined variables, invalid
-  states, duplicate targets, include cycles, includes escaping the
+  states, duplicate targets, apply cycles, applies escaping the
   project and unknown hosts/tags are reported with file context before
   anything touches a machine.
 - Per-host failure isolation: a failing host is dropped from the rest of its
@@ -98,7 +98,7 @@ vars {
     domain = "example.org",
 }
 
-include "base.pravic" {
+apply "base.pravic" {
     site_name = "main",
 }
 
@@ -181,10 +181,10 @@ $ tachy apply '@web'             # second run: nothing to do
 -- main.pravic: ok=8 changed=0 failed=0
 ```
 
-The base's `directory` runs first because its `include` statement is
+The base's `directory` runs first because its `apply` statement is
 declared first — jobs run in source order. Note that the main file's
-jobs use `{{ doc_root }}` even though it is defined inside the included
-`base.pravic` — the include composes above them and its variables flow
+jobs use `{{ doc_root }}` even though it is defined inside the applied
+`base.pravic` — the apply composes above them and its variables flow
 forward. Host variables (`http_port`) and global ones (`site_owner`)
 travel to each host in a generated one-host inventory inside the
 temporary bundle. `template = "files/index.tmpl"` renders that source on
@@ -230,9 +230,9 @@ tachy — Pravic-driven configuration management (Ansible-like)
   Commands:
     apply       apply tasks to the selected hosts
     check       check mode: report changes without applying them
-    hosts       inspect hosts: "hosts list <selection>" lists the hosts
-                matching a selection, "hosts info <host>" shows one
-                host's attributes
+    hosts       inspect hosts: "hosts list [<selection>]" lists the
+                hosts matching a selection (default: all), "hosts info
+                <host>" shows one host's attributes
     generate    key <path> : writes a new age key pair
                 task <path> : write a sample tasks file
                 settings <path> : write a sample settings file
@@ -401,9 +401,9 @@ A tasks file is a sequence of statements, one per line (all optional):
 | `package "mgr:name" { ... }` | `"<manager>:<name>"` | `version` (default `latest`; an explicit version pins it exactly — epoch-qualified, as dpkg reports it), `present` (default `true`; `false` removes). Only `apt` keys are supported. |
 | `group NAME { ... }` | name | `state` (default `present`; `absent` removes). |
 | `user NAME { ... }` | name | `group` (primary; default: a group named after the user), `groups` (supplementary, additive only), `shell` (default `/bin/sh` at creation), `comment`, `create_home` (default `true`, creation only), `home` (default `/home/<name>` at creation), `state` (default `present`; `absent` removes), `remove_home` (default `false`, with `state = "absent"`). |
-| `check "name" { ... }` | name | `run` (required), `exit_status` (integer, `{ not = N }`, or `{ cond = "OP N" }`; default 0), `output` (string, `{ contains = "..." }`, or `{ matches = "..." }`) |
-| `include "path" { bindings }` | path | Composes another tasks file **at the statement's position**, carrying its own variables: the binding's entry keys, or the same grouped in a `vars { ... }` sub-block. A path naming an existing directory uses its `main.pravic`, like a directory CLI argument. |
-| `import "path"` | path | Bundled mode only: an external file or directory (absolute, or relative to the defining tasks file) copied into the bundle next to the project copy under its base name — `import "tasks/install_gogs"` → `project/install_gogs` — so `src`/`template`/`run` can use it on the host. No parameters — the braces are optional; destinations colliding with project content or another import are load-time errors; a path that does not resolve relative to its defining file is searched in the `settings.pravic` `imports` paths. An include naming the import destination itself works too (`include "neovim" { }` → its `main.pravic`); entries under a destination that are missing locally defer to the host (the inner run composes them, bindings included; a manual `--direct` run skips them with a warning). |
+| `ensure "name" { ... }` | name | `run` (required), `exit_status` (integer, `{ not = N }`, or `{ cond = "OP N" }`; default 0), `output` (string, `{ contains = "..." }`, or `{ matches = "..." }`) |
+| `apply "path" { bindings }` | path | Composes another tasks file **at the statement's position**, carrying its own variables: the binding's entry keys, or the same grouped in a `vars { ... }` sub-block. A path naming an existing directory uses its `main.pravic`, like a directory CLI argument. |
+| `import "path"` | path | Bundled mode only: an external file or directory (absolute, or relative to the defining tasks file) copied into the bundle next to the project copy under its base name — `import "tasks/install_gogs"` → `project/install_gogs` — so `src`/`template`/`run` can use it on the host. No parameters — the braces are optional; destinations colliding with project content or another import are load-time errors; a path that does not resolve relative to its defining file is searched in the `settings.pravic` `imports` paths. An apply naming the import destination itself works too (`apply "neovim" { }` → its `main.pravic`); entries under a destination that are missing locally defer to the host (the inner run composes them, bindings included; a directory entry resolves to its `main.pravic`, as everywhere). |
 
 Both forms of a directive are equivalent — the same entry, spelled once
 each way:
@@ -485,13 +485,13 @@ Idempotency semantics:
   `down --remove-orphans` (plus `--volumes` / `--rmi all` on request) and
   is a no-op when nothing of the project exists — the compose file is only
   read when something has to run.
-- `check`: runs `run` on the host and checks it — `exit_status`
+- `ensure`: runs `run` on the host and checks it — `exit_status`
   accepts an integer, `{ not = N }` or `{ cond = "OP N" }` with `OP`
   one of `==`, `!=`, `<`, `<=`, `>`, `>=` (default `0`); `output`
   accepts a string (exact match on the trimmed output),
   `{ contains = "..." }` or `{ matches = "regex" }`. A passing job
   reports `ok` (never `changed`); a failed assertion fails the host
-  with the actual status/output. Check jobs are checks by nature:
+  with the actual status/output. Ensure jobs are checks by nature:
   they run even in check mode, so keep mutating commands out of them.
   The command runs with the defining tasks file's directory as its
   working directory, so relative paths (scripts, data files) resolve
@@ -499,19 +499,19 @@ Idempotency semantics:
 
 Execution order is the source order: there is no fixed directive order
 and no sorting — jobs execute in the order their statements appear, and
-an `include` composes its file at the statement's position. What a
+an `apply` composes its file at the statement's position. What a
 fixed order used to guarantee is the author's to express: a `directory`
 statement above the files that live in it (a file may live inside a
 directory the same file manages — including the compose file a
 `compose` entry uses), a user's primary `group` above the `user`, a
-health `check` simply between the statements it checks. `var`/`vars`
+health `ensure` simply between the statements it checks. `var`/`vars`
 and `import` statements are not jobs — they take effect file-wide
 regardless of position.
 
 Managing the same (kind, target) twice anywhere in a composition is a
 load-time error.
 
-A project must be self-contained: includes escaping the tasks file's
+A project must be self-contained: applies escaping the tasks file's
 parent directory are a load-time error, and `file.src` resolves inside
 the copied project (a `src` outside the project cannot be read on the
 host) — the `import` statement is the sanctioned way to pull external
@@ -526,18 +526,18 @@ Precedence, lowest to highest, scopes chaining through the composition
 graph:
 
 ```
-inventory vars  <  host vars  <  outer file vars  <  include bindings
+inventory vars  <  host vars  <  outer file vars  <  apply bindings
                 <  composed file's own vars
 ```
 
 The resulting scope flows forward: statements see everything the
-includes above them contributed (they compose first, at their
-position). An include's binding keys are its variable binding; a
+applies above them contributed (they compose first, at their
+position). An apply's binding keys are its variable binding; a
 `vars { ... }` sub-block in the binding is an equivalent, grouped
 spelling:
 
 ```pravic
-include "files.pravic" {
+apply "files.pravic" {
     vars { three = "three" }
 }
 ```
@@ -630,7 +630,7 @@ copy (the identity never travels — the same trust the generated
 inventory already extends to decrypted vars; `--keep-bundle` retains
 it). With `--direct` the source is decrypted in-process with the same
 identity resolution. The path resolves like `src`, must live inside
-the project, and requires `state = "file"`. Secrets inside includes
+the project, and requires `state = "file"`. Secrets inside applies
 deferred to an `import` destination work too: the controller mirrors
 the bundle's layout (project plus landed imports, as symlinks) and
 shadow-composes the entry file there to collect them.
@@ -641,7 +641,7 @@ shadow-composes the entry file there to collect them.
 flowchart LR
     CLI["app.d\nCLI: command + selection + options"] --> RUN["runner.d\norchestration"]
     INV["inventory.d\nhosts, tags"] --> RUN
-    MOD["models.d\ntasks files: jobs + includes"] --> RUN
+    MOD["models.d\ntasks files: jobs + applies"] --> RUN
     RUN --> PROJ["project.d\nbundle: project copy\n+ binary + inventory"]
     PROJ --> TR["transport.d\nlocal: /bin/sh\nssh: ssh subprocess"]
     TR --> INNER["copied tachy\n--direct on the host"] --> MODS["modules/\nfiles, directories, services"]
@@ -667,10 +667,10 @@ copy runs as).
    hand-written parser; see LANGUAGE.md) into a uniform `Val` tree plus
    its ordered statement list (datetimes do not exist in Pravic).
    `inventory.d` and `models.d` validate structure, keys, states,
-   duplicate targets, include cycles and includes escaping the project
+   duplicate targets, apply cycles and applies escaping the project
    up front, so a typo fails before any host is contacted. A tasks file
    flattens into an ordered `Job[]`, each job carrying its variable
-   overlay (the include-chain scope it was defined in).
+   overlay (the apply-chain scope it was defined in).
 2. **Select** — `runner.d` resolves the selection argument (host names,
    `@tags`, `all`) through the inventory; unknown names or tags error with
    the list of the known ones.
@@ -682,7 +682,7 @@ copy runs as).
 4. **Execute** — the controller runs the bundled binary on the host
    (`cd project && tachy --direct ...`), which renders each job's
    parameters against the host scope and dispatches to its module
-   (`filemod` / `servicemod` / `checkmod`) with a `TaskContext` (local
+   (`filemod` / `servicemod` / `ensuremod`) with a `TaskContext` (local
    transport, check-mode flag, host name, defining file's dir for
    relative `src`).
    Modules express everything as POSIX shell commands; `transport.d`
@@ -721,7 +721,7 @@ source/tachy/
   value.d                    Pravic parser, Val tree, validated accessors
   vars.d                     deepMerge, {{ }} rendering, cycle detection
   inventory.d                hosts/tags model, selection, var resolution
-  models.d                   tasks files: jobs, includes, scope chaining
+  models.d                   tasks files: jobs, applies, scope chaining
   project.d                  bundles: project + binary + generated inventory
   transport.d                Transport interface, local/ssh, shell helpers
   runner.d                   orchestration: bundled and direct modes
@@ -734,14 +734,14 @@ source/tachy/
     servicemod.d             systemd services
     accounts.d               groups / users (shadow-utils, getent probes)
     packagemod.d             package installs/removals (apt via dpkg-query)
-    checkmod.d               shell command checks (exit status / output)
+    ensuremod.d               shell command ensures (exit status / output)
     composemod.d             Docker Compose stacks (config-hash probes)
     fake.d                   scripted transport (unit tests only)
 ```
 
 Testing: `dub test` covers the Pravic parser, merging/templating (including
 cycles), inventory selection and precedence, tasks-file parsing (both
-forms, include layering, duplicate and cycle errors), quoting and
+forms, apply layering, duplicate and cycle errors), quoting and
 process plumbing, the file module against the real local filesystem, the
 service module against a scripted transport, Pravic re-serialization of
 host variables, and full bundle deploy/remove over the local transport —

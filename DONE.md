@@ -1550,3 +1550,82 @@
      (commandEntries asset, README examples + CLI block,
      DOCUMENTATION command table + new "### version" section);
      AGENTS.md CLI shape and source/AGENTS.md app.d bullet refreshed.
+
+48. extract the two immutable strings for the samples (sampleSettings
+   and sampleTasks) into assets and import them using D's import
+   - generate.d's `private immutable string sampleTasks`/`sampleSettings`
+     q-token literals are gone; the texts now live in
+     `source/assets/sampleTask.txt` and
+     `source/assets/sampleSettings.txt` and are embedded at compile
+     time with `import("assets/...")`, exactly like app.d's help/man
+     blocks (dub.json's stringImportPaths already covers them).
+   - Verified byte-identical: generated task/settings samples with the
+     pre-change binary and the rebuilt one, `cmp` clean on both.
+     `dub test`: 137 passed, 0 failed. No behavior change (internal
+     refactor), so the doc trio is untouched; source/AGENTS.md
+     generate.d bullet refreshed to name the assets.
+
+49. change in pravic language: replace the 'check' statement by the
+   'ensure' statement, and the 'include' statement by the 'apply'
+   statement
+   - Parser (value.d singleKeywords), models.d (kinds, module wiring,
+     `processApply` — was `processInclude`) and the module layer all
+     renamed in one clean cutover: the check module is now `ensuremod.d`
+     (`runEnsureModule`, module name "ensure", error contexts
+     "ensure 'name'"), the job kind/dispatch name is "ensure", and the
+     composition statement/kind is `apply` (`the composition applies
+     'x', which is outside the project directory ...` escaping error
+     reworded). Old keywords are parse errors again
+     ("unknown directive 'check ...'/'include ...'").
+   - The CLI is untouched: `tachy check` (check mode), the webui
+     check runs and the event-stream "check" flag (check-mode marker)
+     are a different layer and keep their names.
+   - Doc trio + spec + syntax all switched together: LANGUAGE.md
+     (grammar alternation, no-plural list, directive inventory,
+     examples, semantics notes), README (features, example walk,
+     directive table, idempotence list, internals), DOCUMENTATION.md
+     (intro example and output, `### apply` — composition, deferred
+     applies, `### ensure` — command checks), the man/help assets
+     (compositionBody, orderBody, tasksBody, variablesBody,
+     projectsBody, sampleTask — `ensure "demo file exists"`, commented
+     `apply "base.pravic"`) and syntax/pravic.vim's keyword match.
+   - Tests: tests/ensuremod.d (renamed from checkmod.d), models/value/
+     runner fixtures and asserts updated; value.d's `apply "x.pravic"`
+     unknown-directive negative became `hook "x.pravic"` (apply is a
+     keyword now). Fixed a pre-existing fixture race the rename
+     exposed: two tests in tests/models.d both wrote "compose.pravic"
+     into the shared scratch dir (threaded runner) — the compose-
+     wiring fixture is "stack.pravic" now; suite run 5x, 137/137 each.
+   - E2E local --direct and bundled (event relay shows `ensure ...`
+     labels), failure isolation (`ensure 'must fail': exit status 9,
+     expected 0`, later jobs skipped, exit 1), check mode, generate
+     task sample loads and applies ok=... idempotently, `tachy man`
+     free of old keywords; on the Debian 12 VM over ssh (root@
+     testing.internal): bundled run with `apply` + vars sub-block
+     binding + dash-safe `. /etc/os-release` ensure, idempotent second
+     run, check mode, "flavor chocolate on vm1" verified, VM cleaned.
+   - DOX: root AGENTS.md language bullet, source/AGENTS.md models.d/
+     runner.d bullets and modules/AGENTS.md module list + check-mode
+     contract refreshed; syntax/AGENTS.md unchanged (no keyword text,
+     pravic.vim contract is "track LANGUAGE.md").
+
+50. hosts list: default the selection to all when omitted —
+   `tachy hosts list` used to error with "expected exactly one
+   selection" and now lists every host (user-reported).
+   - runHosts (runner.d): `hosts list [<selection>]` — the selection
+     is optional and defaults to "all" (the header line shows 'all');
+     more than one selection is still an argument error ("expected at
+     most one selection ... not N"), `hosts info <host>` still
+     requires exactly one name, and the no-sub-command usage text now
+     shows 'list [<selection>]' with a bare `tachy hosts list`
+     example.
+   - Tests (tests/runner.d): `["list"]` left the rejected-shapes list
+     and gained a positive `runHosts(["list"], opts) == 0` regression
+     check (failed pre-change, passes post) plus the "at most one
+     selection" guard. dub test: 137 passed, 0 failed.
+   - E2E: `tachy hosts list` prints "== all | hosts: buildbox, web1"
+     (exit 0), `hosts list @web` still filters, `hosts list a b`
+     errors exit 1, and README's CLI reference block byte-matches
+     `tachy help` again. Doc trio (commandEntries asset, README,
+     DOCUMENTATION hosts section + example) and the root/source AGENTS
+     CLI bullets updated.

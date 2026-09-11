@@ -22,8 +22,8 @@ This doc owns module-level contracts.
   mode/owner/group), `servicemod` (systemctl state/enablement
   plus unit file management: `src` verbatim copy, `template` rendering
   with the entry's local `vars`, written to /etc/systemd/system with
-  daemon-reload on drift), `packagemod` (apt), `checkmod` (run +
-  exit_status/output assertions behind the `check` directive),
+  daemon-reload on drift), `packagemod` (apt), `ensuremod` (run +
+  exit_status/output assertions behind the `ensure` directive),
   `accounts.d` (groups + users via
   shadow-utils), `composemod` (Docker Compose stacks keyed by project
   dir: read-only probes — container runtime/health via `docker ps`/
@@ -38,7 +38,7 @@ This doc owns module-level contracts.
   (stat/getent/dpkg-query/systemctl), act only on drift, report
   `changed` truthfully; `ok` when already conformant
 - Check mode: probes run, mutations go through `mustRun` (suppressed in
-  check mode, i.e. the `check` command); `check`-directive jobs are
+  check mode, i.e. the `check` command); `ensure`-directive jobs are
   checks by nature and run even in check mode, never reporting
   `changed`
 - All shell input through `shQuote`; multi-step remote changes prefer

@@ -1,4 +1,4 @@
-Precedence: global vars < host vars < include chain < file vars.
+Precedence: global vars < host vars < apply chain < file vars.
 Strings are templated with {{ name }} / {{ table.key }}; the builtin
 {{ inventory_hostname }} holds the current host name.
 A var of the form { env = "NAME" } (optionally

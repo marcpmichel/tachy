@@ -138,7 +138,7 @@ file /tmp/x { src = "../../tachy_runner_age_ut_out/x.age", age = true }
 }
 }
 
-@("deferred includes: the staging mirror collects their secrets")
+@("deferred applies: the staging mirror collects their secrets")
 unittest
 {
 import std.algorithm.searching : canFind;
@@ -162,7 +162,7 @@ scope (exit) rmdirRecurse(root);
 // the import source, outside the project: a tasks file under the
 // landing that only exists inside the bundle, plus its secrets
 write(buildPath(root, "src", "land", "x.pravic"), `
-include "y.pravic"
+apply "y.pravic"
 file /tmp/deferred.key { src = "s.age", age = true }
 `);
 write(buildPath(root, "src", "land", "y.pravic"), `
@@ -175,7 +175,7 @@ write(buildPath(root, "id.txt"), "# identity\n");
     auto f = File(buildPath(root, "proj", "main.pravic"), "w");
     f.write(`
 import "land"
-include "land/x.pravic"
+apply "land/x.pravic"
 `);
     f.close();
 }
@@ -205,8 +205,8 @@ const string staging = makeStaging(buildPath(root, "proj"), imports);
 assert(exists(buildPath(staging, "main.pravic")));
 assert(exists(buildPath(staging, "land", "x.pravic")));
 
-// the shadow composition sees the deferred subtree, nested include
-// included, exactly like the on-host inner run will
+// the shadow composition sees the deferred subtree, nested apply
+// composed, exactly like the on-host inner run will
 auto shadow = loadTasksFile(buildPath(staging, "main.pravic"), settings);
 assert(shadow.deferred.length == 0, "landing exists in the mirror");
 assert(shadow.jobs.length == 2, text(shadow.jobs.length));
@@ -311,7 +311,8 @@ import tachy.errors : TachyError;
 import tachy.inventory : Inventory;
 
 // argument shapes are rejected before the inventory is even read
-foreach (args; [cast(string[])[], ["ls"], ["list"], ["list", "a", "b"],
+// (a bare "list" is not one of them: it defaults to "all")
+foreach (args; [cast(string[])[], ["ls"], ["list", "a", "b"],
     ["info"], ["info", "a", "b"], ["nonsense", "x"]])
 {
     string msg;
@@ -347,6 +348,9 @@ opts.settings = settingsPath;
 
 assert(runHosts(["info", "web1"], opts) == 0);
 
+// no selection defaults to all: same inventory, no argument error
+assert(runHosts(["list"], opts) == 0);
+
 string msg;
 try
 {
@@ -357,6 +361,16 @@ catch (TachyError e)
     msg = e.msg;
 assert(canFind(msg, "unknown host 'nope'"), msg);
 assert(canFind(msg, "known: web1"), msg);
+
+// more than one selection is still an argument error
+try
+{
+    runHosts(["list", "a", "b"], opts);
+    assert(false, "expected TachyError");
+}
+catch (TachyError e)
+    msg = e.msg;
+assert(canFind(msg, "at most one selection"), msg);
 
 // list rejects an empty selection the same way apply does
 try

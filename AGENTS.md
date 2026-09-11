@@ -93,14 +93,16 @@ When the user requests a durable behavior change, record it here or in the relev
 - `LANGUAGE.md` is the spec for **Pravic**, tachy's configuration
   language (implemented): directives as independent statements
   (`vars { ... }` block form, `var X = "v"` single form;
-  `include`/`check`/`compose`/`import` single form only), jobs run in
-  statement order — no fixed order, no sorting; hooks, `apply` and the
-  `includes` group form do not exist, `execute` was renamed `check`,
-  and TOML support is gone (no dual reader ever shipped)
+  `apply`/`ensure`/`compose`/`import` single form only), jobs run in
+  statement order — no fixed order, no sorting; hooks and the group
+  forms of `apply`/`ensure` do not exist, `execute` was renamed
+  `check` then `ensure`, `include` became `apply`, and TOML support
+  is gone (no dual reader ever shipped)
 - CLI shape: `tachy <command> [options] <selection> [<tasks.pravic>...]`;
  command is one of `apply`, `check` (check mode; the old `-c` option is
- gone), `hosts` (`hosts list <selection>`, `hosts info <host>`; the old
- `--list-hosts` option is gone), `generate` (`generate key <path>`,
+ gone), `hosts` (`hosts list [<selection>]` — `all` when omitted,
+ `hosts info <host>`; the old `--list-hosts` option is gone),
+ `generate` (`generate key <path>`,
  `generate task <path>`, `generate settings <path>`),
  `webui` (local web console; no selection — projects come from
  settings.pravic `webui` projects, runs start from the browser),
