@@ -58,7 +58,7 @@ syn match pravicComment /#.*/ contains=@Spell,pravicTodo
 " followed by a bare-key character, so `vars-foo` and `varsite` stay
 " plain keys.  Defined last: it also wins the tie against pravicKey when
 " an entry is literally named like a directive (`vars { var = 1 }`).
-syn match pravicKeyword /\v<(vars|var|files|file|directories|directory|packages|package|groups|group|users|user|services|service|hosts|host|imports|import|webui|apply|ensure|compose)\ze%([ \t\r\n"'{}\[\]=#,\\]|$)/ display
+syn match pravicKeyword /\v<(vars|var|files|file|directories|directory|packages|package|groups|group|users|user|services|service|hosts|host|imports|import|webui|identity|apply|ensure|compose|http)\ze%([ \t\r\n"'{}\[\]=#,\\]|$)/ display
 
 hi def link pravicComment Comment
 hi def link pravicTodo Todo

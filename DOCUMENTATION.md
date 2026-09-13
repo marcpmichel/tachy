@@ -102,7 +102,7 @@ tachy <command> [options] <selection> [<tasks.pravic>...]
   | Command | Description |
   |---|---|
   | `apply` | Apply the tasks files to the selected hosts. |
-  | `check` | Check mode: report the changes that would be made, apply nothing. `ensure` jobs still run — they are checks by nature. |
+  | `check` | Check mode: report the changes that would be made, apply nothing. `ensure` and `http` jobs still run — they are checks by nature. |
   | `hosts` | Inspect hosts without running anything — see [hosts](#hosts). |
   | `generate` | Create something new — see [generate](#generate). |
   | `webui` | Start a local web server, a graphical version of the CLI — see [Web UI](#web-ui-tachy-webui). |
@@ -786,6 +786,49 @@ ensure "version format" {
 | `run` | required | The shell command; templated like every string. |
 | `exit_status` | `0` | An integer, `{ not = N }`, or `{ cond = "OP N" }` with OP one of `==`, `!=`, `<`, `<=`, `>`, `>=`. |
 | `output` | — | A string (exact match on the trimmed output), `{ contains = "..." }`, or `{ matches = "regex" }` (invalid patterns are load-time errors). |
+
+---
+
+### `http` — HTTP checks
+
+Keyed by URL. Submits one HTTP request **from the tachy process running
+the job** — on the managed host in bundled runs (the default), on the
+controller for `--direct` runs — and asserts on the answer. The query
+comes from tachy itself (a small client on plain TCP sockets: no curl,
+nothing installed on the host); it is plain `http://` only — no TLS, no
+redirects — and one `timeout` bounds the whole query (connect, send,
+receive). Like `ensure`, these jobs are checks by nature: they run even
+in check mode, report `ok` when the expectations hold and never report
+`changed`.
+
+```pravic
+http http://localhost:8080/health {   # bare URLs need no quotes
+    code = 200
+    output = { contains = "ok" }
+}
+
+http "http://api.internal/v1/pets" {
+    type = "POST",                    # any HTTP method (default "GET")
+    headers = ["Content-Type=application/json"],
+    data = "{\"name\": \"bo\"}",
+    code = 201,
+    output = { matches = "\"id\": \\d+" },
+    timeout = 5,
+}
+```
+
+| Attribute | Default | Description |
+|---|---|---|
+| `url` | required | The statement key: `http://host[:port]/path`. |
+| `type` | `"GET"` | The HTTP method — any method token (`POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, …). |
+| `headers` | — | Array of `"Name=Value"` strings, sent as `Name: Value` request headers. |
+| `data` | — | Request body, sent verbatim with `Content-Length` (any method). Absent means no body; `data = ""` sends an empty one. |
+| `code` | `200` | The expected HTTP status (100–599). |
+| `output` | — | The response body, compared after trimming surrounding whitespace — the same shapes `ensure` accepts: a string (exact), `{ contains = "..." }` or `{ matches = "regex" }`. |
+| `timeout` | `10` | Seconds for the whole query (name resolution aside); zero or less is a load-time error, running past it fails the job. |
+
+A failed expectation fails the host with the actual status (and a body
+excerpt): `http '…/health': status 503, expected 200; output: '…'`.
 
 ## Secrets (age)
 

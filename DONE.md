@@ -1665,3 +1665,73 @@
      it, idempotent second run); webui startup lists projects from
      config.pravic; help carries --config (no --settings) and
      README's CLI block byte-matches `tachy help`.
+
+52. add the "http" instruction to the pravic language: submit a query
+   and test the result (type/headers/data in, code/output asserted)
+   - Query tool written from scratch on D's stdlib, no curl anywhere:
+     new `source/tachy/http.d` (module `tachy.http`) — a minimal
+     HTTP/1.1 client on plain TCP sockets (non-blocking connect +
+     select, one deadline bounding connect/send/receive, bodies by
+     Content-Length / chunked / close, HEAD aware, 16 MiB body cap,
+     RFC 7230 token validation for methods and "Name=Value" headers);
+     plain `http://` only (https named in the error), no redirects.
+     New `source/tachy/modules/httpmod.d` — `runHttpModule` asserts
+     `code` (default 200, 100–599) and `output` (ensure's exact /
+     contains / matches shapes on the trimmed body); a check by nature:
+     runs even in check mode, never reports changed. The query is
+     issued by the tachy process running the job — the managed host in
+     bundled runs, the controller for --direct.
+   - Wiring: `http` single-form keyword in value.d (`https://…` stays
+     an unknown directive via the !KeyChar guard), models.d (kind,
+     `url` injected from the statement key, duplicate targets),
+     package.d registry (validateModuleParams + runModule + moduleNames),
+     runner.d defaultLabel (`http <url>`), `timeout` param (default 10s)
+     beyond the TODO's type/headers/data/code/output.
+   - Tests: tests/http.d (client against an in-process OneShotServer —
+     request shape, chunked/close bodies, HEAD, timeout, resolve and
+     malformed-response errors, URL parsing) and tests/httpmod.d
+     (pass/fail assertions, wire format, check mode, load-time and
+     run-time validation); http blocks added to tests/models.d and
+     tests/value.d (bare URL keys, keyword guard). dub test: 152
+     passed, 0 failed (baseline 137).
+   - E2E: local direct run (200/404/501 against python3 http.server,
+     labels `http <url>: 200 OK`, check mode runs them, failed
+     assertion → exit 1 naming status/output); bundled run on the
+     Debian 12 VM over ssh as root (server bound to the VM's localhost
+     — success proves the on-host vantage), idempotent second run,
+     failing code expectation fails the host; VM and scratch cleaned.
+   - Docs: LANGUAGE.md (grammar keyword + inventory row), man asset
+     tasksBody.txt (`tachy man` renders it; `tachy help` unchanged —
+     it never listed directives), README (features, directives table,
+     walkthrough, source tree), DOCUMENTATION.md (`http` section,
+     check-mode row). pravic.vim keyword list gained `http` plus the
+     missing `identity` (lockstep contract with LANGUAGE.md).
+   - DOX: source/AGENTS.md http.d layer bullet; modules/AGENTS.md
+     httpmod module entry, injected-keys and check-mode contracts,
+     listener-based testing note, stale "19 modules" count dropped.
+     Root and syntax/AGENTS.md unchanged: no CLI or tree-boundary
+     change, and the syntax contract already says "track LANGUAGE.md".
+
+53. reflow the man page and help: prose on single logical lines, the
+   terminal does the wrapping (user request)
+   - Every man/help asset in source/assets/ rewritten without the
+     hard 80-column wrap: manDescription, projectsBody, webuiBody,
+     webdocBody, variablesBody, orderBody and the prose paragraphs of
+     compositionBody/tasksBody are one line per paragraph (wording
+     byte-preserved, only line breaks joined); commandEntries and
+     optionEntries are one line per entry (the aligned continuation
+     rows are gone, the description columns stay at 16/27 — the
+     `--config` row's one-column misalignment fixed on the way);
+     helpTail unwrapped. Code examples and their aligned comment
+     towers stay hand-formatted (copy-pasteable code is not prose);
+     helpHead usage lines, manExamples and inventoryBody were already
+     single-line and are unchanged.
+   - README's "CLI reference" block regenerated from `tachy help` and
+     verified byte-identical — it had silently drifted (missing the
+     `tachy host list|info` and `tachy man` usage lines); the
+     byte-match is now an invariant recorded in source/AGENTS.md.
+   - Wording unchanged everywhere (pure reflow), so DOCUMENTATION.md's
+     command-line tables needed no edit; dub test: 152 passed,
+     0 failed (the app.d tests pin help/man sections, the
+     `version     show the version` column spacing and the
+     help-stays-short boundary — all still hold).

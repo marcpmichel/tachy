@@ -247,7 +247,7 @@ private struct Parser
     private static immutable string[] singleKeywords =
         ["var", "file", "directory", "package", "group", "user",
          "service", "host", "apply", "ensure", "compose", "import",
-         "identity"];
+         "identity", "http"];
 
     /// Canonical directive names for the single-form keywords (group-form
     /// keywords are their own canonical name).

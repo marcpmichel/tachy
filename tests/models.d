@@ -801,3 +801,82 @@ file /tmp/x { age = false }
     assert(l2.jobs.length == 1 && !l2.jobs[0].params["age"].boolean_);
 }
 }
+
+@("http: url injection, wiring, load-time errors")
+unittest
+{
+import tachy.value : Val;
+auto p = writeTemp("http.pravic", `
+http "http://localhost:9/h" {
+    type = "POST"
+    headers = ["X-T=1"]
+    data = "{}"
+    code = 201
+    output = { contains = "ok" }
+    timeout = 2
+}
+
+ensure "after" { run = "true" }
+`);
+auto loaded = loadTasksFile(p);
+assert(loaded.jobs.length == 2);
+assert(loaded.jobs[0].kind == "http" && loaded.jobs[0].moduleName == "http");
+assert(loaded.jobs[0].target == "http://localhost:9/h");
+assert(loaded.jobs[0].params["url"].str_ == "http://localhost:9/h");
+assert(loaded.jobs[0].params["type"].str_ == "POST");
+assert(loaded.jobs[0].params["headers"].kind == Val.Kind.array_);
+assert(loaded.jobs[0].params["code"].integer_ == 201);
+assert(loaded.jobs[0].params["timeout"].integer_ == 2);
+assert(loaded.jobs[1].kind == "ensure"); // source order
+
+// unknown key is a load-time error
+{
+    auto q = writeTemp("http_bad.pravic", `
+http "http://x/" { verb = "GET" }
+`);
+    string msg;
+    try
+    {
+        loadTasksFile(q);
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(msg.indexOf("unknown key 'verb'") >= 0, msg);
+}
+// the statement key is the url: setting it by hand is an error
+{
+    auto q = writeTemp("http_url.pravic", `
+http "http://x/" { url = "http://y/" }
+`);
+    string msg;
+    try
+    {
+        loadTasksFile(q);
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(msg.indexOf("'url' is implied by the statement key") >= 0, msg);
+}
+// duplicate targets across a composition (the same file twice over is a
+// parser duplicate error, like every directive)
+{
+    writeTemp("http_inner.pravic", `
+http "http://x/a" { }
+`);
+    auto q = writeTemp("http_dup.pravic", `
+apply "http_inner.pravic" { }
+http "http://x/a" { }
+`);
+    string msg;
+    try
+    {
+        loadTasksFile(q);
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(msg.indexOf("already managed") >= 0, msg);
+}
+}

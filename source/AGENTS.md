@@ -22,6 +22,11 @@ This doc owns the source tree's structure and conventions;
     reserves `version`, so the symbol is `tachyVersion` and the enum
     member `Cmd.showVersion`); delegates to `runner.d`, `generate.d`,
     `web.d` and `webdoc.d`
+    - Asset prose is authored as single logical lines (one per
+      paragraph or table entry) — no hard wrap at 80 columns; the
+      terminal wraps. Code examples and their aligned comment columns
+      stay hand-formatted. README's "CLI reference" block is kept
+      byte-identical to `tachy help`.
   - `runner.d` — per-host orchestration and the read-only `hosts`
     command (`runHosts`: `hosts list [<selection>]` prints the former
     --list-hosts output — `all` when the selection is omitted,
@@ -56,6 +61,12 @@ This doc owns the source tree's structure and conventions;
     in the root `LANGUAGE.md` (a keyword registered in both forms —
     `identity` — takes its group form when a `{` follows)
   - `transport.d` — `local` and `ssh` transports (abstract class; `runStreaming` delivers output lines live — POSIX `read`, not buffered `rawRead`, so streams are not batched), `shQuote`, stat helpers
+  - `http.d` — the minimal HTTP/1.1 client behind the `http` directive:
+    plain TCP via std.socket (no libcurl, no external processes), plain
+    `http://` only, one deadline bounding connect/send/receive
+    (select(2)), bodies by Content-Length/chunked/close, capped size;
+    methods and header entries are validated here at run time (the
+    module pre-checks literal values at load time)
   - `project.d` — project bundles (project copy plus `import` sources
     under their base name, controller-decrypted `age = true` sources
     written over their ciphertext copies, generated one-host

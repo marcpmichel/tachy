@@ -11,11 +11,13 @@ public import tachy.modules.accounts : runGroupModule, runUserModule;
 public import tachy.modules.composemod : runComposeModule;
 public import tachy.modules.ensuremod : runEnsureModule;
 public import tachy.modules.filemod : runFileModule;
+public import tachy.modules.httpmod : runHttpModule;
 public import tachy.modules.packagemod : runPackageModule;
 public import tachy.modules.servicemod : runServiceModule;
 
 import tachy.modules.composemod : validateComposeParams;
 import tachy.modules.ensuremod : parseExitStatus, parseOutput;
+import tachy.modules.httpmod : validateHttpParams;
 import tachy.modules.packagemod : validatePackageKey;
 
 import tachy.errors;
@@ -40,7 +42,7 @@ struct TaskResult
     string[] details;  // commands executed + change details (shown with -v)
 }
 
-private immutable string[] allModules = ["file", "service", "ensure", "group", "user", "package", "compose"];
+private immutable string[] allModules = ["file", "service", "ensure", "group", "user", "package", "compose", "http"];
 
 /// Registered module names.
 string[] moduleNames() @safe pure nothrow
@@ -80,6 +82,15 @@ void validateModuleParams(string moduleName, in Val[string] params, string conte
                 parseExitStatus(*p, context ~ " (ensure)");
             if (auto p = "output" in params)
                 parseOutput(*p, context ~ " (ensure)");
+            break;
+        }
+        case "http":
+        {
+            checkKeys(params, ["url", "type", "headers", "data", "code",
+                "output", "timeout"], context ~ " (http)");
+            if ("url" !in params)
+                throw new TachyError(context ~ " (http): 'url' is required");
+            validateHttpParams(params, context ~ " (http)");
             break;
         }
         case "group":
@@ -173,6 +184,7 @@ TaskResult runModule(string moduleName, Val[string] params, TaskContext ctx)
         case "user": return runUserModule(params, ctx);
         case "package": return runPackageModule(params, ctx);
         case "compose": return runComposeModule(params, ctx);
+        case "http": return runHttpModule(params, ctx);
         default:
             throw new TachyError("unknown module '" ~ moduleName ~ "'");
     }

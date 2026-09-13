@@ -19,9 +19,9 @@ tachy apply '@web'     # applies main.pravic; its directory is the project
 
 - **Inventory**: hosts with connection details, tags and variables.
 - **Tasks files**: `file`, `directory`, `service`, `compose` (plus
-  `package`, `group`, `user`, `ensure`) statements keyed by path, unit
-  name or stack dir — the target *is* the statement key. Two equivalent
-  forms, group and single.
+  `package`, `group`, `user`, `ensure`, `http`) statements keyed by path,
+  unit name, URL or stack dir — the target *is* the statement key. Two
+  equivalent forms, group and single.
 - **Projects**: the tasks file's parent directory is the project; tachy
   copies it (plus the tachy binary) to a temporary bundle on every host
   and executes the composition there. A tasks file argument may be a
@@ -224,23 +224,19 @@ tachy version                            # the build date (YY.mm.dd)
 tachy — Pravic-driven configuration management (Ansible-like)
 
   tachy <command> [options] <selection> [<tasks.pravic>...]
+  tachy host list|info
   tachy webui [options]
   tachy webdoc [options]
+  tachy man
+
 
   Commands:
     apply       apply tasks to the selected hosts
     check       check mode: report changes without applying them
-    hosts       inspect hosts: "hosts list [<selection>]" lists the
-                hosts matching a selection (default: all), "hosts info
-                <host>" shows one host's attributes
-    generate    key <path> : writes a new age key pair
-                task <path> : write a sample tasks file
-                config <path> : write a sample config file
-                (note: all refuse to overwrite)
-    webui       start a local web server: a graphical version of this
-                CLI
-    webdoc      start a local web server serving this documentation as
-                a browsable site
+    hosts       inspect hosts: "hosts list [<selection>]" lists the hosts matching a selection (default: all), "hosts info <host>" shows one host's attributes
+    generate    key <path> : writes a new age key pair, task <path> : write a sample tasks file, config <path> : write a sample config file (note: all refuse to overwrite)
+    webui       start a local web server: a graphical version of this CLI
+    webdoc      start a local web server serving this documentation as a browsable site
     man         show the full manual, unix man-page style
     version     show the version (the build date, YY.mm.dd)
     help        show this help
@@ -249,43 +245,19 @@ tachy — Pravic-driven configuration management (Ansible-like)
   Options:
     -i, --inventory PATH   Inventory file (default: inventory.pravic)
     -v, --verbose          Show executed commands and change details
-        --direct           Apply tasks files directly in this process,
-                           without bundling a project (this is how the
-                           copied binary runs on each host)
-        --direct-report P  With --direct: write "ok changed failed"
-                           counters to P
-        --events           Print one JSON event per line on stdout instead
-                           of text (machine mode): with --direct, the
-                           local run's own events; otherwise the raw
-                           events streamed live from each host, wrapped in
-                           the controller's fileStart/fileDone events
-        --keep-bundle      Keep each host's temporary bundle directory
-                           after the run, for inspection (project copy,
-                           generated inventory, report)
-        --config PATH       Optional config file (the identity entry,
-                           imports search paths, webui projects);
-                           default: TACHY_CONFIG, then config.pravic
-                           in the current directory, then
-                           ~/.config/tachy/config.pravic
-        --identity PATH    Age identity for { age = ... } inventory vars
-                           and file sources marked age = true;
-                           supersedes the config file's identity
-                           entry. Default: that entry, then AGE_IDENTITY
-                           (path or key material), then ~/.ssh/id_ed25519
-                           (age accepts ssh keys)
-        --color            Force colored statuses even when stdout is not
-                           a tty (forwarded to the run on each host)
-        --address ADDR     Webui/webdoc only: address to bind (default
-                           127.0.0.1; an IP — use 0.0.0.0 to listen on
-                           every interface)
-        --port PORT        Webui/webdoc only: port to listen on (default:
-                           a random port between 10000 and 65534; 0 does
-                           the same)
+        --direct           Apply tasks files directly in this process, without bundling a project (this is how the copied binary runs on each host)
+        --direct-report P  With --direct: write "ok changed failed" counters to P
+        --events           Print one JSON event per line on stdout instead of text (machine mode): with --direct, the local run's own events; otherwise the raw events streamed live from each host, wrapped in the controller's fileStart/fileDone events
+        --keep-bundle      Keep each host's temporary bundle directory after the run, for inspection (project copy, generated inventory, report)
+        --config PATH      Optional config file (the identity entry, imports search paths, webui projects); default: TACHY_CONFIG, then config.pravic in the current directory, then ~/.config/tachy/config.pravic
+        --identity PATH    Age identity for { age = ... } inventory vars and file sources marked age = true; supersedes the config file's identity entry. Default: that entry, then AGE_IDENTITY (path or key material), then ~/.ssh/id_ed25519 (age accepts ssh keys)
+        --color            Force colored statuses even when stdout is not a tty (forwarded to the run on each host)
+        --address ADDR     Webui/webdoc only: address to bind (default 127.0.0.1; an IP — use 0.0.0.0 to listen on every interface)
+        --port PORT        Webui/webdoc only: port to listen on (default: a random port between 10000 and 65534; 0 does the same)
     -h, --help             Show this help
 
-  The full manual — selection syntax, projects, the web console and
-  web docs, the inventory and tasks file reference, variables and the
-  execution order — is one command away: "tachy man".
+
+  The full manual — selection syntax, projects, the web console and web docs, the inventory and tasks file reference, variables and the execution order — is one command away: "tachy man".
 ```
 
 This is the whole of `tachy help` (and `--help`). The reference that
@@ -402,6 +374,7 @@ A tasks file is a sequence of statements, one per line (all optional):
 | `group NAME { ... }` | name | `state` (default `present`; `absent` removes). |
 | `user NAME { ... }` | name | `group` (primary; default: a group named after the user), `groups` (supplementary, additive only), `shell` (default `/bin/sh` at creation), `comment`, `create_home` (default `true`, creation only), `home` (default `/home/<name>` at creation), `state` (default `present`; `absent` removes), `remove_home` (default `false`, with `state = "absent"`). |
 | `ensure "name" { ... }` | name | `run` (required), `exit_status` (integer, `{ not = N }`, or `{ cond = "OP N" }`; default 0), `output` (string, `{ contains = "..." }`, or `{ matches = "..." }`) |
+| `http URL { ... }` | url | `type` (any HTTP method, default `GET`), `headers` (array of `"Name=Value"`), `data` (body, sent verbatim), `code` (expected status, default `200`), `output` (body assertion, `ensure`'s shapes), `timeout` (seconds, default `10`). Plain `http://` only; queried by tachy itself (no curl) — on the host in bundled runs, from the controller with `--direct`; a check by nature: runs in check mode, never `changed`. |
 | `apply "path" { bindings }` | path | Composes another tasks file **at the statement's position**, carrying its own variables: the binding's entry keys, or the same grouped in a `vars { ... }` sub-block. A path naming an existing directory uses its `main.pravic`, like a directory CLI argument. |
 | `import "path"` | path | Bundled mode only: an external file or directory (absolute, or relative to the defining tasks file) copied into the bundle next to the project copy under its base name — `import "tasks/install_gogs"` → `project/install_gogs` — so `src`/`template`/`run` can use it on the host. No parameters — the braces are optional; destinations colliding with project content or another import are load-time errors; a path that does not resolve relative to its defining file is searched in the `config.pravic` `imports` paths. An apply naming the import destination itself works too (`apply "neovim" { }` → its `main.pravic`); entries under a destination that are missing locally defer to the host (the inner run composes them, bindings included; a directory entry resolves to its `main.pravic`, as everywhere). |
 
@@ -496,6 +469,16 @@ Idempotency semantics:
   The command runs with the defining tasks file's directory as its
   working directory, so relative paths (scripts, data files) resolve
   next to the file that declares the job.
+- `http`: submits one HTTP request and checks the answer — `type` is any
+  HTTP method (default `GET`), `headers` an array of `"Name=Value"`
+  strings, `data` the body sent verbatim, `code` the expected status
+  (default `200`), `output` the body assertion (the same shapes
+  `ensure`'s `output` accepts) and `timeout` the whole-query budget in
+  seconds (default `10`). Plain `http://` only; the query is issued by
+  tachy itself (no curl on the host) — on the managed host in bundled
+  runs, from the controller with `--direct`. Like `ensure` these jobs
+  are checks by nature: they run even in check mode and never report
+  `changed`.
 
 Execution order is the source order: there is no fixed directive order
 and no sorting — jobs execute in the order their statements appear, and
@@ -725,6 +708,7 @@ source/tachy/
   project.d                  bundles: project + binary + generated inventory
   transport.d                Transport interface, local/ssh, shell helpers
   runner.d                   orchestration: bundled and direct modes
+  http.d                     minimal HTTP/1.1 client (the http directive)
   generate.d                 the generate command: age keys, sample files
   config.d                   optional config.pravic: identity, imports
                              search paths, webui projects
@@ -735,6 +719,7 @@ source/tachy/
     accounts.d               groups / users (shadow-utils, getent probes)
     packagemod.d             package installs/removals (apt via dpkg-query)
     ensuremod.d               shell command ensures (exit status / output)
+    httpmod.d                http checks (status / body assertions)
     composemod.d             Docker Compose stacks (config-hash probes)
     fake.d                   scripted transport (unit tests only)
 ```

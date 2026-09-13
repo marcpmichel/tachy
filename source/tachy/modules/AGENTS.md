@@ -29,17 +29,21 @@ This doc owns module-level contracts.
   dir: read-only probes — container runtime/health via `docker ps`/
   `docker inspect` labels, config drift via `docker compose config
   --hash` vs the container's config-hash label — then `up --detach`/
-  `stop`/`down` with the pull/build/recreate/wait policy flags)
+  `stop`/`down` with the pull/build/recreate/wait policy flags),
+  `httpmod` (the `http` directive: one request through the in-process
+  client in `tachy.http` — no transport, no curl — asserting on the
+  status and body; a check by nature, so it runs even in check mode
+  and never reports `changed`)
 - Directives → module names are wired in `models.d` (`addJob` over the
-  ordered Pravic statements): keys are targets, `path`/`dir`/`name` is
-  injected, duplicate/cycle detection comes free — modules never
+  ordered Pravic statements): keys are targets, `path`/`dir`/`url`/`name`
+  is injected, duplicate/cycle detection comes free — modules never
   re-implement those
 - Idempotence is probe-then-act: inspect current state read-only
   (stat/getent/dpkg-query/systemctl), act only on drift, report
   `changed` truthfully; `ok` when already conformant
 - Check mode: probes run, mutations go through `mustRun` (suppressed in
-  check mode, i.e. the `check` command); `ensure`-directive jobs are
-  checks by nature and run even in check mode, never reporting
+  check mode, i.e. the `check` command); `ensure`- and `http`-directive
+  jobs are checks by nature and run even in check mode, never reporting
   `changed`
 - All shell input through `shQuote`; multi-step remote changes prefer
   one command over dribble; errors must name what failed and why
@@ -49,6 +53,11 @@ This doc owns module-level contracts.
 
 - Relative paths (`src`, `template`, execute `run`) resolve against the
   defining tasks file's directory (`TaskContext.tasksFileDir`)
+- `httpmod` never touches the transport: it queries through
+  `tachy.http` from the process running the job (the managed host in
+  bundled runs, the controller for `--direct`), so its unittests run
+  against the in-process listener in `tests/http.d` (`OneShotServer`)
+  instead of the scripted fake transport
 - File content compares by sha256 when possible (only the hash crosses
   the transport); `src` copies bytes, not text
 - New expectation/param shapes are validated at load time for early
@@ -56,11 +65,12 @@ This doc owns module-level contracts.
 
 # Verification
 
-- Every module carries unittests against the scripted fake transport
-  (creation, drift repair, removal, idempotence, every error path)
+- Every module carries unittests covering creation, drift repair,
+  removal, idempotence and every error path — against the scripted
+  fake transport, or against the in-process listener for `httpmod`
 - End-to-end on the `testing.internal` VM over ssh for anything
   touching real system state; leave the VM as found
-- `dub build` compiles; `dub test` runs all module unittests (must pass, 19 modules)
+- `dub build` compiles; `dub test` runs all module unittests (must pass)
 
 # Child DOX Index
 (none — individual `.d` files are not durable boundaries)

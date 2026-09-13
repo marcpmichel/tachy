@@ -1,10 +1,4 @@
-The parent directory of a tasks file is its project.  For every
-selected host, tachy copies the project (and the tachy binary itself)
-to a temporary directory on the host and runs the copied binary
-there, where it applies the copied tasks file over a local connection.
-A project must be self-contained: applies and file src paths are
-resolved inside the copied project; the import statement is the
-sanctioned way to pull in files from outside.  Bundles are removed
-after the run (--keep-bundle leaves them in place for inspection);
-check mode still deploys and removes a bundle but manages nothing.
-Controller and hosts must be linux/amd64 for now.
+The parent directory of a tasks file is its project.  
+For every selected host, tachy copies the project (and the tachy binary itself) to a temporary directory on the host and runs the copied binary there, where it applies the copied tasks file over a local connection. 
+A project must be self-contained: applies and file src paths are resolved inside the copied project; the import statement is the sanctioned way to pull in files from outside.
+Bundles are removed after the run (--keep-bundle leaves them in place for inspection); check mode still deploys and removes a bundle but manages nothing. Controller and hosts must be linux/amd64 for now.

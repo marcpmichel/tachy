@@ -1,10 +1,5 @@
-Every task is an idempotent "ensure" job; running a tasks file twice
-applies changes only the first time.
+Every task is an idempotent "ensure" job; running a tasks file twice applies changes only the first time.
 
-A tasks file argument may be a directory: its "main.pravic" is then the
-entry point. With no tasks file at all, "main.pravic" in the current
-directory is used.
+A tasks file argument may be a directory: its "main.pravic" is then the entry point. With no tasks file at all, "main.pravic" in the current directory is used.
 
-<selection> is a comma-separated list of host names and tags; a tag is
-written as @tag.  The special selector "all" matches every host.
-Examples: "web1", "web1,web2", "@web,@db", "@web,buildbox", "all"
+<selection> is a comma-separated list of host names and tags; a tag is written as @tag.  The special selector "all" matches every host. Examples: "web1", "web1,web2", "@web,@db", "@web,buildbox", "all"

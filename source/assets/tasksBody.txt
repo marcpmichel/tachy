@@ -1,15 +1,20 @@
-  file /etc/app/app.conf {            # state (default file; link/absent),
-      content = "port = {{ http_port }}"   # content is templated; src
-      mode = "0644"                    # copies verbatim, template renders,
-      age = true                       # age = true marks src as
-  }                                   # age-encrypted: decrypted on the
-                                      # controller, deployed byte-exact;
-                                      # line/block ensure a line or a
-                                      # contiguous block of lines is
-                                      # present; mode (octal), owner, group
+  file /etc/app/app.conf {
+      state = "file"                  # state (default file; link/absent),
+      content = "port = {{ http_port }}"   # content is templated; 
+      # src = "files/config"          # src copies verbatim
+      # age = true                    # age = true marks src as age-encrypted: decrypted on the controller, deployed byte-exact
+      # template = "templates/config" # template renders (interpolates variables)
+      # line = "line in file"         # line ensures a line is present
+      # block = """                   # block ensures a contiguous block of lines is present
+      some  
+      lines
+      """
+      # mode = "0644"                 # mode (octal), 
+      # owner = "user"                # owner
+      # group = "group"               # group
 
   directory /etc/app {                # state (default directory; absent),
-      mode = "0755"                    # mode, owner, group
+      mode = "0755"                   # mode, owner, group
   }
 
   package apt:curl {                  # key is "<manager>:<name>" (only
@@ -19,59 +24,58 @@
                                       # (epoch-qualified, as dpkg reports
                                       # it).  present = false removes
 
-  group epices                        # no attributes: the braces are
-                                      # optional; state (default present;
-                                      # absent removes)
+  group epices                        # no attributes: the braces are optional; 
+                                      # state (default present; absent removes)
 
-  user deploy {                       # shadow-utils accounts; group
-      group = "epices"                # defaults to a group named after
-      groups = ["docker"]             # the user, groups only ADD
-      shell = "/bin/bash"             # memberships, shell to /bin/sh at
-      comment = "epices user"         # creation, create_home to true;
-      home = "/home/epices"           # state = "absent" removes
-  }                                   # (remove_home = true also deletes
-                                      # the home directory)
+  user deploy {                       # shadow-utils accounts; 
+      group = "epices"                # group defaults to a group named after the user
+      groups = ["docker"]             # groups only ADD memberships
+      shell = "/bin/bash"             # shell to /bin/sh at creation
+      comment = "epices user"         # GECOS comment
+      home = "/home/epices"           # home directory, defaults to "/home/<username>" (create_home to true)
+                                      # state = "absent" removes
+  }                                   # with "remove_home = true" also deletes the home directory)
 
-  service app {                       # state (started/stopped/restarted/
-      state = "started"               # reloaded/enabled), enabled =
-      enabled = true                  # true; src/template manage the
-  }                                   # unit file itself:
+  service app {                       # 
+      state = "started"               # state (started/stopped/restarted/reloaded/enabled), 
+      enabled = true                  # enabled =true; 
+  }
+
+  # src/template manage the unit file itself
   service my_service {
-      template = "my.service.tmpl"    # template renders it with the host
-      vars { user = "www" }           # scope plus the entry's local
-      state = "started"               # vars { ... } (template only);
-  }                                   # src copies a file verbatim
+      template = "my.service.tmpl"    # template renders it with the host scope
+      vars { user = "www" }           # with optional entry's local vars
+      state = "started"               # ensure state
+  }                                   # src instead of template copies a file verbatim
 
-  compose /srv/app {                  # Docker Compose stacks, keyed by
-      file = "compose.yml"            # project dir (absolute); file
-      state = "running"               # names the compose file (relative:
-  }                                   # inside dir); project overrides
-                                      # the derived name (lowercased dir
-                                      # basename); services = ["web"]
-                                      # selects a subset (default: every
-                                      # service the file enables); state:
-                                      # running (default) | stopped |
-                                      # absent — running checks each
-                                      # selected service's runtime, health
-                                      # and compose config-hash label
-                                      # before acting; pull/build/recreate:
-                                      # missing/auto/never; wait (capped by
-                                      # wait_timeout) waits after up;
-                                      # timeout is the stop/shutdown
-                                      # timeout in seconds; remove_orphans/
-                                      # remove_volumes/remove_images for
-                                      # stopped/absent teardowns
+  compose /srv/app {                  # Docker Compose stacks, keyed by project dir (absolute) 
+      file = "compose.yml"            # - file names the compose file (relative: inside dir)                            
+      state = "running"               # - project overrides the derived name (lowercased dir basename)                  
+                                      # - services = ["web"] selects a subset (default: every # service the file enables) 
+                                      # - state: running (default) | stopped | absent running checks each selected service's runtime, health 
+                                      # and compose config-hash label before acting; 
+                                      # - pull/build/recreate: missing/auto/never; 
+                                      # - wait (capped by wait_timeout) waits after up
+                                      # - timeout is the stop/shutdown timeout in seconds;
+                                      # - remove_orphans/remove_volumes/remove_images for stopped/absent teardowns
 
   ensure "is debian" {                # run a shell command and check it
       run = "source /etc/os-release; echo $ID"
                                       # (runs in the defining file's dir)
       exit_status = 0                 # int | { not = N } | { cond = "< 1" }
-      output = "debian"               # string | { contains = "deb" }
-  }                                   # | { matches = "^debian.*$" }
+      output = "debian"               # string | { contains = "deb" } | { matches = "^debian.*$" }
+  }
 
-  Plural directives also take a group form; path keys need no quotes
-  (quotes are for spaces, braces and templates); and an instruction
-  with no attributes may omit the braces:
+  http http://localhost:8080/health { # submit a query and test the answer (a check, like ensure, runs even in check mode, never changes)
+      type = "GET"                    # type is any HTTP method (default GET)
+      headers = ["X-Api-Key=k"]       # headers are "Name=Value" strings
+      data = "{\"x\": 1}"             # data is the body sent verbatim
+      code = 200                      # code (default 200) tests the status
+      output = { contains = "ok" }    # output the body (ensure's shapes)
+      timeout = 10                    # timeout bounds the whole query (default 10s).
+                                      # Plain http only, queried by tachy itself (no curl needed)
+
+  Plural directives also take a group form; path keys need no quotes (quotes are for spaces, braces and templates); and an instruction with no attributes may omit the braces:
   files {
       /etc/hosts { owner = "root", mode = "0644" }
   }

@@ -1,9 +1,18 @@
-Serves the documentation as a small web site on a local web server
-(a random port between 10000 and 65534; the http://127.0.0.1:<port>
-URL is printed — the same --address/--port options as the webui):
-one page per section, with a left menu to pick one.  The pages are
-generated from the DOCUMENTATION.md embedded in the binary at compile
-time, so they always document the binary being run.  The site shares
-the web console's stylesheet — dark, like the webui.  The server is
-read-only.  On startup tachy tries to open the page in the local
-browser (gio open — best-effort; the URL is printed regardless).
+Serves the documentation as a small web site on a local web server.
+
+The URL http://127.0.0.1:<port> URL is printed.
+
+By default, a random port between 10000 and 65534 is used. 
+Address and port can be set using the --address/--port options.
+
+One page per section, with a left menu to pick one. 
+
+The pages are generated from the DOCUMENTATION.md embedded in the binary at compile time, so they always document the binary being run.
+
+The site shares the web console's stylesheet — dark, like the webui. 
+
+The server is read-only. 
+
+On startup tachy tries to open the page in the local browser (gio open — best-effort; the URL is printed regardless).
+
+

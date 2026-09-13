@@ -264,3 +264,36 @@ unittest
     assert(optString(t, "missing", "ctx", "dflt") == "dflt");
     assertThrown!(TachyError)(optString(t, "a", "ctx", "dflt")); // integer, not string
 }
+
+@("http directive keyword: quoted and bare URL keys, guarded boundary")
+unittest
+{
+    import std.algorithm.searching : canFind, startsWith;
+
+    auto stmts = parseStmts("http \"http://localhost/h\" { code = 200 }\n");
+    assert(stmts.length == 1);
+    assert(stmts[0].kind == "http");
+    assert(stmts[0].key == "http://localhost/h");
+    assert(stmts[0].value.table_["code"].integer_ == 200);
+
+    // ':' '/' '.' '.' are key characters: URLs need no quotes
+    stmts = parseStmts("http http://127.0.0.1:8080/healthz { }\n");
+    assert(stmts[0].kind == "http" && stmts[0].key == "http://127.0.0.1:8080/healthz");
+
+    // the keyword guard: `https://...` is one unknown directive, not
+    // `http` followed by a key
+    string msg;
+    try
+    {
+        parseStmts("https://localhost/x { }\n");
+        assert(false);
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(canFind(msg, "unknown directive"), msg);
+    assert(canFind(msg, "https"), msg);
+
+    // braceless when there are no attributes at all
+    stmts = parseStmts("http http://localhost/ping\n");
+    assert(stmts[0].kind == "http" && stmts[0].key == "http://localhost/ping");
+}

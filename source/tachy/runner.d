@@ -731,9 +731,10 @@ private string describeHost(in HostConfig h) @safe pure
 private string defaultLabel(string kind, in Val[string] params) @safe pure
 {
     // files and directories key their params by "path", compose by the
-    // injected "dir", everything else by the injected "name".
+    // injected "dir", http by the injected "url", everything else by
+    // the injected "name".
     const string key = kind.among!("file", "directory") ? "path"
-        : kind == "compose" ? "dir" : "name";
+        : kind == "compose" ? "dir" : kind == "http" ? "url" : "name";
     auto pv = key in params;
     if (pv !is null && (*pv).kind == Val.Kind.string_)
         return kind ~ " " ~ (*pv).str_;

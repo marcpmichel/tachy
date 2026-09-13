@@ -26,8 +26,9 @@ module tachy.models;
  *     compose DIR        Docker Compose stacks: file, project, services,
  *                        state (running/stopped/absent), pull, build,
  *                        recreate, wait, wait_timeout, timeout,
- *                        remove_orphans, remove_volumes, remove_images
  *     ensure NAME        run (required), exit_status, output
+ *     http URL           type (default "GET"), headers, data, code
+ *                        (default 200), output, timeout
  *
  * `apply "path" { bindings }` composes another tasks file **at the
  * statement's position**, carrying its own variables; a `vars`
@@ -118,7 +119,8 @@ private Val[string] loadInto(string path, Val[string] outerVars,
             addImport(loaded, path, projectDir, importLandings, config, s);
         else if (s.kind != "files" && s.kind != "directories" && s.kind != "packages"
                 && s.kind != "groups" && s.kind != "users" && s.kind != "services"
-                && s.kind != "compose" && s.kind != "ensure" && s.kind != "apply")
+                && s.kind != "compose" && s.kind != "ensure" && s.kind != "apply"
+                && s.kind != "http")
             throw new TachyError(path ~ ": line " ~ text(s.line) ~ ": '"
                 ~ s.kind ~ "' is not valid in a tasks file");
     }
@@ -282,16 +284,18 @@ private void addJob(ref LoadedTasks loaded, ref string[][string] seen,
         case "services": moduleName = "service"; break;
         case "compose": moduleName = "compose"; break;
         case "ensure": moduleName = "ensure"; break;
+        case "http": moduleName = "http"; break;
         default: assert(0, "not a job statement: " ~ s.kind);
     }
 
     // The statement key injects the target: "path" for files, "dir" for
-    // compose stacks, "name" for everything else.
+    // compose stacks, "url" for http checks, "name" for everything else.
     string key, noun;
     switch (moduleName)
     {
         case "file": key = "path"; noun = "path"; break;
         case "compose": key = "dir"; noun = "directory"; break;
+        case "http": key = "url"; noun = "url"; break;
         default: key = noun = "name"; break;
     }
     if (!target.length)
@@ -347,6 +351,7 @@ private string kindFor(string kind) @safe pure nothrow
         case "services": return "service";
         case "compose": return "compose";
         case "ensure": return "ensure";
+        case "http": return "http";
         default: assert(0, "unknown kind " ~ kind);
     }
 }
