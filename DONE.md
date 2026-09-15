@@ -1877,3 +1877,36 @@
      still resolve no markers (they merge into the child scope as
      plain values) — same bug class, but changing it alters
      composition semantics, so it awaits an explicit call.
+
+58. fix: same marker hole for `apply` bindings — `{ run }` (and
+    `{ env }`) inside an apply's binding variables were merged into
+    the child scope as plain tables, so `{{ system.kernel }}` from
+    `apply mytask { vars = { system = { kernel = { run = "uname -r" }
+    } } }` failed with "variable 'system.kernel' is a table and cannot
+    be substituted into a string" (user report from chat; the gap was
+    flagged under item 57).
+   - `models.d` `processApply` runs the unwrapped binding through
+     `resolveEnvVars(binding, path)` at load — after the structural
+     checks (vars sub-table unwrap, the both-ways ambiguity error), so
+     a failed `{ run }` command or an unset `{ env }` without a
+     default fails the load before the composed file is read. Both
+     binding spellings (direct entry keys, `vars { ... }` sub-block)
+     resolve; nested tables are walked; `{ age }` is rejected
+     (tasks-file bindings hold no identity); resolved values flow
+     forward to statements after the apply like any contributed var.
+     Deferred applies (under an import landing) re-resolve on the
+     host, where the inner run re-parses the defining file.
+   - Tests (tests/models.d): the reported nested `vars = { system =
+     { kernel = { run } } }` shape; direct-key bindings resolve and
+     flow forward to later statements; `{ env = "PATH" }` binding;
+     `{ age }` rejected; `{ run = "exit 9" }` fails the load naming
+     `vars.k` and the status. dub test: 158 passed, 0 failed.
+   - E2E: bundled local run of the reporter's exact snippet (apply
+     mytask with a `uname -r` run marker, `{{ system.kernel }}` in a
+     template) — renders the kernel, ensure verifies it. The first
+     attempt reproduced the user's error verbatim by accident: the
+     stale binary (built before the fix) shipped in the bundle — a
+     reminder that bundled mode copies the running executable.
+   - Docs: DOCUMENTATION.md apply section (marker paragraph),
+     README apply row + composition prose, man compositionBody; DOX:
+     source/AGENTS.md models.d bullet extended to cover processApply.

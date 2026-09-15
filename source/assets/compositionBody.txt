@@ -7,6 +7,8 @@ A tasks file may compose others; an apply composes its file at the statement's p
   apply "files.pravic" {
       vars { three = "three" }         # or grouped under 'vars'
   }                                    # (the same thing)
+                                       # bindings resolve { env }/{ run } markers
+                                       # at load, like every other var
 
   An apply naming an existing directory uses its main.pravic, like a directory argument on the command line.
 

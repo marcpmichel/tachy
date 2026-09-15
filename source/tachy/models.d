@@ -237,6 +237,16 @@ private void processApply(in PracticStmt s, string path,
         binding = deepMerge(binding, nested);
     }
 
+    // The binding resolves its markers like every other var of the
+    // defining file: at load, in the process loading it, paths relative
+    // to it — after the structural checks above (unwrapping, the
+    // both-ways ambiguity), so a failed { run } command or an unset
+    // { env } without a default fails the load before the child file
+    // is even read.  { age } is rejected: tasks-file vars hold no
+    // identity.  Deferred applies re-resolve on the host, where the
+    // inner run re-parses this file.
+    binding = resolveEnvVars(binding, path);
+
     string resolved = s.key.dup;
     if (!isAbsolute(resolved))
         resolved = buildNormalizedPath(

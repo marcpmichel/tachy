@@ -381,7 +381,7 @@ A tasks file is a sequence of statements, one per line (all optional):
 | `user NAME { ... }` | name | `group` (primary; default: a group named after the user), `groups` (supplementary, additive only), `shell` (default `/bin/sh` at creation), `comment`, `create_home` (default `true`, creation only), `home` (default `/home/<name>` at creation), `state` (default `present`; `absent` removes), `remove_home` (default `false`, with `state = "absent"`). |
 | `ensure "name" { ... }` | name | `run` (required), `exit_status` (integer, `{ not = N }`, or `{ cond = "OP N" }`; default 0), `output` (string, `{ contains = "..." }`, or `{ matches = "..." }`) |
 | `http URL { ... }` | url | `type` (any HTTP method, default `GET`), `headers` (array of `"Name=Value"`), `data` (body, sent verbatim), `code` (expected status, default `200`), `output` (body assertion, `ensure`'s shapes), `timeout` (seconds, default `10`). Plain `http://` only; queried by tachy itself (no curl) — on the host in bundled runs, from the controller with `--direct`; a check by nature: runs in check mode, never `changed`. |
-| `apply "path" { bindings }` | path | Composes another tasks file **at the statement's position**, carrying its own variables: the binding's entry keys, or the same grouped in a `vars { ... }` sub-block. A path naming an existing directory uses its `main.pravic`, like a directory CLI argument. |
+| `apply "path" { bindings }` | path | Composes another tasks file **at the statement's position**, carrying its own variables: the binding's entry keys, or the same grouped in a `vars { ... }` sub-block. Bindings resolve `{ env }`/`{ run }` markers at load like every other var. A path naming an existing directory uses its `main.pravic`, like a directory CLI argument. |
 | `import "path"` | path | Bundled mode only: an external file or directory (absolute, or relative to the defining tasks file) copied into the bundle next to the project copy under its base name — `import "tasks/install_gogs"` → `project/install_gogs` — so `src`/`template`/`run` can use it on the host. No parameters — the braces are optional; destinations colliding with project content or another import are load-time errors; a path that does not resolve relative to its defining file is searched in the `config.pravic` `imports` paths. An apply naming the import destination itself works too (`apply "neovim" { }` → its `main.pravic`); entries under a destination that are missing locally defer to the host (the inner run composes them, bindings included; a directory entry resolves to its `main.pravic`, as everywhere). |
 
 Both forms of a directive are equivalent — the same entry, spelled once
@@ -535,6 +535,8 @@ apply "files.pravic" {
 ```
 
 Binding the same variable both directly and under `vars` is an error.
+Bindings resolve their `{ env }`/`{ run }` markers at load like every
+other var of the defining file, before the composed file is read.
 Every string in job parameters (including statement keys) is rendered
 before execution; `{{ expr }}` accepts dotted paths into nested tables.
 Unknown variables and reference cycles are hard errors.

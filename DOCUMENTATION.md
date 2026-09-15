@@ -414,6 +414,13 @@ argument on the command line.
 | `key = "value"` (entry keys) | The binding for the composed file. |
 | `vars { ... }` sub-block | Same binding, grouped. Mixing both for one variable is an ambiguity error. |
 
+Bindings resolve their markers at load like every other var of the
+defining file: `{ env }` reads the loading process's environment,
+`{ run }` captures its command's output (nested tables walked —
+`vars { system = { kernel = { run = "uname -r" } } }` works), `{ age }`
+is rejected, and a failing command fails the load before the composed
+file is read.
+
 ### `import` — external files in the bundle
 
 Bundled mode only. An `import` statement names a file or directory

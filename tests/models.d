@@ -200,6 +200,66 @@ apply "ap_files.pravic" { vars = "nope" }
 `)));
 }
 
+@("apply bindings resolve { run } / { env } markers at load")
+unittest
+{
+import std.algorithm.searching : canFind;
+
+// the reported shape: a run marker nested in the vars sub-table
+writeTemp("ab_child.pravic", `
+file /tmp/ab.conf { content = "{{ system.kernel }}" }
+`);
+auto loaded = loadTasksFile(writeTemp("ab_main.pravic", `
+apply "ab_child.pravic" {
+    vars = { system = { kernel = { run = "echo 6.1.0-tachy" } } }
+}
+`));
+assert(loaded.jobs[0].overlay["system"].table_["kernel"].str_
+    == "6.1.0-tachy", "run marker resolved in the binding, nested walked");
+
+// direct entry-key bindings resolve too, and the resolved values flow
+// forward to statements after the apply
+loaded = loadTasksFile(writeTemp("ab_direct.pravic", `
+apply "ab_child.pravic" { system = { kernel = { run = "echo direct" } } }
+
+file /tmp/after { content = "{{ system.kernel }}" }
+`));
+assert(loaded.jobs[0].overlay["system"].table_["kernel"].str_ == "direct");
+assert(loaded.jobs[1].overlay["system"].table_["kernel"].str_ == "direct");
+
+// env markers read the loading process's environment
+loaded = loadTasksFile(writeTemp("ab_env.pravic", `
+apply "ab_child.pravic" { path_var = { env = "PATH" } }
+`));
+assert(loaded.jobs[0].overlay["path_var"].str_.length > 0);
+
+// age markers are rejected: tasks-file bindings hold no identity
+string msg;
+try
+{
+    loadTasksFile(writeTemp("ab_age.pravic", `
+apply "ab_child.pravic" { s = { age = "f.age" } }
+`));
+    assert(false, "expected TachyError");
+}
+catch (TachyError e)
+    msg = e.msg;
+assert(canFind(msg, "only supported in inventory"), msg);
+
+// a failing command fails the load before the child is read
+try
+{
+    loadTasksFile(writeTemp("ab_fail.pravic", `
+apply "ab_child.pravic" { k = { run = "exit 9" } }
+`));
+    assert(false, "expected TachyError");
+}
+catch (TachyError e)
+    msg = e.msg;
+assert(canFind(msg, "ab_fail.pravic: vars.k"), msg);
+assert(canFind(msg, "exit status 9"), msg);
+}
+
 @("applies: position, var layering, path resolution")
 unittest
 {

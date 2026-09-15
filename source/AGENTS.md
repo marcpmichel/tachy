@@ -48,9 +48,9 @@ This doc owns the source tree's structure and conventions;
     and cycle detection, `import` collection with config search
     paths (bundled-mode external files; applies under an import
     landing missing locally defer to the host); `addJob` resolves the
-    entry-local `vars` context of `file`/`service` through
-    resolveEnvVars at load, so its markers behave like every other
-    var of the file
+    entry-local `vars` context of `file`/`service` and `processApply`
+    the apply bindings through resolveEnvVars at load, so their
+    markers behave like every other var of the file
   - `events.d` — execution events (producer/consumer split): `JobEvent` + builders, `foldCounters`, `TextRenderer` (the one renderer for both modes), NDJSON `eventLine`/`parseEventLine` for the stream between inner runs and the controller
   - `vars.d` — variable scopes, `{ env, default, from }` resolution
     (environment or dotenv file), `{ run, stream }` command capture
