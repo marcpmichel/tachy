@@ -1847,3 +1847,33 @@
      row), README.md file prose bullet, man tasksBody example tower;
      DOX: modules/AGENTS.md filemod bullet. LANGUAGE.md unchanged —
      no grammar change (an entry's `vars` is an ordinary table).
+
+57. fix: `{ run }` (and `{ env }`) markers inside a `file`/`service`
+    entry's local `vars` were never resolved — the marker table reached
+    the template renderer as data and `{{ myservice.host }}` failed
+    with "variable 'myservice.host' is a table and cannot be
+    substituted into a string" (user report from chat).
+   - `models.d` `addJob` now runs the entry-local `vars` param through
+     `resolveEnvVars` at load — the same call, context and time as the
+     file's own `var`/`vars` statements: `{ env }` reads the loading
+     process's environment, `{ run }` captures its command's output
+     (nested tables walked, so `vars { myservice = { host = { run =
+     "hostname" } } }` works), `{ age }` is rejected (tasks-file vars
+     hold no identity), a failing command is a load-time error naming
+     file and variable. Runs after `validateModuleParams`, so
+     structural errors (vars without template, non-table) surface
+     before any command executes.
+   - Tests (tests/models.d): the reported nested-run shape resolves at
+     load; `{ env = "PATH" }` resolves in a `service` entry's vars;
+     `{ age }` rejected; failing `{ run = "exit 4" }` is a load error
+     naming `vars.h` and the status. dub test: 157 passed, 0 failed.
+   - E2E: bundled local run of the reporter's exact shape —
+     `vars = { myservice = { host = { run = "hostname" } } }` with
+     `{{ myservice.host }}` in the template rendered the hostname and
+     an `ensure` verified it.
+   - Docs: DOCUMENTATION.md `file`/`service` `vars` rows, README file
+     bullet + service row, man tasksBody; DOX: source/AGENTS.md
+     models.d bullet. Note left for the user: `apply` binding entries
+     still resolve no markers (they merge into the child scope as
+     plain values) — same bug class, but changing it alters
+     composition semantics, so it awaits an explicit call.

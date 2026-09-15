@@ -5,7 +5,8 @@
       # age = true                    # age = true marks src as age-encrypted: decrypted on the controller, deployed byte-exact
       # template = "templates/config" # template renders (interpolates variables)
       # vars { env = "prod" }          # vars: local template context, wins over
-      #                                  # the host scope (with template only)
+      #                                  # the host scope (with template only);
+      #                                  # { env }/{ run } markers resolve at load
       # line = "line in file"         # line ensures a line is present
       # block = """                   # block ensures a contiguous block of lines is present
       some  

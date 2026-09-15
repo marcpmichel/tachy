@@ -313,6 +313,20 @@ private void addJob(ref LoadedTasks loaded, ref string[][string] seen,
         params["state"] = Val(s.kind == "files" ? "file" : "directory");
 
     validateModuleParams(moduleName, params, ctx);
+
+    // An entry's local `vars` (the template context of `file` and
+    // `service`) resolves its markers exactly like every other var of
+    // the file: at load, in the process loading it — `{ env }` reads
+    // that environment, `{ run }` captures that command's output, and
+    // `{ age }` is rejected (tasks-file vars hold no identity).  After
+    // validation, so structural errors surface before any command runs.
+    if (auto v = "vars" in params)
+    {
+        Val resolved;
+        resolved.kind = Val.Kind.table_;
+        resolved.table_ = resolveEnvVars((*v).table_, path);
+        params["vars"] = resolved;
+    }
     if (s.kind == "directories")
     {
         auto st = optString(params, "state", ctx);

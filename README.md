@@ -374,7 +374,7 @@ A tasks file is a sequence of statements, one per line (all optional):
 |---|---|---|
 | `var NAME = value` / `vars { ... }` | — | Variables for this file's jobs and everything it composes. Entries may be `{ env = "NAME", default = "...", from = ".env" }` to read the environment of the process loading the file (the host, in bundled runs), a dotenv file relative to it, or `{ run = "cmd" }` to capture a command's output. |
 | `directory PATH { ... }` | path | `state` (default `directory`; also `absent`), `mode`, `owner`, `group` |
-| `service UNIT { ... }` | unit | `state` (`started`, `stopped`, `restarted`, `reloaded`, or `enabled` = ensure boot enablement only), `enabled` (bool), `src`/`template` (manage the unit file at `/etc/systemd/system/<unit>`: verbatim copy or rendered template; mutually exclusive), `vars` (local template context, with `template` only). |
+| `service UNIT { ... }` | unit | `state` (`started`, `stopped`, `restarted`, `reloaded`, or `enabled` = ensure boot enablement only), `enabled` (bool), `src`/`template` (manage the unit file at `/etc/systemd/system/<unit>`: verbatim copy or rendered template; mutually exclusive), `vars` (local template context, with `template` only; `{ env }`/`{ run }` markers resolve at load like every other var). |
 | `compose DIR { ... }` | dir | `file` (required; relative inside `dir`), `state` (`running` default, `stopped`, `absent`), `project` (default: lowercased `dir` basename), `services` (subset; default all), `pull`/`build`/`recreate` policies, `wait` (default `true`) + `wait_timeout`, `timeout`, `remove_orphans` (stopped), `remove_volumes`/`remove_images` (absent). Needs the docker CLI with the compose plugin on the host. |
 | `package "mgr:name" { ... }` | `"<manager>:<name>"` | `version` (default `latest`; an explicit version pins it exactly — epoch-qualified, as dpkg reports it), `present` (default `true`; `false` removes). Only `apt` keys are supported. |
 | `group NAME { ... }` | name | `state` (default `present`; `absent` removes). |
@@ -418,9 +418,10 @@ Idempotency semantics:
   the named file verbatim; `template` renders the named file's
   `{{ vars }}` with the host's scope first (an entry `vars { ... }`
   table is a local template context merged over it, local values
-  winning — with `template` only, like `service`). The three are
-  mutually exclusive sources. `state = "link"` makes the key a symlink
-  to `src`; `state = "absent"` removes whatever is there.
+  winning — with `template` only, like `service`; its `{ env }`/`{ run }`
+  markers resolve at load like every other var of the file). The three
+  are mutually exclusive sources. `state = "link"` makes the key a
+  symlink to `src`; `state = "absent"` removes whatever is there.
 - `file` + `line`/`block`: ensures a line (or a contiguous block of
   lines) is present — whole-line matches anywhere in the file; appends
   it (newline-terminated) only when missing. `line` and `block` are

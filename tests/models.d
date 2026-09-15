@@ -361,6 +361,59 @@ catch (TachyError e) { msg = e.msg; }
 assert(canFind(msg, "'vars' must be a table"), msg);
 }
 
+@("file/service local vars resolve { run } / { env } markers at load")
+unittest
+{
+import tachy.value : Val;
+import std.algorithm.searching : canFind;
+
+// the reported shape: a run marker nested inside the local vars table
+auto loaded = loadTasksFile(writeTemp("file_vars_run.pravic", `
+file /tmp/app.conf {
+    template = "app.tmpl"
+    vars { myservice = { host = { run = "echo myhost" } } }
+}
+`));
+auto v = loaded.jobs[0].params["vars"];
+assert(v.table_["myservice"].table_["host"].str_ == "myhost",
+    "run marker resolved at load, nested tables walked");
+
+// env markers read the loading process's environment, like file vars
+auto lsvc = loadTasksFile(writeTemp("svc_vars_env.pravic", `
+service app {
+    template = "app.service.tmpl"
+    vars { path_var = { env = "PATH" } }
+}
+`));
+assert(lsvc.jobs[0].params["vars"].table_["path_var"].str_.length > 0);
+
+// age markers are rejected (tasks-file vars hold no identity)
+string msg;
+try
+{
+    loadTasksFile(writeTemp("file_vars_age.pravic", `
+file /tmp/x { template = "t", vars { s = { age = "f.age" } } }
+`));
+    assert(false, "expected TachyError");
+}
+catch (TachyError e)
+    msg = e.msg;
+assert(canFind(msg, "only supported in inventory"), msg);
+
+// a failing command is a load-time error naming file and variable
+try
+{
+    loadTasksFile(writeTemp("file_vars_runfail.pravic", `
+file /tmp/x { template = "t", vars { h = { run = "exit 4" } } }
+`));
+    assert(false, "expected TachyError");
+}
+catch (TachyError e)
+    msg = e.msg;
+assert(canFind(msg, "file_vars_runfail.pravic: vars.h"), msg);
+assert(canFind(msg, "exit status 4"), msg);
+}
+
 @("tasks-file vars may read the environment")
 unittest
 {
