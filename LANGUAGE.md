@@ -287,6 +287,8 @@ ensure "answers on port 80" {          # sits between jobs: source order
 vars {
     db_fallback = { env = "DB_HOST", default = "localhost" },
     secret = { env = "SECRET_VAR", from = ".env" },
+    host_ip = { run = "hostname -I" },                    # a command's stdout
+    diag = { run = 'echo "error" >&2', stream = "stderr" },
 }
 
 import "../shared/install_gogs"

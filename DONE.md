@@ -1735,3 +1735,89 @@
      0 failed (the app.d tests pin help/man sections, the
      `version     show the version` column spacing and the
      help-stays-short boundary — all still hold).
+
+54. add a `run = "<command>"` attribute to var/vars that captures the
+    result of the command into the variable, plus a `stream` attribute
+    ("stdout" the default, or "stderr"); exclusive with `env` and `from`.
+   - `vars.d`: a third self-contained marker family in `resolveEnvVal`
+     — `{ run = "cmd" }` with an optional `stream = "stdout"|"stderr"`.
+     The command runs through `/bin/sh -c` in the declaring file's
+     directory (workDir of the child process; relative paths resolve
+     next to the declaring file, like `from` and `ensure`) and sees the
+     environment of the process loading the file — the same place and
+     time an `{ env }` entry resolves: on the controller for inventory
+     vars, on the host for tasks-file vars in bundled runs (whose
+     controller-side validation load executes it once on the controller
+     too — like env markers, which also read the controller's
+     environment during validation; documented, "keep it read-only or
+     idempotent", and it runs in check mode).
+   - `runCapture` (vars.d): pipeProcess with the chosen stream captured
+     and the other drained on a thread (the transport's runStreaming
+     pattern — more than a pipe buffer of the uncaptured stream cannot
+     deadlock the capture), stdin closed so commands see EOF. One
+     trailing newline (and a CR before it) stripped, like `{ age }`;
+     failing command → load-time error naming file, variable, command,
+     exit status and the other stream's first line; non-UTF-8 output →
+     error (binary does not fit variables). `run` combines with
+     nothing but `stream`: env/default/from and age combinations are
+     errors from their own branches (the age message now names `run`
+     too); a lone `{ stream = ... }` table stays plain data.
+   - Tests: tests/vars.d (capture, stream choice — the other stream is
+     never captured, final-newline-only stripping, declaring-dir cwd,
+     nested tables, failure message shape, UTF-8 rejection, all
+     combination errors, stream value/type checks, plain-data pass-
+     through) and tests/models.d (loadTasksFile resolves run vars into
+     the job scope, renderParams substitutes them into job params,
+     failing command and env-combination are load-time errors).
+     Repaired on the way: tests/app.d line 46 still pinned the retired
+     generic usage line ("tachy <command> ...") that item 53's helpHead
+     reflow replaced — the suite was red at HEAD (152 passed, 1
+     failed); now asserts the shipped "tachy apply|check ..." line.
+     README's "CLI reference" block had also silently drifted from
+     `tachy help` (item 53's regeneration lost to a later help edit);
+     regenerated from the binary and re-verified byte-identical.
+   - Docs: DOCUMENTATION.md (var/vars section: intro, examples, `{ run }`
+     table row, age exclusivity), README.md (inventory/tasks table rows,
+     variables section, secrets exclusivity), LANGUAGE.md (vars example)
+     and the man VARIABLES body (source/assets/variablesBody.txt).
+   - Verification: `dub build`; `dub test` 154 passed, 0 failed (was
+     152+1 failing at HEAD). End-to-end: bundled local run (apply +
+     check) with run vars templated into ensure assertions; the TODO's
+     exact example run on the testing.internal VM as controller
+     (`hostname -I` stdout, `echo "error" >&2` stderr; apply and check
+     green; VM and scratch cleaned); ssh-transport bundled run from the
+     Manjaro controller proving host-side resolution — an os-release
+     `run` var resolved to "debian" on the host, not the controller's
+     "manjaro" (and Manjaro's inetutils `hostname` having no `-I`
+     surfaced the documented load-time error path verbatim:
+     "main.pravic: vars.test_var: command 'hostname -I' failed with
+     exit status 64: hostname: invalid option -- 'I'").
+   - DOX: source/AGENTS.md vars.d bullet now lists the `{ run, stream }`
+     capture alongside env/age. Root, modules and syntax AGENTS.md
+     unchanged — no CLI, module or grammar-boundary change (run markers
+     are ordinary inline tables to the parser).
+
+55. add a mise task that publishes a new GitHub release with gh (user
+    request from chat).
+   - New `mise.toml` (first mise config in the repo) with one task,
+     `release`: reads the version from `source/assets/version` (the
+     same build date `tachy version` prints), refuses a dirty tree, an
+     empty version file or an already-existing `v<version>` tag, tags
+     the committed HEAD, pushes the tag to `origin`, then runs
+     `gh release create v<version> --verify-tag --title "tachy
+     <version>" --generate-notes`. The script block is a TOML literal
+     string (`'''`) so shell escapes pass through verbatim; sh-only
+     constructs.
+   - Verified: `mise tasks` lists it; on the real (dirty) tree it
+     aborts with "working tree is dirty — commit first"; full happy
+     path in a throwaway repo with a bare `origin` and a shimmed `gh`
+     — tag created and pushed, exact invocation
+     `gh release create v26.09.15 --verify-tag --title tachy 26.09.15
+     --generate-notes` captured, second run refuses the existing tag
+     (the unshimmed first attempt also proved the real gh runs: it
+     rejected the bare non-GitHub remote exactly as expected). `gh
+     auth status`: logged in as marcpmichel with repo scope, so the
+     real `mise run release` needs only a clean, committed tree.
+   - DOX: root AGENTS.md Project section now lists `mise.toml` and its
+     release contract. No doc-trio change: nothing user-visible in the
+     tachy binary changed.

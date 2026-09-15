@@ -16,6 +16,14 @@ Tasks-file vars reads the environment of the process that loads them (the host, 
 
 An unset variable without a default is an error. 
 
+A var of the form { run = "command" } is replaced by the command's captured output — stdout by default, or stderr with stream = "stderr". 
+
+The command runs through /bin/sh -c in the declaring file's directory, in the environment of the process loading the file — at the same place and time an { env } entry resolves (so a bundled tasks file runs it on the host; the controller's validation load runs it once there too). 
+
+One trailing newline is stripped; a failing command, or non-UTF-8 output, is a load-time error naming the variable, the command and the status. 
+
+'run' cannot combine with 'env', 'default', 'from' or 'age'.
+
 Inventory vars may also hold { age = "file.age" }: 
   replaced by that file's age-decrypted content (one trailing newline stripped), on the controller, 
   with the identity from --identity, the config identity entry, AGE_IDENTITY or ~/.ssh/id_ed25519. 

@@ -43,7 +43,7 @@ assert(parseCommand("help") == Cmd.help);
 {
     const h = helpText();
     assert(canFind(h, "tachy — Pravic-driven"));
-    assert(canFind(h, "tachy <command> [options] <selection> [<tasks.pravic>...]"));
+    assert(canFind(h, "tachy apply|check [options] <selection> [<tasks.pravic>...]"));
     assert(canFind(h, "Commands:"));
     assert(canFind(h, "Options:"));
     assert(canFind(h, "\"tachy man\""), "help must point at tachy man");

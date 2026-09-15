@@ -366,7 +366,7 @@ Variables for this file's jobs and everything it composes. Precedence:
 global `var` (inventory) < host vars < apply chain < this file's own
 statements. Entries may read the environment of the process loading the
 file — the controller for inventory vars, the host for tasks-file vars in
-bundled runs:
+bundled runs — or capture a command's output:
 
 ```pravic
 var domain = "example.org"
@@ -374,11 +374,14 @@ var port = 8080
 var db_host = { env = "DB_HOST" }                        # from the environment
 var db_fallback = { env = "DB_HOST", default = "localhost" }
 var secret_var = { env = "SECRET_VAR", from = ".env" }   # from a dotenv file
+var host_ip = { run = "hostname -I" }                    # from a command
+var diag = { run = 'echo "error" >&2', stream = "stderr" }
 ```
 
 | Entry | Description |
 |---|---|
-| `{ age = "path" }` | Inventory vars only: replaced by the age-decrypted content of `path` (relative to the inventory; one trailing newline stripped). Decrypted on the controller with the identity from `--identity PATH`, the config `identity` entry, `AGE_IDENTITY` (path or key material — stdin, never on disk) or `~/.ssh/id_ed25519`; cannot combine with `env`/`default`/`from`; plaintext must be valid UTF-8. |
+| `{ age = "path" }` | Inventory vars only: replaced by the age-decrypted content of `path` (relative to the inventory; one trailing newline stripped). Decrypted on the controller with the identity from `--identity PATH`, the config `identity` entry, `AGE_IDENTITY` (path or key material — stdin, never on disk) or `~/.ssh/id_ed25519`; cannot combine with `env`/`default`/`from`/`run`; plaintext must be valid UTF-8. |
+| `{ run = "command" }` | Replaced by the command's captured output. The command runs through `/bin/sh -c` in the declaring file's directory (relative paths resolve next to it, like `ensure` jobs) and sees the environment of the process loading the file — so in bundled runs the controller's validation load executes it once on the controller, and the on-host inner run resolves it again on the host; keep it read-only or idempotent, and it runs in check mode too. `stream` picks `"stdout"` (the default) or `"stderr"`. One trailing newline is stripped; a failing command, or output that is not valid UTF-8, is a load-time error naming the variable, the command and the status. Cannot combine with `env`/`default`/`from`/`age`. |
 | `{ env = "NAME" }` | Replaced by the environment variable `NAME`. Unset without a `default` is an error; set-but-empty resolves to the empty string. |
 | `{ env = "NAME", from = "path" }` | Same, but the value is looked up in the dotenv file at `path` (relative to the declaring file) instead of the process environment; the environment is not consulted. `KEY=VALUE` lines, `#` comments, blank lines, optional `export ` prefix, single-line quoted values (double quotes process `\n \t \r \f \b \" \' \\`, single quotes are literal); empty values count, later keys win, malformed lines are errors naming file and line. `default` covers a key the file does not define; in bundled runs the file is read on the host, so it must live inside the project. |
 
@@ -847,7 +850,7 @@ no identity): an entry of the form `{ age = "file.age" }` is replaced
 by the decrypted content of the named file (path relative to the
 inventory; one trailing newline stripped, so
 `echo secret | age -r … > f.age` files work as-is). Plaintext must be
-valid UTF-8; markers cannot combine with `env`/`default`/`from`, and a
+valid UTF-8; markers cannot combine with `env`/`default`/`from`/`run`, and a
 failed decryption is a load-time error naming the entry and file.
 
 ```pravic

@@ -385,6 +385,51 @@ assert(canFind(msg, "cannot read dotenv file"));
 assert(canFind(msg, "nope.env"));
 }
 
+@("vars { run } captures a command's output at load time")
+unittest
+{
+import tachy.vars : renderParams;
+import std.algorithm.searching : canFind;
+
+const string p = writeTemp("runvars.pravic", `
+vars {
+    ip = { run = "echo 192.0.2.10" },
+    errv = { run = "printf bad >&2", stream = "stderr" },
+}
+
+file /tmp/hosts.conf { content = "{{ ip }} {{ errv }}\n" }
+`);
+auto loaded = loadTasksFile(p);
+assert(loaded.jobs.length == 1);
+assert(loaded.jobs[0].overlay["ip"].str_ == "192.0.2.10"); // stdout, trimmed
+assert(loaded.jobs[0].overlay["errv"].str_ == "bad");      // stderr stream
+auto params = renderParams(loaded.jobs[0].params, loaded.jobs[0].overlay);
+assert(params["content"].str_ == "192.0.2.10 bad\n");
+
+// a failing command is a load-time error naming the file and variable
+string msg;
+try
+{
+    loadTasksFile(writeTemp("runvars_fail.pravic",
+        "var x = { run = \"exit 7\" }\n"));
+    assert(false, "expected TachyError");
+}
+catch (TachyError e)
+    msg = e.msg;
+assert(canFind(msg, "runvars_fail.pravic: vars.x"), msg);
+assert(canFind(msg, "exit status 7"), msg);
+
+// run does not combine with the env family
+try
+{
+    loadTasksFile(writeTemp("runvars_combo.pravic",
+        `var x = { run = "true", env = "PATH" }` ~ "\n"));
+    assert(false, "expected TachyError");
+}
+catch (TachyError e)
+    assert(canFind(e.msg, "'run' cannot be combined"), e.msg);
+}
+
 @("vars { age } is rejected in tasks files: decryption is controller-side")
 unittest
 {

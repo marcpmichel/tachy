@@ -5,6 +5,12 @@
 
 - callbacks : run a task after a service changed its state
 
+- download ?
+
+- git ?
+
+- when <condition> for tasks ??
+
 
 
 

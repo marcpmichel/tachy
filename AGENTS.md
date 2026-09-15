@@ -98,6 +98,11 @@ When the user requests a durable behavior change, record it here or in the relev
   forms of `apply`/`ensure` do not exist, `execute` was renamed
   `check` then `ensure`, `include` became `apply`, and TOML support
   is gone (no dual reader ever shipped)
+- `mise.toml` holds dev tasks: `mise run release` tags the committed
+  source `v<version>` (the build date in `source/assets/version`), pushes
+  the tag to `origin` and creates the GitHub release with
+  `gh release create --verify-tag --generate-notes`; it refuses a dirty
+  tree, an empty version file or an existing tag
 - CLI shape: `tachy <command> [options] <selection> [<tasks.pravic>...]`;
  command is one of `apply`, `check` (check mode; the old `-c` option is
  gone), `hosts` (`hosts list [<selection>]` — `all` when omitted,

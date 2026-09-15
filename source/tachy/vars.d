@@ -85,11 +85,13 @@ string delegate(string agePath, in AgeIdentity identity, string where) ageDecryp
     (string agePath, in AgeIdentity identity, string where) =>
         defaultAgeDecrypt(agePath, identity, where);
 
-/// Resolve `{ env = "NAME", default = "...", from = "..." }` and
-/// `{ age = "file.age" }` variable entries, replacing them with their
-/// value.  Without `from` an env marker reads the environment of the
-/// current process; with `from` it reads that dotenv file instead;
-/// an age marker decrypts the named file (paths relative to the file
+/// Resolve `{ env = "NAME", default = "...", from = "..." }`,
+/// `{ run = "command" }` and `{ age = "file.age" }` variable entries,
+/// replacing them with their value.  Without `from` an env marker
+/// reads the environment of the current process; with `from` it reads
+/// that dotenv file instead; a run marker captures its command's
+/// output (stdout, or stderr through `stream = "stderr"`); an age
+/// marker decrypts the named file (paths relative to the file
 /// declaring the vars).  Called when a vars table is consumed:
 /// inventory tables resolve on the controller (age markers enabled),
 /// tasks-file tables in the environment of the process that loads them
@@ -117,13 +119,15 @@ private Val resolveEnvVal(in Val v, string where, string context,
         return cast(Val) v;
 
     // An age marker is a table of exactly { age = "path" } — it cannot
-    // combine with the env/default/from family (it is self-contained:
-    // a failed decryption is an error, not an absent value).
+    // combine with the env/default/from family or a run marker (it is
+    // self-contained: a failed decryption is an error, not an absent
+    // value).
     if (auto a = "age" in v.table_)
     {
         if (v.table_.length != 1)
             throw new TachyError(where
-                ~ ": 'age' cannot be combined with 'env', 'default' or 'from'");
+                ~ ": 'age' cannot be combined with 'env', 'default', 'from'"
+                ~ " or 'run'");
         if ((*a).kind != Val.Kind.string_)
             throw new TachyError(where ~ ": 'age' must be a string, not a "
                 ~ (*a).typeName());
@@ -154,6 +158,34 @@ private Val resolveEnvVal(in Val v, string where, string context,
         if (value.length && value[$ - 1] == '\r')
             value = value[0 .. $ - 1];
         return Val(value);
+    }
+    // A run marker is a table of { run = "command" } plus an optional
+    // stream = "stdout"/"stderr": the command's captured output becomes
+    // the value.  Like 'age' it is self-contained — it cannot combine
+    // with the env/default/from family, and a failed command is an
+    // error, not an absent value.
+    if (auto c = "run" in v.table_)
+    {
+        foreach (string k, const Val _; v.table_)
+            if (k != "run" && k != "stream")
+                throw new TachyError(where ~ ": 'run' cannot be combined with"
+                    ~ " 'env', 'default' or 'from' (a run marker holds only"
+                    ~ " 'run' and 'stream')");
+        if ((*c).kind != Val.Kind.string_)
+            throw new TachyError(where ~ ": 'run' must be a string, not a "
+                ~ (*c).typeName());
+        bool wantStderr;
+        if (auto s = "stream" in v.table_)
+        {
+            if ((*s).kind != Val.Kind.string_)
+                throw new TachyError(where ~ ": 'stream' must be a string, not a "
+                    ~ (*s).typeName());
+            if ((*s).str_ != "stdout" && (*s).str_ != "stderr")
+                throw new TachyError(where ~ ": 'stream' must be \"stdout\" or"
+                    ~ " \"stderr\", not \"" ~ (*s).str_ ~ "\"");
+            wantStderr = (*s).str_ == "stderr";
+        }
+        return Val(runCapture((*c).str_, wantStderr, where, context));
     }
 
     // An env marker is a table whose keys are "env" plus any of
@@ -207,6 +239,99 @@ private Val resolveEnvVal(in Val v, string where, string context,
     if (d !is null)
         return Val((*d).str_);
     throw new TachyError(missing);
+}
+/// Capture the output of a `{ run = "command" }` marker: run it with
+/// /bin/sh -c and return the chosen stream.  The command runs in the
+/// directory of the file declaring the vars (like `from` paths and
+/// `ensure` jobs: relative paths resolve next to the declaring file)
+/// and sees the environment of the process loading it — the controller
+/// for inventory vars, the host for tasks-file vars in bundled runs
+/// (the controller's validation load executes it once there too).
+/// One trailing newline (and a CR before it) is stripped, so
+/// `hostname -I` yields the bare value.  A failing command is an error
+/// naming the variable, the command and the status (with the other
+/// stream's output when it has any); so is output that is not valid
+/// UTF-8 (binary does not fit variables).
+private string runCapture(string command, bool wantStderr, string where,
+    string context) @trusted
+{
+    import core.thread : Thread;
+    import std.array : appender;
+    import std.conv : text;
+    import std.path : dirName;
+    import std.process : Config, ProcessPipes, Redirect, pipeProcess, wait;
+    import std.string : strip;
+
+    const string dir = dirName(context); // declaring file's directory
+    ProcessPipes p;
+    try
+        p = pipeProcess(["/bin/sh", "-c", command],
+            Redirect.stdin | Redirect.stdout | Redirect.stderr,
+            null, Config.none, dir);
+    catch (Exception e)
+        throw new TachyError(where ~ ": cannot run '" ~ command ~ "': " ~ e.msg);
+    p.stdin.close(); // commands see EOF on stdin, never the loader's
+
+    // Drain the uncaptured stream on a thread so a command writing
+    // more than a pipe buffer of it cannot deadlock the capture (the
+    // transport's runStreaming drains the same way).
+    auto other = wantStderr ? p.stdout : p.stderr;
+    auto otherApp = appender!(ubyte[]);
+    auto thr = new Thread({
+        auto buf = new ubyte[65536];
+        for (;;)
+        {
+            auto n = other.rawRead(buf).length;
+            if (n == 0) break;
+            otherApp.put(buf[0 .. n]);
+        }
+    });
+    thr.start();
+
+    string value;
+    {
+        auto capture = wantStderr ? p.stderr : p.stdout;
+        auto app = appender!(ubyte[]);
+        auto buf = new ubyte[65536];
+        for (;;)
+        {
+            auto n = capture.rawRead(buf).length;
+            if (n == 0) break;
+            app.put(buf[0 .. n]);
+        }
+        value = cast(string) app.data;
+    }
+    thr.join();
+    const int status = wait(p.pid);
+    if (status != 0)
+    {
+        const string m = strip(cast(string) otherApp.data);
+        throw new TachyError(where ~ ": command '" ~ command
+            ~ "' failed with exit status " ~ text(status)
+            ~ (m.length ? ": " ~ firstLine(m) : ""));
+    }
+    try
+    {
+        import std.utf : validate;
+        validate(value);
+    }
+    catch (Exception)
+        throw new TachyError(where ~ ": output of '" ~ command
+            ~ "' is not valid UTF-8 (binary output does not fit variables)");
+    if (value.length && value[$ - 1] == '\n')
+        value = value[0 .. $ - 1];
+    if (value.length && value[$ - 1] == '\r')
+        value = value[0 .. $ - 1];
+    return value;
+}
+
+/// The first line of `s`, capped for error messages.
+private string firstLine(string s) @safe pure
+{
+    import std.string : indexOf;
+    const ptrdiff_t nl = indexOf(s, '\n');
+    string line = nl >= 0 ? s[0 .. nl] : s;
+    return line.length > 200 ? line[0 .. 200] ~ "…" : line;
 }
 
 /// Resolve a `from` path like any other tasks-file path: absolute

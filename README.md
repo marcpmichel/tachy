@@ -223,7 +223,7 @@ tachy version                            # the build date (YY.mm.dd)
 ```
 tachy — Pravic-driven configuration management (Ansible-like)
 
-  tachy <command> [options] <selection> [<tasks.pravic>...]
+  tachy apply|check [options] <selection> [<tasks.pravic>...]
   tachy host list|info
   tachy webui [options]
   tachy webdoc [options]
@@ -231,15 +231,20 @@ tachy — Pravic-driven configuration management (Ansible-like)
 
 
   Commands:
-    apply       apply tasks to the selected hosts
-    check       check mode: report changes without applying them
-    hosts       inspect hosts: "hosts list [<selection>]" lists the hosts matching a selection (default: all), "hosts info <host>" shows one host's attributes
-    generate    key <path> : writes a new age key pair, task <path> : write a sample tasks file, config <path> : write a sample config file (note: all refuse to overwrite)
+    apply       apply tasks to the selected hosts.
+    check       check mode: report changes without applying them.
+    hosts       inspect hosts:
+                "hosts list [<selection>]" lists the hosts matching a selection (default: all) 
+                "hosts info <host>" shows one host's attributes
+    generate    key <path> : writes a new age key pair.
+                task <path> : write a sample tasks file. 
+                config <path> : write a sample config file (note: all refuse to overwrite).
     webui       start a local web server: a graphical version of this CLI
     webdoc      start a local web server serving this documentation as a browsable site
     man         show the full manual, unix man-page style
     version     show the version (the build date, YY.mm.dd)
     help        show this help
+
 
 
   Options:
@@ -258,6 +263,7 @@ tachy — Pravic-driven configuration management (Ansible-like)
 
 
   The full manual — selection syntax, projects, the web console and web docs, the inventory and tasks file reference, variables and the execution order — is one command away: "tachy man".
+
 ```
 
 This is the whole of `tachy help` (and `--help`). The reference that
@@ -358,7 +364,7 @@ file is retried in the next.
 | Statement | Keys | Meaning |
 |---|---|---|
 | `host NAME { ... }` | `address`, `user`, `port`, `key`, `connection`, `tags`, `vars` | One host. `connection` is `"ssh"` (default) or `"local"`; `address` defaults to the host name; `tags` drive `@tag` selection. |
-| `vars { ... }` / `var NAME = value` | — | Global variables. Entries may be `{ env = "NAME", default = "...", from = ".env" }` to read the controller's environment or a dotenv file (a per-host `vars { ... }` block too). |
+| `vars { ... }` / `var NAME = value` | — | Global variables. Entries may be `{ env = "NAME", default = "...", from = ".env" }` to read the controller's environment or a dotenv file, or `{ run = "cmd" }` to capture a command's output (a per-host `vars { ... }` block too). |
 
 ### Tasks file
 
@@ -366,7 +372,7 @@ A tasks file is a sequence of statements, one per line (all optional):
 
 | Statement | Target | Entry keys |
 |---|---|---|
-| `var NAME = value` / `vars { ... }` | — | Variables for this file's jobs and everything it composes. Entries may be `{ env = "NAME", default = "...", from = ".env" }` to read the environment of the process loading the file (the host, in bundled runs) or a dotenv file relative to it. |
+| `var NAME = value` / `vars { ... }` | — | Variables for this file's jobs and everything it composes. Entries may be `{ env = "NAME", default = "...", from = ".env" }` to read the environment of the process loading the file (the host, in bundled runs), a dotenv file relative to it, or `{ run = "cmd" }` to capture a command's output. |
 | `directory PATH { ... }` | path | `state` (default `directory`; also `absent`), `mode`, `owner`, `group` |
 | `service UNIT { ... }` | unit | `state` (`started`, `stopped`, `restarted`, `reloaded`, or `enabled` = ensure boot enablement only), `enabled` (bool), `src`/`template` (manage the unit file at `/etc/systemd/system/<unit>`: verbatim copy or rendered template; mutually exclusive), `vars` (local template context, with `template` only). |
 | `compose DIR { ... }` | dir | `file` (required; relative inside `dir`), `state` (`running` default, `stopped`, `absent`), `project` (default: lowercased `dir` basename), `services` (subset; default all), `pull`/`build`/`recreate` policies, `wait` (default `true`) + `wait_timeout`, `timeout`, `remove_orphans` (stopped), `remove_volumes`/`remove_images` (absent). Needs the docker CLI with the compose plugin on the host. |
@@ -563,6 +569,27 @@ project (the bundle copies it along). A set-but-empty variable resolves
 to the empty string (the default only covers an unset variable). Nested
 tables are walked; arrays and scalars pass through unchanged.
 
+A `{ run = "<command>" }` entry captures a command's output instead:
+stdout by default, stderr with a `stream = "stderr"` attribute.
+
+```pravic
+vars {
+    host_ip = { run = "hostname -I" },
+    diag = { run = 'echo "error" >&2', stream = "stderr" },
+}
+```
+
+The command runs through `/bin/sh -c` in the declaring file's directory
+(relative paths resolve next to it, like `ensure` jobs) and sees the
+environment of the process loading the file, at the same place and time
+an `{ env }` entry resolves: on the controller for inventory vars, on
+the host for bundled tasks-file vars — whose controller-side validation
+load also executes it once on the controller, so keep it read-only or
+idempotent (it runs in check mode too). One trailing newline is
+stripped; a failing command, or output that is not valid UTF-8, is a
+load-time error naming the variable, the command and the status. `run`
+cannot combine with `env`, `default`, `from` or `age`.
+
 ### Secrets (age)
 
 Inventory vars may hold age-encrypted entries — replaced by the
@@ -589,7 +616,7 @@ the deployment key can double as the decryption key; encrypt with
 
 `{ age }` markers are inventory-only (tasks-file vars resolve on
 hosts, which hold no identity) and cannot combine with
-`env`/`default`/`from`. Decryption failures are load-time errors naming
+`env`/`default`/`from`/`run`. Decryption failures are load-time errors naming
 the entry and file; plaintext must be UTF-8 — binary secrets do not
 fit variables (see below). Keep secrets out of `check` commands:
 `-v` details would display them.

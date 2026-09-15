@@ -297,6 +297,146 @@ assert(r["nested"].table_["inner"].str_ == "s3cret");
 }
 }
 
+@("{ run = \"...\" } markers: capture, stream choice, cwd, errors")
+unittest
+{
+import std.algorithm.searching : canFind;
+import std.exception : assertThrown;
+import std.file : exists, mkdirRecurse, rmdirRecurse, tempDir, write;
+import std.path : buildPath;
+import std.stdio : File;
+
+auto dir = buildPath(tempDir, "tachy_vars_run_ut");
+if (exists(dir)) rmdirRecurse(dir);
+mkdirRecurse(dir);
+scope (exit) if (exists(dir)) rmdirRecurse(dir);
+write(buildPath(dir, "data.txt"), "next to the declaring file\n");
+const string ctx = buildPath(dir, "main.pravic");
+File(ctx, "w").close();
+
+Val mkRun(string cmd, string stream = null)
+{
+    Val m;
+    m.kind = Val.Kind.table_;
+    m.table_["run"] = Val(cmd);
+    if (stream !is null)
+        m.table_["stream"] = Val(stream);
+    return m;
+}
+
+// stdout by default; one trailing newline stripped
+Val[string] vars;
+vars["host"] = mkRun("echo hello");
+vars["no_newline"] = mkRun("printf plain");
+vars["multi"] = mkRun("printf 'a\\nb\\n'");
+vars["err"] = mkRun(`printf oops >&2`, "stderr");
+vars["both_default"] = mkRun("echo out; echo noise >&2");
+vars["both_stderr"] = mkRun("echo out; echo noise >&2", "stderr");
+vars["cwd"] = mkRun("cat data.txt");
+vars["nested"] = tbl(table("inner", mkRun("echo deep")));
+auto r = resolveEnvVars(vars, ctx);
+assert(r["host"].str_ == "hello");
+assert(r["no_newline"].str_ == "plain");
+assert(r["multi"].str_ == "a\nb"); // only the final newline goes
+assert(r["err"].str_ == "oops");
+assert(r["both_default"].str_ == "out"); // stderr is not captured
+assert(r["both_stderr"].str_ == "noise"); // stdout is not captured
+assert(r["cwd"].str_ == "next to the declaring file"); // declaring dir
+assert(r["nested"].table_["inner"].str_ == "deep");
+
+// a failing command is a hard error naming var, command and status,
+// with the uncaptured stream's output
+string msg;
+try
+{
+    Val[string] bad;
+    bad["x"] = mkRun("echo boom >&2; exit 3");
+    resolveEnvVars(bad, ctx);
+    assert(false, "expected TachyError");
+}
+catch (TachyError e)
+    msg = e.msg;
+assert(canFind(msg, ctx ~ ": vars.x"), msg);
+assert(canFind(msg, "exit status 3"), msg);
+assert(canFind(msg, "boom"), msg);
+
+// binary output does not fit variables
+try
+{
+    Val[string] bad;
+    bad["x"] = mkRun("printf '\\377'");
+    resolveEnvVars(bad, ctx);
+    assert(false, "expected TachyError");
+}
+catch (TachyError e)
+    msg = e.msg;
+assert(canFind(msg, "not valid UTF-8"), msg);
+
+// combinations with the env/default/from family are errors, both ways
+foreach (extra; ["env", "default", "from"])
+{
+    Val m;
+    m.kind = Val.Kind.table_;
+    m.table_["run"] = Val("true");
+    m.table_[extra] = Val("x");
+    Val[string] bad;
+    bad["x"] = m;
+    try
+    {
+        resolveEnvVars(bad, ctx);
+        assert(false, "expected TachyError for run + " ~ extra);
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(canFind(msg, "'run' cannot be combined"), msg);
+}
+{
+    Val m;
+    m.kind = Val.Kind.table_;
+    m.table_["run"] = Val("true");
+    m.table_["age"] = Val("f.age");
+    Val[string] bad;
+    bad["x"] = m;
+    try
+    {
+        resolveEnvVars(bad, ctx);
+        assert(false, "expected TachyError for run + age");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(canFind(msg, "'age' cannot be combined"), msg);
+}
+
+// stream validation, and type checks
+{
+    Val[string] bad;
+    bad["x"] = mkRun("true", "both");
+    try { resolveEnvVars(bad, ctx); assert(false); }
+    catch (TachyError e) { assert(canFind(e.msg, `'stream' must be "stdout" or "stderr"`), e.msg); }
+
+    bad.clear();
+    bad["x"] = tbl(table("run", Val(1L)));
+    try { resolveEnvVars(bad, ctx); assert(false); }
+    catch (TachyError e) { assert(canFind(e.msg, "'run' must be a string"), e.msg); }
+
+    bad.clear();
+    Val m;
+    m.kind = Val.Kind.table_;
+    m.table_["run"] = Val("true");
+    m.table_["stream"] = Val(1L);
+    bad["x"] = m;
+}
+
+// a table with stream but no run stays plain data
+{
+    Val[string] plain;
+    plain["x"] = tbl(table("stream", Val("stdout")));
+    auto rp = resolveEnvVars(plain, ctx);
+    assert(rp["x"].kind == Val.Kind.table_);
+    assert(rp["x"].table_["stream"].str_ == "stdout");
+}
+}
+
 @("dotenv parsing errors name file and line")
 unittest
 {

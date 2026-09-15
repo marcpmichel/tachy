@@ -50,7 +50,9 @@ This doc owns the source tree's structure and conventions;
     landing missing locally defer to the host)
   - `events.d` — execution events (producer/consumer split): `JobEvent` + builders, `foldCounters`, `TextRenderer` (the one renderer for both modes), NDJSON `eventLine`/`parseEventLine` for the stream between inner runs and the controller
   - `vars.d` — variable scopes, `{ env, default, from }` resolution
-    (environment or dotenv file), `{ age }` secret markers
+    (environment or dotenv file), `{ run, stream }` command capture
+    (stdout/stderr through /bin/sh in the declaring file's directory,
+    where the loading process runs), `{ age }` secret markers
     (controller-side age decryption, inventory vars only), `{{ expr }}`
     templating, plus the age file helpers `file` sources use
     (`isAgeCiphertext`, `decryptAgeFile` — the same identity
