@@ -57,7 +57,7 @@ void validateModuleParams(string moduleName, in Val[string] params, string conte
     {
         case "file":
             checkKeys(params, ["path", "state", "src", "content", "line", "block",
-                "template", "mode", "owner", "group", "age"],
+                "template", "mode", "owner", "group", "age", "vars"],
                 context ~ " (file)");
             if ("path" !in params)
                 throw new TachyError(context ~ " (file): 'path' is required");
@@ -70,6 +70,14 @@ void validateModuleParams(string moduleName, in Val[string] params, string conte
                 if ((*p).boolean_ && "src" !in params)
                     throw new TachyError(context ~ " (file): 'age' requires"
                         ~ " 'src' (it marks that source file as age-encrypted)");
+            }
+            if (auto p = "vars" in params)
+            {
+                if ((*p).kind != Val.Kind.table_)
+                    throw new TachyError(context ~ " (file): 'vars' must be a table, not a "
+                        ~ (*p).typeName());
+                if ("template" !in params)
+                    throw new TachyError(context ~ " (file): 'vars' is only meaningful with 'template'");
             }
             break;
         case "ensure":

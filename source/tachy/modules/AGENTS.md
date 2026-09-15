@@ -16,10 +16,11 @@ This doc owns module-level contracts.
   `fake.d` is the scripted transport for unittests — a new module is
   not done until it is in all three plus `models.d`
 - Modules: `filemod` (files/directories: state, content, src,
-  template, line/block, `age = true` marking src as age-encrypted —
-  controller-decrypted and shipped as plaintext inside bundles,
-  decrypted in-process on `--direct`, byte-exact either way —
-  mode/owner/group), `servicemod` (systemctl state/enablement
+  template, line/block, the entry's local `vars` merged over the host
+  scope for `template` rendering (like `service`), `age = true` marking
+  src as age-encrypted — controller-decrypted and shipped as plaintext
+  inside bundles, decrypted in-process on `--direct`, byte-exact either
+  way — mode/owner/group), `servicemod` (systemctl state/enablement
   plus unit file management: `src` verbatim copy, `template` rendering
   with the entry's local `vars`, written to /etc/systemd/system with
   daemon-reload on drift), `packagemod` (apt), `ensuremod` (run +

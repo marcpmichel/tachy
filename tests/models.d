@@ -323,6 +323,44 @@ assertThrown!(TachyError)(loadTasksFile(writeTemp("unk3.pravic",
     "file /tmp/x { bogus = 1 }\n")));
 }
 
+@("file: local vars for the template, validated at load time")
+unittest
+{
+import std.algorithm.searching : canFind;
+import tachy.value : Val;
+
+// vars + template loads and reaches the module as a param table
+auto loaded = loadTasksFile(writeTemp("file_vars.pravic", `
+file /tmp/app.conf {
+    template = "app.conf.tmpl"
+    vars { env = "prod", ttl = 3600 }
+}
+`));
+assert(loaded.jobs.length == 1);
+auto v = loaded.jobs[0].params["vars"];
+assert(v.kind == Val.Kind.table_);
+assert(v.table_["env"].str_ == "prod");
+assert(v.table_["ttl"].integer_ == 3600);
+
+// vars without template is rejected, whatever the other source
+foreach (t; ["file /tmp/x { vars { a = 1 } }\n",
+    "file /tmp/x { content = \"c\", vars { a = 1 } }\n",
+    "file /tmp/x { src = \"s\", vars { a = 1 } }\n"])
+{
+    string msg;
+    try { loadTasksFile(writeTemp("file_vars_alone.pravic", t)); assert(false); }
+    catch (TachyError e) { msg = e.msg; }
+    assert(canFind(msg, "'vars' is only meaningful with 'template'"), msg);
+}
+
+// non-table vars is a type error
+string msg;
+try { loadTasksFile(writeTemp("file_vars_bad.pravic",
+    "file /tmp/x { template = \"t\", vars = \"nope\" }\n")); assert(false); }
+catch (TachyError e) { msg = e.msg; }
+assert(canFind(msg, "'vars' must be a table"), msg);
+}
+
 @("tasks-file vars may read the environment")
 unittest
 {

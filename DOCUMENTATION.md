@@ -509,6 +509,11 @@ file /etc/nginx/site.conf {         # rendered from a template file
     template = "site.conf.tmpl"     # {{ vars }} resolved with the host scope
 }
 
+file /etc/app/local.conf {          # template with a local context:
+    template = "app.conf.tmpl"      # these vars win over the host scope
+    vars { env = "prod", ttl = 3600 }
+}
+
 file /etc/sysctl.d/99-forward.conf {   # ensure one line is present
     line = "net.ipv4.ip_forward = 1"
 }
@@ -537,6 +542,7 @@ file /tmp/stale.conf {              # removal of whatever is there
 | `src` | — | Copy this project file verbatim — byte-exact, binary files (keyrings, archives) included. Presence/drift is detected by comparing sha256 checksums, so file content never travels back over the transport. |
 | `age` | — | Boolean marking `src` as age-encrypted: the plaintext is decrypted on the controller (identity from `--identity`, the config `identity` entry, `AGE_IDENTITY` or `~/.ssh/id_ed25519`, like `{ age = ... }` vars) and deployed byte-exact — binary secrets fit, unlike in variables. Not templated, no newline stripping. Requires `src`, `state = "file"` only; in bundled runs the controller ships the plaintext inside the temporary bundle over the ciphertext copy (the identity never travels). See [Secrets](#secrets-age). |
 | `template` | — | Path to a template file (like `src`, resolved relative to the defining tasks file); its content is rendered with the variable scope and becomes the managed content. |
+| `vars` | — | Table; a local variable context merged over the host scope for the `template` rendering (local values win; nested tables merge key by key). Values are templated against the host scope before merging, so they may reference it. Only meaningful with `template` — like `service`'s `vars`. |
 | `line` | — | Ensure this line is present anywhere in the file (whole-line match); appended, newline-terminated, only when missing. |
 | `block` | — | Same for a contiguous block of lines, in order. |
 | `mode` | — | Octal string or integer. |

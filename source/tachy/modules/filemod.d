@@ -12,6 +12,9 @@ module tachy.modules.filemod;
  *                                           # deploy the plaintext, byte-exact
  *     file.template = "app.tmpl"            # state=file: render this file's
  *                                           # {{ vars }} onto the target
+ *     file.vars    = { user = "app" }       # local template context
+ *                                           # (with template only; local
+ *                                           # values win over the host scope)
  *     file.line    = "umask 022"            # state=file: ensure this line is present
  *     file.block   = "header\n...\n"        # state=file: ensure these lines are
  *                                           # present (contiguously, in order)
@@ -45,7 +48,7 @@ import tachy.errors;
 import tachy.modules : TaskContext, TaskResult, mustRun, mustRunWithInput, optBool, optStr, requireStr;
 import tachy.transport : StatKind, Transport, readLinkTarget, shQuote, statPath;
 import tachy.value : Val;
-import tachy.vars : decryptAgeFile, isAgeCiphertext, renderTemplate;
+import tachy.vars : deepMerge, decryptAgeFile, isAgeCiphertext, renderTemplate;
 
 TaskResult runFileModule(Val[string] params, TaskContext ctx)
 {
@@ -187,11 +190,16 @@ TaskResult runFileModule(Val[string] params, TaskContext ctx)
             if (hasTemplate)
             {
                 // template = <path>: render that file with the host's
-                // variable scope and use the result as the content.
+                // variable scope (the entry's local `vars` merged over
+                // it, local values winning) and use the result as the
+                // content.
                 const string tplPath = isAbsolute(templatePath)
                     ? templatePath : buildPath(ctx.tasksFileDir, templatePath);
+                Val[string] tplScope = ctx.vars;
+                if (auto v = "vars" in params)
+                    tplScope = deepMerge(ctx.vars, (*v).table_);
                 try
-                    content = renderTemplate(readText(tplPath), ctx.vars);
+                    content = renderTemplate(readText(tplPath), tplScope);
                 catch (TachyError e)
                     throw new TachyError("file: cannot render '" ~ tplPath ~ "': " ~ e.msg);
                 catch (Exception e)

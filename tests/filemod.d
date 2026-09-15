@@ -190,6 +190,51 @@ auto rc = runFileModule(p, ctxLocal(dir, true, vars));
 assert(rc.changed && readText(f) == "drifted\n");
 }
 
+@("template: entry-local vars win over the host scope")
+unittest
+{
+import std.file : readText, write;
+auto dir = freshDir;
+scope (exit) rmdirRecurse(dir);
+
+Val[string] host;
+host["user"] = Val("www-data");
+host["ttl"] = Val("9999"); // local value must win
+Val nested;
+nested.kind = Val.Kind.table_;
+nested.table_["env"] = Val("prod"); // nested tables merge per key
+Val[string] local;
+local["ttl"] = Val("3600");
+local["opts"] = nested;
+
+write(buildPath(dir, "unit.tmpl"),
+    "user={{ user }} ttl={{ ttl }} env={{ opts.env }}\n");
+auto f = buildPath(dir, "unit.conf");
+Val[string] p;
+p["path"] = Val(f);
+p["template"] = Val("unit.tmpl");
+p["vars"] = tableOf(local);
+
+auto r = runFileModule(p, ctxLocal(dir, false, host));
+assert(r.changed, r.msg);
+assert(readText(f) == "user=www-data ttl=3600 env=prod\n", readText(f));
+assert(!runFileModule(p, ctxLocal(dir, false, host)).changed); // idempotent
+
+// local drift: same host scope, different local var -> rewritten
+local["ttl"] = Val("7200");
+p["vars"] = tableOf(local);
+auto r3 = runFileModule(p, ctxLocal(dir, false, host));
+assert(r3.changed && readText(f) == "user=www-data ttl=7200 env=prod\n");
+}
+
+Val tableOf(Val[string] t)
+{
+    Val v;
+    v.kind = Val.Kind.table_;
+    v.table_ = t;
+    return v;
+}
+
 @("template = <path>: combination errors")
 unittest
 {

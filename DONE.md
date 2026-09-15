@@ -1821,3 +1821,29 @@
    - DOX: root AGENTS.md Project section now lists `mise.toml` and its
      release contract. No doc-trio change: nothing user-visible in the
      tachy binary changed.
+
+56. add a `vars` attribute to the `file`/`files` statement: render
+    templates with locally declared variables (user request from chat).
+   - Same contract as `service`'s `vars`: an entry table merged over
+     the host scope for the `template` rendering — local values win,
+     nested tables merge key by key, values are templated against the
+     host scope first (runner's renderParams), so they may reference
+     it. Only meaningful with `template`: `vars` without `template` (or
+     beside `content`/`src`) is a load-time error, as is a non-table
+     `vars` (package.d's file case, beside the service case).
+   - filemod.d renders with `deepMerge(ctx.vars, vars)` — the
+     servicemod pattern verbatim; module doc comment updated.
+   - Tests: tests/filemod.d (local vars win over the host scope, host
+     scope still visible, nested local tables, idempotence against the
+     rendered form, local drift rewrites) and tests/models.d (vars
+     reaches the module as a param table; vars-without-template,
+     vars-beside-content/src and non-table vars are load-time errors
+     with the service-style messages). dub test: 156 passed, 0 failed.
+   - E2E: bundled local run — template rendered with local
+     `port = 9090` winning over the host's 8080, host `svc_user`
+     visible, nested `ctx { env = "prod" }` merged, `ensure` verified
+     the content, second run ok=2 changed=0.
+   - Docs: DOCUMENTATION.md `file` section (example + `vars` attribute
+     row), README.md file prose bullet, man tasksBody example tower;
+     DOX: modules/AGENTS.md filemod bullet. LANGUAGE.md unchanged —
+     no grammar change (an entry's `vars` is an ordinary table).

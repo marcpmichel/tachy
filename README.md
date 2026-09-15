@@ -416,9 +416,11 @@ Idempotency semantics:
 - `file` + `content`/`src`/`template`: compares current content,
   writes only on difference. `content` is templated inline; `src` copies
   the named file verbatim; `template` renders the named file's
-  `{{ vars }}` with the host's scope first. The three are mutually
-  exclusive sources. `state = "link"` makes the key a symlink to `src`;
-  `state = "absent"` removes whatever is there.
+  `{{ vars }}` with the host's scope first (an entry `vars { ... }`
+  table is a local template context merged over it, local values
+  winning — with `template` only, like `service`). The three are
+  mutually exclusive sources. `state = "link"` makes the key a symlink
+  to `src`; `state = "absent"` removes whatever is there.
 - `file` + `line`/`block`: ensures a line (or a contiguous block of
   lines) is present — whole-line matches anywhere in the file; appends
   it (newline-terminated) only when missing. `line` and `block` are
