@@ -382,3 +382,181 @@ catch (TachyError e)
     msg = e.msg;
 assert(canFind(msg, "matched no hosts"), msg);
 }
+
+@("validateRenders: undefined variables fail per host, with entry context")
+unittest
+{
+import std.algorithm.searching : canFind;
+import std.file : exists, mkdirRecurse, rmdirRecurse, tempDir;
+import std.path : buildPath;
+import std.stdio : File;
+import tachy.errors : TachyError;
+import tachy.inventory : HostConfig, Inventory;
+import tachy.models : loadTasksFile;
+
+auto dir = buildPath(tempDir, "tachy_runner_dryvar_ut");
+if (exists(dir)) rmdirRecurse(dir);
+mkdirRecurse(dir);
+scope (exit) rmdirRecurse(dir);
+
+const string tasks = buildPath(dir, "main.pravic");
+{
+    auto f = File(tasks, "w");
+    f.write("file \"/srv/{{ domian }}/x\" { }\n");
+    f.close();
+}
+const string invPath = buildPath(dir, "inventory.pravic");
+{
+    auto f = File(invPath, "w");
+    f.write(`
+host hasit {
+    connection = "local"
+    vars { domian = "example.org" }
+}
+
+host lacksit {
+    connection = "local"
+}
+`);
+    f.close();
+}
+
+auto inv = Inventory.load(invPath);
+auto loaded = loadTasksFile(tasks);
+
+// a host that defines the variable passes validation untouched
+validateRenders(loaded, inv, inv.select("hasit"));
+
+// the host missing it fails with the entry's origin, the host name
+// and the variable (the typo sits in the target itself)
+string msg;
+try
+{
+    validateRenders(loaded, inv, inv.select("hasit,lacksit"));
+    assert(false, "expected TachyError");
+}
+catch (TachyError e)
+    msg = e.msg;
+assert(canFind(msg, "main.pravic: files \"/srv/{{ domian }}/x\""), msg);
+assert(canFind(msg, "host lacksit"), msg);
+assert(canFind(msg, "undefined variable 'domian'"), msg);
+}
+
+@("validateRenders: template files render with the entry's scope")
+unittest
+{
+import std.algorithm.searching : canFind;
+import std.file : exists, mkdirRecurse, rmdirRecurse, tempDir, write;
+import std.path : buildPath;
+import std.stdio : File;
+import tachy.errors : TachyError;
+import tachy.inventory : HostConfig, Inventory;
+import tachy.models : loadTasksFile;
+
+auto dir = buildPath(tempDir, "tachy_runner_drytpl_ut");
+if (exists(dir)) rmdirRecurse(dir);
+mkdirRecurse(dir);
+scope (exit) rmdirRecurse(dir);
+
+write(buildPath(dir, "greet.tpl"), "hello {{ greet }}\n");
+const string invPath = buildPath(dir, "inventory.pravic");
+{
+    auto f = File(invPath, "w");
+    f.write("host bare { connection = \"local\" }\n");
+    f.close();
+}
+auto inv = Inventory.load(invPath);
+const HostConfig[] bare = inv.select("bare");
+
+// the bare host has no greet: rendering the template file fails,
+// naming the template and the variable
+{
+    auto f = File(buildPath(dir, "a.pravic"), "w");
+    f.write("file /tmp/motd { template = \"greet.tpl\" }\n");
+    f.close();
+}
+string msg;
+try
+{
+    validateRenders(loadTasksFile(buildPath(dir, "a.pravic")), inv, bare);
+    assert(false, "expected TachyError");
+}
+catch (TachyError e)
+    msg = e.msg;
+assert(canFind(msg, "files \"/tmp/motd\""), msg);
+assert(canFind(msg, "cannot render '" ~ buildPath(dir, "greet.tpl") ~ "'"), msg);
+assert(canFind(msg, "undefined variable 'greet'"), msg);
+
+// the entry's local `vars` joins the template scope (local wins), and
+// a template file unreadable on the controller is skipped — it may
+// land inside the bundle with an import
+{
+    auto f = File(buildPath(dir, "b.pravic"), "w");
+    f.write(`
+file /tmp/local { template = "greet.tpl", vars { greet = "hi" } }
+file /tmp/gone { template = "nowhere.tpl" }
+`);
+    f.close();
+}
+validateRenders(loadTasksFile(buildPath(dir, "b.pravic")), inv, bare);
+}
+
+@("validateRenders: the apply-chain scope flows into validation")
+unittest
+{
+import std.algorithm.searching : canFind;
+import std.file : exists, mkdirRecurse, rmdirRecurse, tempDir;
+import std.path : buildPath;
+import std.stdio : File;
+import tachy.errors : TachyError;
+import tachy.inventory : HostConfig, Inventory;
+import tachy.models : loadTasksFile;
+
+auto dir = buildPath(tempDir, "tachy_runner_drychain_ut");
+if (exists(dir)) rmdirRecurse(dir);
+mkdirRecurse(dir);
+scope (exit) rmdirRecurse(dir);
+
+{
+    auto f = File(buildPath(dir, "main.pravic"), "w");
+    f.write(`
+var base = "srv"
+apply "child.pravic" { mid = "app" }
+`);
+    f.close();
+}
+{
+    auto f = File(buildPath(dir, "child.pravic"), "w");
+    f.write("var own = \"conf\"\nfile \"/{{ base }}/{{ mid }}/{{ own }}\" { }\n");
+    f.close();
+}
+const string invPath = buildPath(dir, "inventory.pravic");
+{
+    auto f = File(invPath, "w");
+    f.write("host bare { connection = \"local\" }\n");
+    f.close();
+}
+auto inv = Inventory.load(invPath);
+const HostConfig[] bare = inv.select("bare");
+
+// outer var < apply binding < the child's own var: all resolve for a
+// host that defines none of them
+validateRenders(loadTasksFile(buildPath(dir, "main.pravic")), inv, bare);
+
+// a reference nothing in the chain defines fails naming the child
+{
+    auto f = File(buildPath(dir, "child.pravic"), "w");
+    f.write("file \"/{{ absent }}\" { }\n");
+    f.close();
+}
+string msg;
+try
+{
+    validateRenders(loadTasksFile(buildPath(dir, "main.pravic")), inv, bare);
+    assert(false, "expected TachyError");
+}
+catch (TachyError e)
+    msg = e.msg;
+assert(canFind(msg, "child.pravic: files \"/{{ absent }}\""), msg);
+assert(canFind(msg, "undefined variable 'absent'"), msg);
+}

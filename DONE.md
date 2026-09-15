@@ -1951,3 +1951,37 @@
      now points at the task instead of "installed by hand";
      syntax/AGENTS.md intentionally unchanged (it owns the syntax
      definition's contract, not the install path).
+
+61. dry-render validation: undefined variables fail on the controller,
+    before any bundle is built (user request from chat; the "solution
+    A" of the brainstorm that rejected a `use` keyword).
+   - vars.d: new shared entry-template helpers `renderTemplateFile`
+    (render a `template = <path>` file with the run scope plus the
+    entry's local `vars`, local winning) and `resolveEntryPath`
+    (absolute pass-through, relative against the defining file's
+    directory); filemod/servicemod now use both for `template` and
+    `src` (identical error wording, no behavior change), deleting
+    their duplicated blocks.
+   - runner.d: `validateRenders` — for every selected host, render
+    every job's params and each readable template file against the
+    exact run scope (global < host < overlay); failures are hard
+    errors naming origin, host and variable. Wired before the host
+    loop of both modes; bundled mode validates through the staging
+    shadow composition so deferred applies are covered. Unreadable
+    template files are skipped (they may live under an import
+    landing); `{ run }`/`{ env }` markers resolve controller-side for
+    the check (names exist either way, only values can differ).
+   - Tests: three new blocks in tests/runner.d (per-host failure with
+    entry context; template scope incl. local `vars` and the
+    skipped-unreadable rule; apply-chain scope flows into
+    validation). `dub test`: 161 passed, 0 failed.
+   - E2E on testing.internal (root, scoped to /tmp, cleaned): a good
+    file (directory + templated file + ensure) applies and re-checks
+    green; `check --direct` vs bundled outputs byte-identical; a
+    `{{ domian }}` typo fails on the controller in 0.25s with
+    `bad.pravic: files "...": host vm: undefined variable 'domian'`
+    and leaves zero `/tmp/tachy.*` bundles on the VM.
+   - Docs: README pipeline step 1, DOCUMENTATION.md "What a run does"
+    + the variables lead, man VARIABLES (variablesBody.txt) and
+    LANGUAGE.md's validation paragraph; DOX: source/AGENTS.md runner.d
+    and vars.d bullets extended.

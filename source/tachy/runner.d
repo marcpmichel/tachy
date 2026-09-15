@@ -227,6 +227,7 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
     foreach (tasksFile; opts.tasksFiles)
     {
         auto loaded = loadTasksFile(tasksFile, config);
+        validateRenders(loaded, inventory, hosts);
 
         // Apply entries under an import destination that do
         // not exist locally: without a bundle there is nothing to
@@ -292,6 +293,56 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
     }
 
     return totalFailed > 0 ? 1 : 0;
+}
+
+// ---------------------------------------------------------------------------
+// Render validation: every `{{ ... }}` reference resolves, per host,
+// before anything is deployed.
+// ---------------------------------------------------------------------------
+
+/// Dry-render validation: for every selected host, render every job's
+/// parameters — and the file behind a `template = <path>` entry, with
+/// the scope `file`/`service` use at run time — against the scope the
+/// run would compose (global < host < overlay).  Rendering is pure, so
+/// a pass here predicts the run exactly; an undefined variable is a
+/// hard error naming the entry and the host, raised before a bundle is
+/// built or a host is contacted.  Two deliberate blind spots: `{ run }`
+/// and `{ env }` markers resolve in the controller's environment here,
+/// so only their values (never the existence of the names they define)
+/// can differ host-side; and a template file unreadable on the
+/// controller is skipped — it may live under an import landing, which
+/// only exists inside the bundle.
+package(tachy) void validateRenders(in LoadedTasks loaded,
+    const Inventory inventory, const HostConfig[] hosts)
+{
+    import std.file : exists;
+
+    foreach (ref const host; hosts)
+    {
+        const Val[string] hostVars = inventory.varsFor(host.name);
+        foreach (ref const job; loaded.jobs)
+        {
+            Val[string] vars = deepMerge(hostVars, job.overlay);
+            try
+            {
+                Val[string] params = renderParams(job.params, vars);
+                if (auto tpl = "template" in params)
+                {
+                    if ((*tpl).kind != Val.Kind.string_)
+                        continue; // the module rejects it at run time
+                    if (!exists(resolveEntryPath((*tpl).str_, job.tasksFileDir)))
+                        continue; // may only exist inside the bundle
+                    renderTemplateFile((*tpl).str_, job.tasksFileDir,
+                        vars, params, "");
+                }
+            }
+            catch (TachyError e)
+            {
+                throw new TachyError(job.origin ~ ": host " ~ host.name
+                    ~ ": " ~ e.msg);
+            }
+        }
+    }
 }
 private void writeDirectReport(string path, ulong ok, ulong changed, ulong failed)
 {
@@ -367,6 +418,13 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
                 secretLoaded = loadTasksFile(
                     buildPath(staging, baseName(absTasks)), config);
             }
+
+            // Every `{{ ... }}` of the composition must resolve for
+            // every selected host before anything ships: a dry render
+            // of every job's parameters and template files — through
+            // the shadow composition above when applies defer to an
+            // import landing.
+            validateRenders(secretLoaded, inventory, hosts);
 
             // Controller-side decryption of `file` sources marked
             // `age = true`: the identity never travels inside a bundle,

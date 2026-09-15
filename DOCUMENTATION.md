@@ -254,6 +254,16 @@ self-contained: applies and `file.src`/`template` paths resolve inside
 the copied project — `import` is the sanctioned way to pull external
 files into the bundle.
 
+Before any of that ships, every `{{ ... }}` reference of the
+composition — parameters and template files alike — is dry-rendered on
+the controller against each selected host's effective variables (global
+< host < apply chain < file vars); an undefined variable fails the run
+on the controller, naming the entry and the host, before a bundle is
+built. `{ run }`/`{ env }` markers resolve in the controller's
+environment for this check, so only their values can differ host-side,
+and a template file unreadable on the controller is skipped — it may
+live under an import landing, which only exists inside the bundle.
+
 ### Web UI (tachy webui)
 
 `tachy webui [--address ADDR] [--port PORT]` starts a local web server
@@ -353,7 +363,10 @@ between the statements it checks.
 Every string — parameter values **and statement keys** — is templated with
 `{{ name }}` / `{{ table.key }}` before use; `{{ inventory_hostname }}`
 always holds the current host's name. Unknown variables and reference
-cycles are hard errors.
+cycles are hard errors — and they surface on the controller: every
+reference is dry-rendered against each selected host's effective
+variables before anything is deployed (see
+[What a run does](#what-a-run-does)).
 
 Managing the same target twice for the same kind anywhere in a composition
 (applies, the same file) is a load-time error.

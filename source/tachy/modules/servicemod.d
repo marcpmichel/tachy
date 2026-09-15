@@ -21,15 +21,14 @@ module tachy.modules.servicemod;
  */
 import std.algorithm.searching : canFind;
 import std.array : split;
-import std.file : read, readText;
-import std.path : buildPath, isAbsolute;
+import std.file : read;
 import std.string : indexOf, join, strip;
 
 import tachy.errors;
 import tachy.modules : TaskContext, TaskResult, mustRun, mustRunWithInput, optBool, optStr, requireStr;
 import tachy.transport : StatKind, Transport, shQuote, statPath;
 import tachy.value : Val;
-import tachy.vars : deepMerge, renderTemplate;
+import tachy.vars : renderTemplateFile, resolveEntryPath;
 
 TaskResult runServiceModule(Val[string] params, TaskContext ctx)
 {
@@ -178,25 +177,15 @@ private void ensureUnitFile(Transport t, TaskContext ctx, in Val[string] params,
         if ((*tpl).kind != Val.Kind.string_)
             throw new TachyError("service: 'template' must be a string, not a "
                 ~ (*tpl).typeName());
-        const string tplPath = isAbsolute((*tpl).str_)
-            ? (*tpl).str_ : buildPath(ctx.tasksFileDir, (*tpl).str_);
-        Val[string] tplScope = ctx.vars;
-        if (auto v = "vars" in params)
-            tplScope = deepMerge(ctx.vars, (*v).table_);
-        try
-            content = renderTemplate(readText(tplPath), tplScope);
-        catch (TachyError e)
-            throw new TachyError("service: cannot render '" ~ tplPath ~ "': " ~ e.msg);
-        catch (Exception e)
-            throw new TachyError("service: cannot read template '" ~ tplPath ~ "': " ~ e.msg);
+        content = renderTemplateFile((*tpl).str_, ctx.tasksFileDir,
+            ctx.vars, params, "service: ");
     }
     else if (auto src = "src" in params)
     {
         if ((*src).kind != Val.Kind.string_)
             throw new TachyError("service: 'src' must be a string, not a "
                 ~ (*src).typeName());
-        const string srcPath = isAbsolute((*src).str_)
-            ? (*src).str_ : buildPath(ctx.tasksFileDir, (*src).str_);
+        const string srcPath = resolveEntryPath((*src).str_, ctx.tasksFileDir);
         try
             content = cast(string) read(srcPath);
         catch (Exception e)

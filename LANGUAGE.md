@@ -195,8 +195,11 @@ not two statements.
 Same keys and the same validation strictness as before. Which
 directives a file may use is decided by the loader (grammar accepts
 the union, semantic pass rejects strays, e.g. `hosts` in a tasks
-file): unknown keys, duplicate targets, cycles and escaping applies
-stay load-time errors with file context.
+stay load-time errors with file context. Every `{{ ... }}` reference
+(template files included) is additionally dry-rendered on the
+controller against each selected host's effective variables before
+anything is deployed — an undefined variable fails there, naming the
+entry and the host.
 
 Tasks files:
 

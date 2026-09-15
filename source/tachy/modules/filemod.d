@@ -39,16 +39,16 @@ module tachy.modules.filemod;
 import std.algorithm.searching : canFind;
 import std.conv : octal, text;
 import std.format : format;
-import std.path : buildPath, isAbsolute;
 import std.string : join, split, splitLines, strip;
 
-import std.file : read, readText;
+import std.file : read;
 
 import tachy.errors;
 import tachy.modules : TaskContext, TaskResult, mustRun, mustRunWithInput, optBool, optStr, requireStr;
 import tachy.transport : StatKind, Transport, readLinkTarget, shQuote, statPath;
 import tachy.value : Val;
-import tachy.vars : deepMerge, decryptAgeFile, isAgeCiphertext, renderTemplate;
+import tachy.vars : decryptAgeFile, isAgeCiphertext, renderTemplateFile,
+    resolveEntryPath;
 
 TaskResult runFileModule(Val[string] params, TaskContext ctx)
 {
@@ -193,17 +193,8 @@ TaskResult runFileModule(Val[string] params, TaskContext ctx)
                 // variable scope (the entry's local `vars` merged over
                 // it, local values winning) and use the result as the
                 // content.
-                const string tplPath = isAbsolute(templatePath)
-                    ? templatePath : buildPath(ctx.tasksFileDir, templatePath);
-                Val[string] tplScope = ctx.vars;
-                if (auto v = "vars" in params)
-                    tplScope = deepMerge(ctx.vars, (*v).table_);
-                try
-                    content = renderTemplate(readText(tplPath), tplScope);
-                catch (TachyError e)
-                    throw new TachyError("file: cannot render '" ~ tplPath ~ "': " ~ e.msg);
-                catch (Exception e)
-                    throw new TachyError("file: cannot read template '" ~ tplPath ~ "': " ~ e.msg);
+                content = renderTemplateFile(templatePath,
+                    ctx.tasksFileDir, ctx.vars, params, "file: ");
                 hasContent = true;
             }
             else if (hasSrc)
@@ -215,7 +206,7 @@ TaskResult runFileModule(Val[string] params, TaskContext ctx)
                 // the ciphertext header (on the controller); inside a
                 // deployed bundle the controller already replaced it with
                 // the plaintext, which is used as-is.
-                const string srcPath = isAbsolute(src) ? src : buildPath(ctx.tasksFileDir, src);
+                const string srcPath = resolveEntryPath(src, ctx.tasksFileDir);
                 try content = cast(string) read(srcPath);
                 catch (Exception e)
                     throw new TachyError("file: cannot read src '" ~ srcPath ~ "': " ~ e.msg);

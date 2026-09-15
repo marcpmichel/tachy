@@ -683,9 +683,12 @@ copy runs as).
    its ordered statement list (datetimes do not exist in Pravic).
    `inventory.d` and `models.d` validate structure, keys, states,
    duplicate targets, apply cycles and applies escaping the project
-   up front, so a typo fails before any host is contacted. A tasks file
-   flattens into an ordered `Job[]`, each job carrying its variable
-   overlay (the apply-chain scope it was defined in).
+   up front, so a typo fails before any host is contacted — and every
+   `{{ ... }}` reference (template files included) is dry-rendered
+   against each selected host's effective variables, so an undefined
+   variable fails on the controller, naming the entry and the host.
+   A tasks file flattens into an ordered `Job[]`, each job carrying
+   its variable overlay (the apply-chain scope it was defined in).
 2. **Select** — `runner.d` resolves the selection argument (host names,
    `@tags`, `all`) through the inventory; unknown names or tags error with
    the list of the known ones.

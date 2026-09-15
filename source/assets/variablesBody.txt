@@ -4,6 +4,8 @@ Strings are templated with {{ name }} / {{ table.key }};
 
 The builtin {{ inventory_hostname }} holds the current host name. 
 
+Every {{ ... }} reference of a composition (template files included) is dry-rendered on the controller against each selected host's effective variables before anything is deployed: an undefined variable fails the run there, naming the entry and the host.
+
 A var of the form { env = "NAME" }  is replaced by the value of that environment variable.
 
 A var of the form { env = "NAME", default = "ABCDEF" } is replaced by the default when NAME is unset.

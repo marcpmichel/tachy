@@ -708,3 +708,33 @@ private Val renderVal(in Val v, in Val[string] vars) @trusted
 }
 
 // ---------------------------------------------------------------------------
+
+/// Resolve an entry path (`template`, `src`) the way `file`/`service`
+/// do: absolute paths pass through, relative ones resolve against the
+/// defining tasks file's directory.
+package(tachy) string resolveEntryPath(string path, string baseDir) @safe pure
+{
+    import std.path : buildPath, isAbsolute;
+    return isAbsolute(path) ? path : buildPath(baseDir, path);
+}
+
+/// Render the template file at `tplPath` for one entry: the run scope
+/// `vars` merged with the entry's local `vars` param (local values
+/// win) — exactly the scope `file`/`service` render `template` with at
+/// run time.  `where` prefixes errors ("file: ", "service: ").
+package(tachy) string renderTemplateFile(string tplPath, string baseDir,
+    Val[string] vars, in Val[string] params, string where) @trusted
+{
+    import std.file : readText;
+
+    const string abs = resolveEntryPath(tplPath, baseDir);
+    Val[string] tplScope = vars;
+    if (auto v = "vars" in params)
+        tplScope = deepMerge(vars, (*v).table_);
+    try
+        return renderTemplate(readText(abs), tplScope);
+    catch (TachyError e)
+        throw new TachyError(where ~ "cannot render '" ~ abs ~ "': " ~ e.msg);
+    catch (Exception e)
+        throw new TachyError(where ~ "cannot read template '" ~ abs ~ "': " ~ e.msg);
+}

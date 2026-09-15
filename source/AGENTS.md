@@ -32,11 +32,16 @@ This doc owns the source tree's structure and conventions;
     --list-hosts output — `all` when the selection is omitted,
     `hosts info <host>` one host's attributes
     plus effective vars, values via project.d's `pravicValue`);
-    direct mode and bundled mode
-    (default: the tasks file's parent directory is the project, copied
-    with the tachy binary to each host and run there with `--direct
-    --events`); the job loop produces `JobEvent`s consumed by one
-    renderer; bundled mode also decrypts `age = true` file sources on
+    direct mode and bundled mode, both preceded by render validation
+    (`validateRenders`: every job's parameters and template files are
+    dry-rendered against each selected host's effective variables, so
+    an undefined variable fails before a bundle is built or a host is
+    contacted; in bundled mode it runs through the staging shadow
+    composition so deferred applies are covered) — bundled mode is
+    the default: the tasks file's parent directory is the project,
+    copied with the tachy binary to each host and run there with
+    `--direct --events`; the job loop produces `JobEvent`s consumed
+    by one renderer; bundled mode also decrypts `age = true` file sources on
     the controller (`collectDecryptedFiles`) and ships the plaintext
     through the bundle — for applies deferred to an import landing it
     first shadow-composes the entry file in a staging mirror of the
@@ -57,7 +62,10 @@ This doc owns the source tree's structure and conventions;
     (stdout/stderr through /bin/sh in the declaring file's directory,
     where the loading process runs), `{ age }` secret markers
     (controller-side age decryption, inventory vars only), `{{ expr }}`
-    templating, plus the age file helpers `file` sources use
+    templating, the shared `template = <path>` entry rendering
+    (`renderTemplateFile` with `resolveEntryPath`, used by
+    `file`/`service` and `validateRenders` alike), plus the age file
+    helpers `file` sources use
     (`isAgeCiphertext`, `decryptAgeFile` — the same identity
     resolution and swappable decrypt hook)
   - `value.d` — `Val` trees, the Pravic parser (`loadPractic` →
