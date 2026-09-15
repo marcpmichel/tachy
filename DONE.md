@@ -1910,3 +1910,44 @@
    - Docs: DOCUMENTATION.md apply section (marker paragraph),
      README apply row + composition prose, man compositionBody; DOX:
      source/AGENTS.md models.d bullet extended to cover processApply.
+
+59. make omp read the skills in the repo's `skills/` folder (user
+    request from chat).
+   - New project config `.omp/config.yml` (first in the repo, not
+     gitignored): `skills.customDirectories: [skills]` — omp's
+     documented mechanism for extra skill roots, scanned one level
+     deep for `<name>/SKILL.md` relative to the project root.
+   - The three packs (`behavior`, `code`, `testing`) had no frontmatter
+     and would have been silently dropped: custom-directory discovery
+     requires a `description` (name defaults to the directory). Added
+     `name` + `description` frontmatter to each SKILL.md, bodies
+     unchanged.
+   - Verified: `omp config get skills.customDirectories` from the repo
+     root resolves `["skills"]` through the project layer (global is
+     `[]`); layout and frontmatter match every documented discovery
+     requirement. Runtime proof (skill list in the system prompt,
+     `skill://behavior`, `/skill:behavior`) needs a fresh omp session —
+     no headless credential in the task shell, and omp has no
+     skill-listing subcommand; the next `omp` launch in the repo is the
+     final check.
+   - DOX: root AGENTS.md Project section documents `skills/` and the
+     `.omp/config.yml` contract.
+
+60. add a mise task updating the current user's vim/neovim Pravic
+    syntax (user request from chat).
+   - mise.toml: new `syntax` task (documented in the file header):
+     copies syntax/pravic.vim into ~/.vim/syntax and
+     $XDG_CONFIG_HOME/nvim/syntax (default ~/.config/nvim/syntax) and
+     writes the `*.pravic` filetype autocmd into
+     <dir>/ftdetect/pravic.vim for both editors; idempotent, and dies
+     when run outside the repo.
+   - Verified: `mise run syntax` installs all four files (syntax
+     copies cmp-identical to the repo file, correct autocmd); headless
+     `-Nu NONE` runs in both vim and nvim with only the installed
+     runtimepath dirs prepended detect x.pravic as filetype=pravic
+     with synID(1,1,1) != 0 (PASS/PASS).
+   - Docs: README "Editor syntax" mentions `mise run syntax`; DOX:
+     root AGENTS.md mise.toml bullet extended and the `syntax/` bullet
+     now points at the task instead of "installed by hand";
+     syntax/AGENTS.md intentionally unchanged (it owns the syntax
+     definition's contract, not the install path).

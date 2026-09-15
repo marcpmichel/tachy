@@ -1,0 +1,7 @@
+# Project-local omp settings (https://omp docs: settings.md).
+# Discover the repo's skills/ folder: each skills/<name>/SKILL.md
+# becomes a skill (skill://<name>, /skill:<name>); SKILL.md frontmatter
+# needs a description for custom-directory discovery.
+skills:
+  customDirectories:
+    - skills

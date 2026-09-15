@@ -6,6 +6,13 @@
 # notes. Run it from a clean tree, after committing the version bump:
 #
 #     mise run release
+#
+# syntax — install the Pravic editor syntax for the current user:
+# copies syntax/pravic.vim into ~/.vim/syntax and
+# $XDG_CONFIG_HOME/nvim/syntax (default ~/.config/nvim/syntax) and
+# adds the *.pravic filetype detection (ftdetect/pravic.vim):
+#
+#     mise run syntax
 
 [tasks.release]
 description = "Tag v<version> (from source/assets/version) and create the GitHub release with gh"
@@ -22,4 +29,19 @@ echo "release: tagging $(git rev-parse --short HEAD) as $tag"
 git tag "$tag"
 git push origin "refs/tags/$tag"
 gh release create "$tag" --verify-tag --title "tachy $version" --generate-notes
+'''
+
+[tasks.syntax]
+description = "Install syntax/pravic.vim and *.pravic filetype detection into the current user's Vim and Neovim"
+run = '''
+set -eu
+die() { echo "syntax: $*" >&2; exit 1; }
+[ -f syntax/pravic.vim ] || die "syntax/pravic.vim not found — run from the tachy repo"
+cfg="${XDG_CONFIG_HOME:-$HOME/.config}"
+for dir in "$HOME/.vim" "$cfg/nvim"; do
+  mkdir -p "$dir/syntax" "$dir/ftdetect"
+  cp syntax/pravic.vim "$dir/syntax/pravic.vim"
+  echo 'autocmd BufNewFile,BufRead *.pravic setfiletype pravic' > "$dir/ftdetect/pravic.vim"
+  echo "syntax: installed pravic syntax + filetype detection in $dir"
+done
 '''

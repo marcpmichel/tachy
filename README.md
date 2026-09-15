@@ -776,6 +776,9 @@ booleans and comments. Copy it to `~/.vim/syntax/` (Neovim:
 autocmd BufNewFile,BufRead *.pravic setfiletype pravic
 ```
 
+From a checkout, `mise run syntax` does both for the current user
+(the Neovim path honors `XDG_CONFIG_HOME`).
+
 ## Limitations
 
 - linux/amd64 only: the binary copied to each host is the controller's own

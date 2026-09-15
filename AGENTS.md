@@ -102,7 +102,18 @@ When the user requests a durable behavior change, record it here or in the relev
   source `v<version>` (the build date in `source/assets/version`), pushes
   the tag to `origin` and creates the GitHub release with
   `gh release create --verify-tag --generate-notes`; it refuses a dirty
-  tree, an empty version file or an existing tag
+  tree, an empty version file or an existing tag; `mise run syntax`
+  installs `syntax/pravic.vim` and `*.pravic` filetype detection into
+  the current user's Vim (`~/.vim`) and Neovim (`$XDG_CONFIG_HOME/nvim`,
+  default `~/.config/nvim`)
+- `skills/` holds omp skill packs (`behavior`, `code`, `testing`) —
+  discovered through the project config `.omp/config.yml`
+  (`skills.customDirectories: [skills]`); each `skills/<name>/SKILL.md`
+  needs `name`/`description` frontmatter (description is required for
+  custom-directory discovery), is reachable as `skill://<name>` and as
+  an interactive `/skill:<name>` command, and carries working rules for
+  this repo (ask when unclear, no Python for source edits, DOX + K&R,
+  the testing.internal VM, silly's named unittest annotations)
 - CLI shape: `tachy <command> [options] <selection> [<tasks.pravic>...]`;
  command is one of `apply`, `check` (check mode; the old `-c` option is
  gone), `hosts` (`hosts list [<selection>]` — `all` when omitted,
@@ -121,7 +132,8 @@ When the user requests a durable behavior change, record it here or in the relev
  `inventory.pravic`, default tasks file `main.pravic` (a directory
  argument maps to its `main.pravic`)
 - `syntax/` ships editor syntax coloring for Pravic (Vim/Neovim
-  `pravic.vim`, installed by hand — see README "Editor syntax")
+  `pravic.vim`, installed for the current user by `mise run syntax` —
+  see README "Editor syntax")
 - `sessions/` holds saved session records (inert artifacts, not inputs to code or docs)
 - TODO.md / DONE.md are the task ledger: pending work arrives as TODO.md entries
 
