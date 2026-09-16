@@ -12,6 +12,14 @@ copies the project — and itself — to each host and runs it there. Current
 state is inspected first, and actions run only when reality differs from
 the desired one — running twice changes nothing the second time.
 
+The names are a double homage: Pravic is the constructed language of
+Anarres in Ursula K. Le Guin's *The Dispossessed*, and the ansible —
+the instantaneous interstellar communicator of the same Hainish
+novels — gave the Ansible tool its name. *tachy* names the mechanism
+inside Le Guin's device: the tachyon, the hypothetical
+faster-than-light particle (Greek *tachys*, "swift") science fiction
+uses to explain instantaneous communication.
+
 ```sh
 tachy apply '@web'     # applies main.pravic; its directory is the project
 ```
