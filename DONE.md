@@ -2017,3 +2017,59 @@
     value.d separately); DOX: source/AGENTS.md layering bullets —
     new `parser.d` entry, `value.d` entry trimmed to Val + statement
     types + accessors.
+
+63. `repo` directive: ensure a git repository exists and is synchronized
+    (user TODO entry; only git for now)
+   - parser.d: `repo` in singleKeywords (canonical `repos`), `repos` in
+    groupKeywords — both forms, same entry semantics as every plural
+    directive; the `!KeyChar` guard keeps `repofoo` an unknown directive.
+   - modules/repomod.d (new): probe-then-act — `git -C <path> rev-parse
+    --git-dir` decides clone vs sync; a missing repository is cloned
+    (declared branch/tag carried on the clone); `url` is enforced on
+    the `origin` remote (added when missing, retargeted when different);
+    `git fetch --prune origin` refreshes remote-tracking refs and runs
+    in check mode too (it never moves HEAD, the worktree or local
+    branches); `tag` checks the tag's commit out detached; `branch`
+    checks out (created tracking `origin/<branch>` when missing
+    locally) and fast-forwards only when HEAD is an ancestor of
+    `origin/<branch>` — a diverged branch fails the host naming the
+    repository instead of being rewritten. Neither branch nor tag:
+    existence + origin + fetch is the whole contract. Check mode
+    reports would-be clone/retarget/checkout/fast-forward and stops
+    after the first one (later probes would read pre-fix state).
+   - Registration: models.d (`repos` → module `repo`, key injects
+    `path`, display kind `repo`, duplicate "repository" targets),
+    package.d (`moduleNames`, `validateModuleParams` — `url` required
+    string, `type`/`branch`/`tag` strings, literal `type` must be
+    "git" (templated defers to run time), `branch` and `tag` mutually
+    exclusive — and `runModule` dispatch), `allModules` gains "repo".
+   - Tests: tests/repomod.d (12 scripted-transport suites: clone ±branch/
+    tag, up-to-date, fast-forward, diverged guard, branch switch ±local
+    branch, missing branch, tag drift/match/missing, origin add/
+    retarget, seven check-mode flows, run-time type rejection); one new
+    suite in tests/parser.d (both forms, canonical kind, keyword guard)
+    and one in tests/models.d (wiring, path injection, group form, and
+    the load-time errors: implied path, missing url, branch+tag,
+    literal hg, non-string url, duplicate repositories across an
+    apply). `dub test`: 175 passed, 0 failed (was 161).
+   - E2E on testing.internal (root over ssh; git installed via apt for
+    the run, purged + autoremoved after; fixture and scratch under
+    /tmp, all removed): apply cloned the repo from a local bare origin
+    (changed), re-run ok ("up to date with origin/main"); a new remote
+    commit → check mode reported "would fast-forward main to
+    origin/main" applying nothing → apply fast-forwarded (f.txt had
+    all three commits on the host) → ok; branch switch to dev (changed,
+    then ok); tag = v1 at the dev commit → ok without checkout (drift
+    path covered by the scripted tests); a local commit on main →
+    apply failed "branch 'main' and 'origin/main' have diverged",
+    exit 1, nothing rewritten; branch "nope" → "branch 'nope' not
+    found on origin", exit 1.
+   - Docs: LANGUAGE.md directive-inventory row (repositories), a
+    `### repo` section in DOCUMENTATION.md (between service and
+    compose), README.md (tagline, features bullet, directive table
+    row, idempotency note, source tree), man TASKS body
+    (tasksBody.txt), models.d kinds list; syntax/pravic.vim gained
+    `repos|repo` — verified headlessly in vim and nvim (synID: both
+    keywords pravicKeyword, `repofoo` pravicKey) after refreshing the
+    stale user installs with `mise run syntax`; DOX: modules/AGENTS.md
+    repomod bullet with the fetch-in-check-mode rule.

@@ -152,11 +152,11 @@ private struct Parser
     /// collide.  Order within a set does not matter (the guard decides).
     private static immutable string[] groupKeywords =
         ["vars", "files", "directories", "packages", "groups",
-         "users", "services", "hosts", "imports", "webui", "identity"];
+         "users", "services", "repos", "hosts", "imports", "webui", "identity"];
     private static immutable string[] singleKeywords =
         ["var", "file", "directory", "package", "group", "user",
          "service", "host", "apply", "ensure", "compose", "import",
-         "identity", "http"];
+         "identity", "http", "repo"];
 
     /// Canonical directive names for the single-form keywords (group-form
     /// keywords are their own canonical name).
@@ -171,6 +171,7 @@ private struct Parser
             case "group": return "groups";
             case "user": return "users";
             case "service": return "services";
+            case "repo": return "repos";
             case "host": return "hosts";
             default: return kw; // apply, ensure, compose, import
         }

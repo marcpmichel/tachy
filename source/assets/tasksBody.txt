@@ -78,6 +78,17 @@
       timeout = 10                    # timeout bounds the whole query (default 10s).
                                       # Plain http only, queried by tachy itself (no curl needed)
 
+  repo /srv/app {                     # ensure a git repository exists and is
+      url = "git@example.com/me/app.git"  # synchronized: cloned when the path
+                                      # is not a repository; url is enforced on
+                                      # the origin remote, then fetched
+      branch = "main"                 # checkout + fast-forward to origin/branch
+  }                                   # (a diverged branch is an error, never
+                                      # rewritten); tag = "v0.12" checks the tag
+                                      # out detached; branch/tag are mutually
+                                      # exclusive, neither: existence + origin
+                                      # + fetch only
+
   Plural directives also take a group form; path keys need no quotes (quotes are for spaces, braces and templates); and an instruction with no attributes may omit the braces:
   files {
       /etc/hosts { owner = "root", mode = "0644" }

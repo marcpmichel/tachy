@@ -29,6 +29,9 @@ module tachy.models;
  *     ensure NAME        run (required), exit_status, output
  *     http URL           type (default "GET"), headers, data, code
  *                        (default 200), output, timeout
+ *     repo PATH          url (required), type (only "git"), branch, tag
+ *                        (checkout + fast-forward; branch/tag mutually
+ *                        exclusive)
  *
  * `apply "path" { bindings }` composes another tasks file **at the
  * statement's position**, carrying its own variables; a `vars`
@@ -120,8 +123,8 @@ private Val[string] loadInto(string path, Val[string] outerVars,
             addImport(loaded, path, projectDir, importLandings, config, s);
         else if (s.kind != "files" && s.kind != "directories" && s.kind != "packages"
                 && s.kind != "groups" && s.kind != "users" && s.kind != "services"
-                && s.kind != "compose" && s.kind != "ensure" && s.kind != "apply"
-                && s.kind != "http")
+                && s.kind != "repos" && s.kind != "compose" && s.kind != "ensure"
+                && s.kind != "apply" && s.kind != "http")
             throw new TachyError(path ~ ": line " ~ text(s.line) ~ ": '"
                 ~ s.kind ~ "' is not valid in a tasks file");
     }
@@ -293,6 +296,7 @@ private void addJob(ref LoadedTasks loaded, ref string[][string] seen,
         case "groups": moduleName = "group"; break;
         case "users": moduleName = "user"; break;
         case "services": moduleName = "service"; break;
+        case "repos": moduleName = "repo"; break;
         case "compose": moduleName = "compose"; break;
         case "ensure": moduleName = "ensure"; break;
         case "http": moduleName = "http"; break;
@@ -305,6 +309,7 @@ private void addJob(ref LoadedTasks loaded, ref string[][string] seen,
     switch (moduleName)
     {
         case "file": key = "path"; noun = "path"; break;
+        case "repo": key = "path"; noun = "repository"; break;
         case "compose": key = "dir"; noun = "directory"; break;
         case "http": key = "url"; noun = "url"; break;
         default: key = noun = "name"; break;
@@ -374,6 +379,7 @@ private string kindFor(string kind) @safe pure nothrow
         case "groups": return "group";
         case "users": return "user";
         case "services": return "service";
+        case "repos": return "repo";
         case "compose": return "compose";
         case "ensure": return "ensure";
         case "http": return "http";

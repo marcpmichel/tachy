@@ -1076,3 +1076,118 @@ http "http://x/a" { }
     assert(msg.indexOf("already managed") >= 0, msg);
 }
 }
+
+@("repo: statement wiring, path injection, load-time errors")
+unittest
+{
+import tachy.value : Val;
+auto p = writeTemp("repo.pravic", `
+repo /srv/app {
+    type = "git"
+    url = "git@example.com/me/app.git"
+    branch = "main"
+}
+
+ensure "after" { run = "true" }
+`);
+auto loaded = loadTasksFile(p);
+assert(loaded.jobs.length == 2);
+assert(loaded.jobs[0].kind == "repo" && loaded.jobs[0].moduleName == "repo");
+assert(loaded.jobs[0].target == "/srv/app");
+assert(loaded.jobs[0].params["path"].str_ == "/srv/app");
+assert(loaded.jobs[0].params["url"].str_ == "git@example.com/me/app.git");
+assert(loaded.jobs[0].params["branch"].str_ == "main");
+assert(loaded.jobs[1].kind == "ensure"); // source order
+
+// the group form composes the same jobs
+loaded = loadTasksFile(writeTemp("repo_group.pravic", `
+repos {
+    /srv/one { url = "git@example.com/one.git" }
+    /srv/two { url = "git@example.com/two.git", tag = "v1" }
+}
+`));
+assert(loaded.jobs.length == 2);
+assert(loaded.jobs[0].kind == "repo" && loaded.jobs[0].target == "/srv/one");
+assert(loaded.jobs[0].params["path"].str_ == "/srv/one");
+assert(loaded.jobs[1].target == "/srv/two"
+    && loaded.jobs[1].params["tag"].str_ == "v1");
+
+// the statement key is the path: setting it by hand is an error
+{
+    string msg;
+    try
+    {
+        loadTasksFile(writeTemp("repo_key.pravic",
+            "repo /srv/app { url = \"u\", path = \"/elsewhere\" }\n"));
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(msg.indexOf("'path' is implied by the statement key") >= 0, msg);
+}
+// url is required
+{
+    string msg;
+    try
+    {
+        loadTasksFile(writeTemp("repo_nourl.pravic",
+            "repo /srv/app { branch = \"main\" }\n"));
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(msg.indexOf("'url' is required") >= 0, msg);
+}
+// branch and tag are mutually exclusive
+{
+    string msg;
+    try
+    {
+        loadTasksFile(writeTemp("repo_both.pravic",
+            "repo /srv/app { url = \"u\", branch = \"a\", tag = \"v1\" }\n"));
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(msg.indexOf("mutually exclusive") >= 0, msg);
+}
+// only git exists (literal values are checked at load time)
+{
+    string msg;
+    try
+    {
+        loadTasksFile(writeTemp("repo_type.pravic",
+            "repo /srv/app { url = \"u\", type = \"hg\" }\n"));
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(msg.indexOf("unsupported repository type 'hg'") >= 0, msg);
+}
+// a templated type defers to run time (params render per host later)
+{
+    auto q = writeTemp("repo_tmpl.pravic",
+        "var t = \"git\"\nrepo /srv/app { url = \"u\", type = \"{{ t }}\" }\n");
+    auto l = loadTasksFile(q);
+    assert(l.jobs.length == 1 && l.jobs[0].params["type"].str_ == "{{ t }}");
+}
+// non-string url
+assertThrown!(TachyError)(loadTasksFile(writeTemp("repo_int.pravic",
+    "repo /srv/app { url = 7 }\n")));
+// duplicate repositories across a composition
+{
+    writeTemp("repo_inner.pravic", "repo /srv/app { url = \"u\" }\n");
+    string msg;
+    try
+    {
+        loadTasksFile(writeTemp("repo_dup.pravic", `
+apply "repo_inner.pravic" { }
+repo /srv/app { url = "u" }
+`));
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(msg.indexOf("repository '/srv/app' is already managed") >= 0, msg);
+}
+}

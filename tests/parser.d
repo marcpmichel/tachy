@@ -284,3 +284,38 @@ unittest
     stmts = parseStmts("http http://localhost/ping\n");
     assert(stmts[0].kind == "http" && stmts[0].key == "http://localhost/ping");
 }
+
+@("repo directive: both forms, canonical kind, keyword guard")
+unittest
+{
+    auto stmts = parseStmts(`
+repo /srv/app {
+    url = "git@example.com/me/app.git",
+    branch = "main"
+}
+repos {
+    /srv/one { url = "u1" }
+    /srv/two
+}
+repo /srv/bare
+`);
+    assert(stmts.length == 4, toText(stmts.length));
+    assert(stmts[0].kind == "repos" && stmts[0].key == "/srv/app"
+        && stmts[0].value.table_["url"].str_ == "git@example.com/me/app.git");
+    assert(stmts[1].kind == "repos" && stmts[1].key == "/srv/one");
+    assert(stmts[2].kind == "repos" && stmts[2].key == "/srv/two"
+        && stmts[2].value.table_.length == 0);
+    assert(stmts[3].kind == "repos" && stmts[3].key == "/srv/bare");
+
+    // the keyword guard: `repofoo` is one unknown directive, not `repo`
+    import std.algorithm.searching : canFind;
+    string msg;
+    try
+    {
+        parseStmts("repofoo = 1\n");
+        assert(false);
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(canFind(msg, "unknown directive 'repofoo'"), msg);
+}

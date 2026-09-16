@@ -702,6 +702,45 @@ reports the would-be write without touching the host.
 
 ---
 
+### `repo` — git repositories
+
+Keyed by the checkout path on the host. Ensures the repository exists —
+cloned from `url` when the path is not a git repository — and is
+synchronized with its `origin` remote. Local work is never discarded: a
+declared branch is fast-forwarded only when the host's HEAD is an
+ancestor of the remote branch; a diverged branch is an error naming the
+repository, and tachy never rewrites history.
+
+```pravic
+repo /srv/app {
+    url = "git@example.com/me/app.git"   # required
+    branch = "main"                      # checkout + fast-forward
+}
+
+repo /srv/release {
+    url = "git@example.com/me/app.git"   # a tag pins a detached checkout
+    tag = "v0.12"
+}
+```
+
+| Attribute | Default | Description |
+|---|---|---|
+| `url` | — | Required. The remote to clone from and the enforced `origin` of an existing checkout (added when missing, retargeted when different). |
+| `type` | `"git"` | Only `git` is implemented; git must be installed on the host. |
+| `branch` | — | Check this branch out (created tracking `origin/<branch>` when it does not exist locally) and fast-forward it to `origin/<branch>`. Mutually exclusive with `tag`. |
+| `tag` | — | Check this tag's commit out detached. Mutually exclusive with `branch`. |
+
+Synchronization means: the `origin` url matches `url`, the
+remote-tracking refs are refreshed (`git fetch --prune origin`), and the
+declared `branch`/`tag` is checked out and up to date with origin.
+Without `branch` or `tag`, existence, origin and fetch are the whole
+contract — the working tree itself is left alone. Check mode runs the
+same probes (fetch included: it only moves remote-tracking refs, never
+HEAD, the worktree or local branches) and reports the would-be
+clone/retarget/checkout/fast-forward without running them.
+
+---
+
 ### `compose` — Docker Compose stacks
 
 Keyed by the stack's project directory (absolute). The key injects `dir`;

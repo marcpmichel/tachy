@@ -13,6 +13,7 @@ public import tachy.modules.ensuremod : runEnsureModule;
 public import tachy.modules.filemod : runFileModule;
 public import tachy.modules.httpmod : runHttpModule;
 public import tachy.modules.packagemod : runPackageModule;
+public import tachy.modules.repomod : runRepoModule;
 public import tachy.modules.servicemod : runServiceModule;
 
 import tachy.modules.composemod : validateComposeParams;
@@ -42,7 +43,7 @@ struct TaskResult
     string[] details;  // commands executed + change details (shown with -v)
 }
 
-private immutable string[] allModules = ["file", "service", "ensure", "group", "user", "package", "compose", "http"];
+private immutable string[] allModules = ["file", "service", "ensure", "group", "user", "package", "compose", "http", "repo"];
 
 /// Registered module names.
 string[] moduleNames() @safe pure nothrow
@@ -129,6 +130,33 @@ void validateModuleParams(string moduleName, in Val[string] params, string conte
                         ~ (*p).typeName());
             break;
         }
+        case "repo":
+        {
+            import std.algorithm.searching : canFind;
+            checkKeys(params, ["path", "type", "url", "branch", "tag"],
+                context ~ " (repo)");
+            if (auto p = "url" in params)
+            {
+                if ((*p).kind != Val.Kind.string_)
+                    throw new TachyError(context ~ " (repo): 'url' must be a string, not a "
+                        ~ (*p).typeName());
+            }
+            else
+                throw new TachyError(context ~ " (repo): 'url' is required");
+            if (("branch" in params) !is null && ("tag" in params) !is null)
+                throw new TachyError(context ~ " (repo): 'branch' and 'tag' are mutually exclusive");
+            foreach (k; ["type", "branch", "tag"])
+                if (auto p = k in params)
+                    if ((*p).kind != Val.Kind.string_)
+                        throw new TachyError(context ~ " (repo): '" ~ k
+                            ~ "' must be a string, not a " ~ (*p).typeName());
+            if (auto p = "type" in params)
+                if ((*p).kind == Val.Kind.string_ && !canFind((*p).str_, "{{")
+                        && (*p).str_ != "git")
+                    throw new TachyError(context ~ " (repo): unsupported repository type '"
+                        ~ (*p).str_ ~ "' (only \"git\" is implemented)");
+            break;
+        }
         case "compose":
         {
             checkKeys(params, ["dir", "file", "project", "services", "state", "pull",
@@ -191,6 +219,7 @@ TaskResult runModule(string moduleName, Val[string] params, TaskContext ctx)
         case "group": return runGroupModule(params, ctx);
         case "user": return runUserModule(params, ctx);
         case "package": return runPackageModule(params, ctx);
+        case "repo": return runRepoModule(params, ctx);
         case "compose": return runComposeModule(params, ctx);
         case "http": return runHttpModule(params, ctx);
         default:

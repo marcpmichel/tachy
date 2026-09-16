@@ -3,7 +3,8 @@
 Full reference: [DOCUMENTATION.md](DOCUMENTATION.md).
 
 Pravic-driven configuration management for D — a small, boring, Ansible-like
-(files, directories, services, compose stacks) addressed by target, written
+(files, directories, services, compose stacks, git repositories) addressed
+by target, written
 in Pravic, tachy's own configuration language (see [LANGUAGE.md](LANGUAGE.md)).
 tachy applies it to the hosts selected from an **inventory**, over SSH or
 locally. The tasks file's parent directory is its **project**: tachy
@@ -19,7 +20,7 @@ tachy apply '@web'     # applies main.pravic; its directory is the project
 
 - **Inventory**: hosts with connection details, tags and variables.
 - **Tasks files**: `file`, `directory`, `service`, `compose` (plus
-  `package`, `group`, `user`, `ensure`, `http`) statements keyed by path,
+  `package`, `group`, `user`, `ensure`, `http`, `repo`) statements keyed by path,
   unit name, URL or stack dir — the target *is* the statement key. Two
   equivalent forms, group and single.
 - **Projects**: the tasks file's parent directory is the project; tachy
@@ -375,6 +376,7 @@ A tasks file is a sequence of statements, one per line (all optional):
 | `var NAME = value` / `vars { ... }` | — | Variables for this file's jobs and everything it composes. Entries may be `{ env = "NAME", default = "...", from = ".env" }` to read the environment of the process loading the file (the host, in bundled runs), a dotenv file relative to it, or `{ run = "cmd" }` to capture a command's output. |
 | `directory PATH { ... }` | path | `state` (default `directory`; also `absent`), `mode`, `owner`, `group` |
 | `service UNIT { ... }` | unit | `state` (`started`, `stopped`, `restarted`, `reloaded`, or `enabled` = ensure boot enablement only), `enabled` (bool), `src`/`template` (manage the unit file at `/etc/systemd/system/<unit>`: verbatim copy or rendered template; mutually exclusive), `vars` (local template context, with `template` only; `{ env }`/`{ run }` markers resolve at load like every other var). |
+| `repo PATH { ... }` | path | `url` (required: cloned when the path is not a repository, enforced on the `origin` remote otherwise), `type` (only `git`), `branch` (checkout + fast-forward to `origin/<branch>`; mutually exclusive with `tag`), `tag` (detached checkout). Without `branch`/`tag`: existence, origin and fetch only — the working tree is left alone. |
 | `compose DIR { ... }` | dir | `file` (required; relative inside `dir`), `state` (`running` default, `stopped`, `absent`), `project` (default: lowercased `dir` basename), `services` (subset; default all), `pull`/`build`/`recreate` policies, `wait` (default `true`) + `wait_timeout`, `timeout`, `remove_orphans` (stopped), `remove_volumes`/`remove_images` (absent). Needs the docker CLI with the compose plugin on the host. |
 | `package "mgr:name" { ... }` | `"<manager>:<name>"` | `version` (default `latest`; an explicit version pins it exactly — epoch-qualified, as dpkg reports it), `present` (default `true`; `false` removes). Only `apt` keys are supported. |
 | `group NAME { ... }` | name | `state` (default `present`; `absent` removes). |
@@ -467,6 +469,18 @@ Idempotency semantics:
   `down --remove-orphans` (plus `--volumes` / `--rmi all` on request) and
   is a no-op when nothing of the project exists — the compose file is only
   read when something has to run.
+- `repo`: git repositories keyed by checkout path. A missing repository
+  is cloned (the declared branch or tag carried on the clone); an
+  existing one gets its `origin` remote added or retargeted to `url`,
+  then `git fetch --prune origin` refreshes the remote-tracking refs.
+  A declared `branch` is checked out (created tracking `origin/<branch>`
+  when it does not exist locally) and fast-forwarded — only when HEAD
+  is an ancestor of the remote branch; a diverged branch fails the host
+  instead of being rewritten. A `tag` checks the tag's commit out
+  detached. Without `branch`/`tag`, existence, origin and fetch are the
+  whole contract — the working tree is never touched. Check mode runs
+  the same probes (fetch included: it only moves remote-tracking refs)
+  and reports the would-be clone/retarget/checkout/fast-forward.
 - `ensure`: runs `run` on the host and checks it — `exit_status`
   accepts an integer, `{ not = N }` or `{ cond = "OP N" }` with `OP`
   one of `==`, `!=`, `<`, `<=`, `>`, `>=` (default `0`); `output`
@@ -757,6 +771,7 @@ source/tachy/
     ensuremod.d               shell command ensures (exit status / output)
     httpmod.d                http checks (status / body assertions)
     composemod.d             Docker Compose stacks (config-hash probes)
+    repomod.d                git repositories (clone, origin, fetch/checkout sync)
     fake.d                   scripted transport (unit tests only)
 ```
 

@@ -212,6 +212,7 @@ Tasks files:
 | groups | `groups { ... }` | `group name { ... }` |
 | users | `users { ... }` | `user name { ... }` |
 | services | `services { ... }` | `service unit { ... }` |
+| repositories | `repos { ... }` | `repo target { ... }` |
 | compose stacks | — | `compose /srv/stack { ... }` |
 | command checks | — | `ensure "task name" { run = "..." }` — asserts on exit status/output; runs even in dry-run mode |
 | HTTP checks | — | `http "url" { ... }` — submits a request (`type`, `headers`, `data`) and asserts on status (`code`) and body (`output`, `ensure`'s shapes); plain http only |

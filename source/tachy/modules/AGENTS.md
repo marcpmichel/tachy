@@ -23,7 +23,11 @@ This doc owns module-level contracts.
   way — mode/owner/group), `servicemod` (systemctl state/enablement
   plus unit file management: `src` verbatim copy, `template` rendering
   with the entry's local `vars`, written to /etc/systemd/system with
-  daemon-reload on drift), `packagemod` (apt), `ensuremod` (run +
+  daemon-reload on drift), `packagemod` (apt), `repomod` (git checkouts behind `repo`: cloned when
+  the path is not a repository, `url` enforced on the `origin` remote,
+  `fetch --prune` refresh — remote-tracking refs only, so it runs in
+  check mode like a probe — `branch` checkout + ff-only fast-forward,
+  `tag` detached checkout; diverged branches error, never rewritten), `ensuremod` (run +
   exit_status/output assertions behind the `ensure` directive),
   `accounts.d` (groups + users via
   shadow-utils), `composemod` (Docker Compose stacks keyed by project
