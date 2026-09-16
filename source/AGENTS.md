@@ -68,11 +68,13 @@ This doc owns the source tree's structure and conventions;
     helpers `file` sources use
     (`isAgeCiphertext`, `decryptAgeFile` — the same identity
     resolution and swappable decrypt hook)
-  - `value.d` — `Val` trees, the Pravic parser (`loadPractic` →
+  - `parser.d` — the Pravic parser: `loadPractic`/`parsePractic` →
     ordered statements, `file: line N:` errors, duplicate-key
-    detection) and the validated accessors; the grammar is specified
-    in the root `LANGUAGE.md` (a keyword registered in both forms —
+    detection; a hand-written recursive descent following the root
+    `LANGUAGE.md` grammar exactly (a keyword registered in both forms —
     `identity` — takes its group form when a `{` follows)
+  - `value.d` — `Val` trees, the `PracticStmt`/`PracticDoc` statement
+    types and the validated accessors
   - `transport.d` — `local` and `ssh` transports (abstract class; `runStreaming` delivers output lines live — POSIX `read`, not buffered `rawRead`, so streams are not batched), `shQuote`, stat helpers
   - `http.d` — the minimal HTTP/1.1 client behind the `http` directive:
     plain TCP via std.socket (no libcurl, no external processes), plain

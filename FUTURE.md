@@ -11,7 +11,7 @@
 
 - when <condition> for tasks ??
 
-
+- improve events output => tree-like : host, task-files, tasks
 
 
 

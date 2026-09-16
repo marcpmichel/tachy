@@ -663,7 +663,7 @@ flowchart LR
     MODS --> TR
     RUN --> VARS["vars.d\nmerge + {{ }} render"]
     subgraph parsing
-        VAL["value.d\nPravic parser + Val tree\n(LANGUAGE.md)"]
+        VAL["parser.d\nPravic parser + Val tree\n(LANGUAGE.md)"]
         VAL --> INV
         VAL --> MOD
     end
@@ -678,7 +678,7 @@ every job through a local transport and reports per-job lines plus an
 skips the bundling and runs jobs in-process (that is what the on-host
 copy runs as).
 
-1. **Parse & validate** — every Pravic file is parsed by `value.d` (a
+1. **Parse & validate** — every Pravic file is parsed by `parser.d` (a
    hand-written parser; see LANGUAGE.md) into a uniform `Val` tree plus
    its ordered statement list (datetimes do not exist in Pravic).
    `inventory.d` and `models.d` validate structure, keys, states,
@@ -736,7 +736,8 @@ Source layout:
 source/app.d                 CLI entry: command word, options, help, exit codes
 source/tachy/
   errors.d                   TachyError (user-facing failures)
-  value.d                    Pravic parser, Val tree, validated accessors
+  parser.d                   Pravic parser (LANGUAGE.md grammar)
+  value.d                    Val tree, statement types, validated accessors
   vars.d                     deepMerge, {{ }} rendering, cycle detection
   inventory.d                hosts/tags model, selection, var resolution
   models.d                   tasks files: jobs, applies, scope chaining

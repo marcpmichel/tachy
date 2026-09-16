@@ -49,6 +49,7 @@ import std.string : indexOf;
 import tachy.errors;
 import tachy.modules : validateModuleParams;
 import tachy.config;
+import tachy.parser : loadPractic;
 import tachy.value;
 import tachy.vars : deepMerge, resolveEnvVars;
 

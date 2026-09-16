@@ -1,7 +1,7 @@
 # Pravic — tachy's configuration language
 
 Status: **the language tachy implements.** The parser lives in
- `source/tachy/value.d` (a hand-written recursive descent of the grammar
+ `source/tachy/parser.d` (a hand-written recursive descent of the grammar
  below); every tasks, inventory and config file is Pravic, and TOML
  support is gone.  File extension `.pravic` (`main.pravic`,
  `inventory.pravic`, `config.pravic`); a directory entry point is its
@@ -347,7 +347,7 @@ webui {
    still applies.  The same file applied from two different files
    remains legal.
 2. **Implementation.** A hand-written recursive-descent parser in
-   `source/tachy/value.d` (the grammar above maps 1:1; chosen over
+   `source/tachy/parser.d` (the grammar above maps 1:1; chosen over
    `pegged` for `file: line N:` errors and zero dependencies) feeding
    the existing `Val` trees plus an ordered statement list.  One hard
    cutover: `loadToml` became `loadPravic`, the fixed per-file job

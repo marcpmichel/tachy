@@ -36,6 +36,7 @@ import std.path : absolutePath, buildNormalizedPath, buildPath, dirName,
     expandTilde, isAbsolute;
 
 import tachy.errors;
+import tachy.parser : loadPractic;
 import tachy.value;
 
 struct Config

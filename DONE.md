@@ -1985,3 +1985,35 @@
     + the variables lead, man VARIABLES (variablesBody.txt) and
     LANGUAGE.md's validation paragraph; DOX: source/AGENTS.md runner.d
     and vars.d bullets extended.
+
+62. parser extraction: the Pravic parser moved from value.d to a new
+    `tachy/parser.d` (user TODO entry); Val and the statement types
+    stay in value.d
+   - source/tachy/parser.d (new): module doc with the grammar prose,
+    `loadPractic`, the `Parser` recursive descent (verbatim move,
+    lines 122-133/135-949/1026-1031 of the old value.d) and
+    `package(tachy) parsePractic`; imports `tachy.value` for
+    `Val`/`PracticStmt`/`PracticDoc`.
+   - source/tachy/value.d: keeps `Val`, `PracticStmt`/`PracticDoc`
+    and the validated accessors (`checkKeys`, `dupTable`, `optTable`,
+    `optString`, `optInt`, `optStringArray`); module doc now points
+    at `tachy.parser`; the unused `Appender` import dropped. 1031 →
+    189 lines; parser.d 864.
+   - Callers: config.d, inventory.d and models.d gained
+    `import tachy.parser : loadPractic;`; tests/project.d imports
+    `parsePractic` from `tachy.parser`.
+   - Tests: the eight parser suites moved verbatim from tests/value.d
+    to tests/parser.d (`tachy.tests.parser`, helpers cleaned — the
+    stray duplicate `TachyError` import inside `toText` dropped);
+    tests/value.d keeps the accessor suite (`checkKeys`/`optString`)
+    with a `varsTable` helper over `tachy.parser.parsePractic`.
+   - Verification: `dub build` clean; `dub test` 161 passed, 0 failed
+    (same count as before the split); smoke run of the real binary —
+    `tachy check all main.pravic` on a scratch inventory+tasks
+    (local host) parsed, composed and reported through the new
+    module, check mode left nothing behind.
+   - Docs: LANGUAGE.md (parser home ×2), README.md (mermaid node,
+    pipeline step 1, source layout listing now names parser.d and
+    value.d separately); DOX: source/AGENTS.md layering bullets —
+    new `parser.d` entry, `value.d` entry trimmed to Val + statement
+    types + accessors.

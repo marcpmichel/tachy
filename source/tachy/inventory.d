@@ -23,6 +23,7 @@ import std.conv : text;
 import std.string : join;
 
 import tachy.errors;
+import tachy.parser : loadPractic;
 import tachy.value;
 import tachy.vars : AgeConfig, deepMerge, resolveEnvVars;
 

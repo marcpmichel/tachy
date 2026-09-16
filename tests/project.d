@@ -9,7 +9,7 @@ import std.file : exists, mkdirRecurse, readText, tempDir;
 import std.path : buildPath;
 import std.stdio : File;
 import tachy.transport : LocalTransport;
-import tachy.value : parsePractic;
+import tachy.parser : parsePractic;
 import tachy.errors : TachyError;
 import tachy.value : Val;
 import std.path : isAbsolute;
