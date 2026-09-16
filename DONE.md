@@ -2150,3 +2150,28 @@
      generate section bullet, manExamples.txt, sampleInventory asset;
      DOX: root AGENTS.md CLI shape (generate sub-commands list) and
      source/AGENTS.md generate.d bullet updated.
+66. accept one-letter short forms for the four common commands: `a`
+   for apply, `c` for check, `g` for generate, `v` for version — and
+   no others (hosts/webui/webdoc/man/help keep their full words
+   only, per operator request).
+   - app.d: parseCommand maps the four short words alongside their
+     long forms; the unknown-command error lists the aliases
+     (apply (a), check (c), hosts, generate (g), webui, webdoc, man,
+     version (v), help); main's check-mode detection accepts `c`
+     (`args[1] == "check" || args[1] == "c"`).
+   - Unittests (tests/app.d): the four short words parse to their
+     commands; every other single letter (h, w, m, x — the other
+     command words' initials included) still throws; error-message
+     and help/man assertions updated for the alias column.
+     `dub test`: 178 passed, 0 failed.
+   - Smoke (local `connection = "local"` scratch project in /tmp):
+     `tachy v` prints the version; `tachy g task` writes the sample;
+     `tachy c all --direct` reports "(check mode, nothing applied)"
+     while `tachy a all --direct` creates the directory; `tachy z`
+     exits 1 naming the commands with their aliases.
+   - Docs: commandEntries.txt (name column widened to 14, aliases in
+     parentheses, continuation lines re-indented), README CLI
+     reference regenerated and byte-compared identical to
+     `tachy help` (cmp), DOCUMENTATION.md command table + note and
+     generate/version sections; DOX: root AGENTS.md CLI shape and
+     source/AGENTS.md app.d bullet updated.

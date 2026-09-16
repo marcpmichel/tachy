@@ -26,18 +26,23 @@ enum Cmd
     help,
 }
 
-/// Map a command word; anything else is an error naming the commands.
+/// Map a command word; `a`/`c`/`g`/`v` are the short forms of the four
+/// common commands (apply, check, generate, version) — the rest take
+/// none. Anything else is an error naming the commands.
 Cmd parseCommand(string word)
 {
     switch (word)
     {
         case "apply":
+        case "a":
             return Cmd.apply;
         case "check":
+        case "c":
             return Cmd.check;
         case "hosts":
             return Cmd.hosts;
         case "generate":
+        case "g":
             return Cmd.generate;
         case "webui":
             return Cmd.webui;
@@ -46,13 +51,14 @@ Cmd parseCommand(string word)
         case "man":
             return Cmd.man;
         case "version":
+        case "v":
             return Cmd.showVersion;
         case "help":
             return Cmd.help;
         default:
             throw new TachyError("unknown command '" ~ word
-                ~ "' (commands: apply, check, hosts, generate, webui,"
-                ~ " webdoc, man, version, help)");
+                ~ "' (commands: apply (a), check (c), hosts, generate (g),"
+                ~ " webui, webdoc, man, version (v), help)");
     }
 }
 
@@ -86,7 +92,7 @@ int main(string[] args)
         {
             case Cmd.apply:
             case Cmd.check:
-                opts.checkMode = args[1] == "check";
+                opts.checkMode = args[1] == "check" || args[1] == "c";
                 if (args.length >= 3)
                 {
                     opts.selection = args[2];

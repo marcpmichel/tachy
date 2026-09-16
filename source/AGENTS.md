@@ -14,11 +14,12 @@ This doc owns the source tree's structure and conventions;
 
 - Layering, top-down:
   - `app.d` — CLI surface only (command word: apply/check/hosts/
-    generate/webui/webdoc/man/version/help; `help` prints the short
-    form, `man` the full manual, man-page style — the text blocks live
-    in `assets/*.txt` and are embedded with `import()`, one source for
-    both outputs; the `version` command prints the build date from
-    `assets/version`, maintained by dub's preBuildCommands — D
+    generate/webui/webdoc/man/version/help, with one-letter short
+    forms a/c/g/v for apply/check/generate/version; `help` prints the
+    short form, `man` the full manual, man-page style — the text
+    blocks live in `assets/*.txt`, embedded with `import()` — one
+    source for both outputs; the `version` command prints the build
+    date from `assets/version`, maintained by dub's preBuildCommands — D
     reserves `version`, so the symbol is `tachyVersion` and the enum
     member `Cmd.showVersion`); delegates to `runner.d`, `generate.d`,
     `web.d` and `webdoc.d`

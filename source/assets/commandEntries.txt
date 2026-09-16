@@ -1,15 +1,14 @@
-    apply       apply tasks to the selected hosts.
-    check       check mode: report changes without applying them.
-    hosts       inspect hosts:
-                "hosts list [<selection>]" lists the hosts matching a selection (default: all) 
-                "hosts info <host>" shows one host's attributes
-    generate    key <path> : writes a new age key pair.
-                task <path> : write a sample tasks file. 
-                config <path> : write a sample config file (note: all refuse to overwrite).
-                project <path> : write a sample project folder (inventory.pravic, main.pravic, config.pravic).
-    webui       start a local web server: a graphical version of this CLI
-    webdoc      start a local web server serving this documentation as a browsable site
-    man         show the full manual, unix man-page style
-    version     show the version (the build date, YY.mm.dd)
-    help        show this help
-
+    apply (a)    apply tasks to the selected hosts.
+    check (c)    check mode: report changes without applying them.
+    hosts        inspect hosts:
+                  "hosts list [<selection>]" lists the hosts matching a selection (default: all) 
+                  "hosts info <host>" shows one host's attributes
+    generate (g) key <path> : writes a new age key pair.
+                  task <path> : write a sample tasks file. 
+                  config <path> : write a sample config file (note: all refuse to overwrite).
+                  project <path> : write a sample project folder (inventory.pravic, main.pravic, config.pravic).
+    webui        start a local web server: a graphical version of this CLI
+    webdoc       start a local web server serving this documentation as a browsable site
+    man          show the full manual, unix man-page style
+    version (v)  show the version (the build date, YY.mm.dd)
+    help         show this help

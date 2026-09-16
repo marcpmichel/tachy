@@ -16,7 +16,8 @@ import std.getopt : GetOptException;
 import tachy.errors : TachyError;
 import tachy.runner : RunOptions;
 
-// the nine command words parse; anything else names the commands
+// the nine command words parse, and the four common ones take their
+// short forms; anything else names the commands
 assert(parseCommand("apply") == Cmd.apply);
 assert(parseCommand("check") == Cmd.check);
 assert(parseCommand("hosts") == Cmd.hosts);
@@ -26,6 +27,25 @@ assert(parseCommand("webdoc") == Cmd.webdoc);
 assert(parseCommand("man") == Cmd.man);
 assert(parseCommand("version") == Cmd.showVersion);
 assert(parseCommand("help") == Cmd.help);
+assert(parseCommand("a") == Cmd.apply);
+assert(parseCommand("c") == Cmd.check);
+assert(parseCommand("g") == Cmd.generate);
+assert(parseCommand("v") == Cmd.showVersion);
+// the short forms stop at the four common commands: every other
+// single letter (the other command words' initials included) is an
+// unknown command
+foreach (w; ["h", "w", "m", "x"])
+{
+    string msg;
+    try
+    {
+        parseCommand(w);
+        assert(false, "expected TachyError for '" ~ w ~ "'");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(canFind(msg, "unknown command '" ~ w ~ "'"), msg);
+}
 {
     string msg;
     try
@@ -35,8 +55,8 @@ assert(parseCommand("help") == Cmd.help);
     }
     catch (TachyError e)
         msg = e.msg;
-    assert(canFind(msg, "apply, check, hosts, generate, webui,"), msg);
-    assert(canFind(msg, "webdoc, man, version, help"), msg);
+    assert(canFind(msg, "apply (a), check (c), hosts, generate (g),"), msg);
+    assert(canFind(msg, "webui, webdoc, man, version (v), help"), msg);
 }
 
 // help stays short; man carries the full reference
@@ -133,6 +153,6 @@ assert(match(tachyVersion, regex(r"^\d{2}\.\d{2}\.\d{2}$")), tachyVersion);
 assert(versionText() == "tachy " ~ tachyVersion);
 
 // help and man carry the version entry
-assert(canFind(helpText(), "version     show the version"), "help");
-assert(canFind(manText(), "version     show the version"), "man");
+assert(canFind(helpText(), "version (v)  show the version"), "help");
+assert(canFind(manText(), "version (v)  show the version"), "man");
 }

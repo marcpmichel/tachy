@@ -101,15 +101,18 @@ tachy <command> [options] <selection> [<tasks.pravic>...]
 
   | Command | Description |
   |---|---|
-  | `apply` | Apply the tasks files to the selected hosts. |
-  | `check` | Check mode: report the changes that would be made, apply nothing. `ensure` and `http` jobs still run — they are checks by nature. |
+  | `apply` (`a`) | Apply the tasks files to the selected hosts. |
+  | `check` (`c`) | Check mode: report the changes that would be made, apply nothing. `ensure` and `http` jobs still run — they are checks by nature. |
   | `hosts` | Inspect hosts without running anything — see [hosts](#hosts). |
-  | `generate` | Create something new — see [generate](#generate). |
+  | `generate` (`g`) | Create something new — see [generate](#generate). |
   | `webui` | Start a local web server, a graphical version of the CLI — see [Web UI](#web-ui-tachy-webui). |
   | `webdoc` | Serve this documentation as a browsable web site — see [Web docs](#web-docs-tachy-webdoc). |
   | `man` | Print the full built-in manual, unix man-page style — see [man](#man). |
-  | `version` | Print the version: the build date, `YY.mm.dd` — see [version](#version). |
+  | `version` (`v`) | Print the version: the build date, `YY.mm.dd` — see [version](#version). |
   | `help` | Show the short help: project and usage lines, commands, options (same as `--help`). |
+
+  The four common commands also take a one-letter short form (shown in
+  parentheses); the others take none.
 
 - `<selection>` is a comma-separated list of host names and `@tag`
   selectors; the special selector `all` matches every host.
@@ -164,8 +167,9 @@ Example: `tachy hosts list`, `tachy hosts list @web`,
 
 ### generate
 
-`tachy generate <what> <path>` creates scaffolding on the controller; it
-never contacts a host and never overwrites an existing file.
+`tachy generate <what> <path>` creates scaffolding on the controller
+(short form: `g`); it never contacts a host and never overwrites an
+existing file.
 
 - `tachy generate key <path>` — a new age key pair: the `age-keygen`
   binary writes the identity to `<path>` (mode 0600; it refuses to
@@ -202,11 +206,11 @@ beyond that now lives here and in `tachy man`.
 
 ### version
 
-`tachy version` prints the version: the build date in `YY.mm.dd` form
-(for example `26.09.11`). The date lives in `source/assets/version`,
-stamped in by dub's pre-build commands — only the `version` command
-reads it, and rebuilding on a later day picks up the new date
-automatically.
+`tachy version` (short form: `v`) prints the version: the build date
+in `YY.mm.dd` form (for example `26.09.11`). The date lives in
+`source/assets/version`, stamped in by dub's pre-build commands — only
+the `version` command reads it, and rebuilding on a later day picks
+up the new date automatically.
 
 ### Config (config.pravic)
 

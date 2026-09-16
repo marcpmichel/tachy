@@ -128,10 +128,12 @@ When the user requests a durable behavior change, record it here or in the relev
  manual, unix man-page style), `version` (prints the version — the
  build date `YY.mm.dd`, kept in `source/assets/version` and refreshed
  by dub's preBuildCommands) or
- `help` (short form only: usage lines, commands, options); selection
- mixes host names, `@tag` and `all`; default inventory
- `inventory.pravic`, default tasks file `main.pravic` (a directory
- argument maps to its `main.pravic`)
+`help` (short form only: usage lines, commands, options); the common
+ commands `apply`, `check`, `generate` and `version` also answer to
+ their one-letter short forms `a`, `c`, `g` and `v` (the others take
+ none); selection mixes host names, `@tag` and `all`; default
+ inventory `inventory.pravic`, default tasks file `main.pravic` (a
+ directory argument maps to its `main.pravic`)
 - `syntax/` ships editor syntax coloring for Pravic (Vim/Neovim
   `pravic.vim`, installed for the current user by `mise run syntax` —
   see README "Editor syntax")
