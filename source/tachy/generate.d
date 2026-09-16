@@ -14,6 +14,11 @@ module tachy.generate;
  *    loadable as-is (verified by unittest).
  *  - `tachy generate config <path>`: a commented sample config
  *    file, loadable as-is.
+ *  - `tachy generate project <path>`: a sample project folder —
+ *    inventory.pravic (one fictitious `example` host tagged `@demo`),
+ *    main.pravic and config.pravic (the two samples above).  The
+ *    folder is created when missing ('.' fills the current
+ *    directory); existing files are never overwritten.
  */
 import std.stdio : stdout;
 
@@ -23,10 +28,11 @@ import tachy.errors;
 int runGenerate(in string[] args)
 {
     if (args.length != 2)
-        throw new TachyError("generate: expected 'key <path>', 'task <path>'"
-            ~ " or 'config <path>' — examples: tachy generate key key.txt,"
-            ~ " tachy generate task main.pravic, tachy generate config"
-            ~ " config.pravic");
+        throw new TachyError("generate: expected 'key <path>', 'task <path>',"
+            ~ " 'config <path>' or 'project <path>' — examples: tachy"
+            ~ " generate key key.txt, tachy generate task main.pravic,"
+            ~ " tachy generate config config.pravic, tachy generate"
+            ~ " project demo");
     switch (args[0])
     {
         case "key":
@@ -35,9 +41,12 @@ int runGenerate(in string[] args)
             return generateTask(args[1]);
         case "config":
             return generateConfig(args[1]);
+        case "project":
+            return generateProject(args[1]);
         default:
             throw new TachyError("generate: unknown thing '" ~ args[0]
-                ~ "' to generate (expected 'key', 'task' or 'config')");
+                ~ "' to generate (expected 'key', 'task', 'config' or"
+                ~ " 'project')");
     }
 }
 
@@ -115,7 +124,53 @@ private int generateConfig(string path)
     return 0;
 }
 
+/// Sample project folder: the three files a fresh project starts
+/// from — an inventory with one fictitious host (tagged `@demo`), the
+/// sample tasks file and the sample config file.  `<name>` is created
+/// when missing ('.' fills the current directory); an existing
+/// non-directory aborts, and any already-present sample aborts the
+/// whole scaffold before anything is written (all three or nothing).
+package(tachy) int generateProject(string name)
+{
+    import std.file : exists, isDir, mkdirRecurse, write;
+    import std.path : buildPath;
+    import std.stdio : writefln;
+
+    if (!name.length)
+        throw new TachyError("generate project: expected a project path");
+    if (exists(name) && !isDir(name))
+        throw new TachyError("generate project: '" ~ name
+            ~ "' exists and is not a directory");
+    if (!exists(name))
+        mkdirRecurse(name);
+
+    static immutable string[3] names = ["inventory.pravic", "main.pravic",
+        "config.pravic"];
+    static immutable string[3] texts = [sampleInventory, sampleTasks,
+        sampleConfig];
+    foreach (f; names)
+    {
+        const string path = buildPath(name, f);
+        if (exists(path))
+            throw new TachyError("generate project: '" ~ path
+                ~ "' already exists (generate never overwrites)");
+    }
+    foreach (i, f; names)
+    {
+        try
+            write(buildPath(name, f), texts[i]);
+        catch (Exception e)
+            throw new TachyError("cannot write '" ~ buildPath(name, f)
+                ~ "': " ~ e.msg);
+    }
+    writefln("wrote a sample project to %s (inventory.pravic, main.pravic,"
+        ~ " config.pravic) — edit the example host in the inventory, then"
+        ~ " try: tachy hosts list", name);
+    return 0;
+}
+
 // The sample texts live in assets/*.txt and are embedded at compile
 // time with import(), like the help/man blocks in app.d.
 private immutable string sampleTasks = import("assets/sampleTask.txt");
 private immutable string sampleConfig = import("assets/sampleConfig.txt");
+private immutable string sampleInventory = import("assets/sampleInventory.txt");

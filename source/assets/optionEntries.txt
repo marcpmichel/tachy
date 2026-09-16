@@ -4,7 +4,7 @@
         --direct-report P  With --direct: write "ok changed failed" counters to P
         --events           Print one JSON event per line on stdout instead of text (machine mode): with --direct, the local run's own events; otherwise the raw events streamed live from each host, wrapped in the controller's fileStart/fileDone events
         --keep-bundle      Keep each host's temporary bundle directory after the run, for inspection (project copy, generated inventory, report)
-        --config PATH      Optional config file (the identity entry, imports search paths, webui projects); default: TACHY_CONFIG, then config.pravic in the current directory, then ~/.config/tachy/config.pravic
+        --config PATH      Optional config file (the identity entry, imports search paths, webui projects, output format); default: TACHY_CONFIG, then config.pravic in the current directory, then ~/.config/tachy/config.pravic
         --identity PATH    Age identity for { age = ... } inventory vars and file sources marked age = true; supersedes the config file's identity entry. Default: that entry, then AGE_IDENTITY (path or key material), then ~/.ssh/id_ed25519 (age accepts ssh keys)
         --color            Force colored statuses even when stdout is not a tty (forwarded to the run on each host)
         --address ADDR     Webui/webdoc only: address to bind (default 127.0.0.1; an IP — use 0.0.0.0 to listen on every interface)

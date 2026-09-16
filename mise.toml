@@ -45,3 +45,4 @@ for dir in "$HOME/.vim" "$cfg/nvim"; do
   echo "syntax: installed pravic syntax + filetype detection in $dir"
 done
 '''
+

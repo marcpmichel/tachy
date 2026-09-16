@@ -3,6 +3,7 @@
   tachy generate key key.txt
   tachy generate task main.pravic
   tachy generate config config.pravic
+  tachy generate project demo
   tachy webui
   tachy webdoc
   tachy man

@@ -152,7 +152,8 @@ private struct Parser
     /// collide.  Order within a set does not matter (the guard decides).
     private static immutable string[] groupKeywords =
         ["vars", "files", "directories", "packages", "groups",
-         "users", "services", "repos", "hosts", "imports", "webui", "identity"];
+         "users", "services", "repos", "hosts", "imports", "webui",
+         "identity", "output"];
     private static immutable string[] singleKeywords =
         ["var", "file", "directory", "package", "group", "user",
          "service", "host", "apply", "ensure", "compose", "import",

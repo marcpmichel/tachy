@@ -11,9 +11,11 @@ module tachy.config;
  *      (default `~/.config/tachy/config.pravic`)
  *
  * With none of these present, settings are simply empty.  Today the
- * file holds the age `identity`, the `import` search paths and the
+ * file holds the age `identity`, the `import` search paths, the
  * `webui` project list (the projects `tachy webui` offers in the
- * browser); anything else in it is a load-time error (strict, like
+ * browser) and the `output` section (the event output shape of
+ * `apply`/`check`: `flat` lines or jobs grouped under a host line in a
+ * `tree`); anything else in it is a load-time error (strict, like
  * inventories and tasks files):
  *
  *     identity "key.txt"                     # or: identity { path = "key.txt" }
@@ -24,6 +26,10 @@ module tachy.config;
  *
  *     webui {
  *         projects = ["~/Code/site"]
+ *     }
+ *
+ *     output {
+ *         format = "tree"                    # "flat" (the default) or "tree"
  *     }
  *
  * The identity decrypts `{ age = ... }` inventory vars and `age = true`
@@ -44,6 +50,7 @@ struct Config
     string identity;        // age identity file, absolute ("" when unset)
     string[] importPaths;    // absolute directories searched for import sources
     string[] webuiProjects;  // absolute project paths offered by `tachy webui`
+    string outputFormat = "flat"; // apply/check event output: "flat" or "tree"
     string file;             // where these came from ("" when none found)
 }
 
@@ -117,6 +124,19 @@ Config loadConfig(string explicitPath) @trusted
                 // load-time concern — the webui reports it per project
                 s.webuiProjects ~= resolveSearchPath(e.str_, path);
             }
+        }
+        else if (stmt.kind == "output")
+        {
+            if (stmt.key != "format")
+                throw new TachyError(path ~ ": output holds only 'format', not '"
+                    ~ stmt.key ~ "'");
+            if (stmt.value.kind != Val.Kind.string_)
+                throw new TachyError(path ~ ": output.format must be a string,"
+                    ~ " not a " ~ stmt.value.typeName());
+            if (stmt.value.str_ != "flat" && stmt.value.str_ != "tree")
+                throw new TachyError(path ~ ": output.format must be \"flat\""
+                    ~ " or \"tree\", not \"" ~ stmt.value.str_ ~ "\"");
+            s.outputFormat = stmt.value.str_;
         }
         else
             throw new TachyError(path ~ ": line "

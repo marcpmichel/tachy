@@ -27,3 +27,10 @@ webui {
         # "~/Code/site",
     ]
 }
+
+output {
+    # The shape of the event output apply/check print: "flat" (the
+    # default) prints one `host | status | task` line per job, "tree"
+    # groups each host's jobs under a host line.
+    # format = "tree"
+}

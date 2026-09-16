@@ -95,24 +95,40 @@ void foldCounters(ref const JobEvent ev, ref ulong ok, ref ulong changed, ref ul
         ok++;
 }
 
-/// Renders events as the classic tachy text output: `== file | hosts`
-/// headers, padded `host | status | label: msg` job lines (statuses
-/// colored on a tty) with indented `-v` details, and `-- file: ok=…`
-/// footers.  `sink` receives complete lines (newline appended); if
-/// events can arrive from several threads it must be internally
-/// synchronized.
+/// Renders events as tachy text output: `== file | hosts` headers,
+/// padded `host | status | label: msg` job lines (statuses colored on a
+/// tty) with indented `-v` details, and `-- file: ok=…` footers.  In
+/// flat mode (the default) every job line repeats its host name; in
+/// tree mode the jobs group under a host line instead — the host prints
+/// once when its first job arrives (hosts run one after another, so a
+/// job event from a new host opens its group) and the job lines indent
+/// beneath it:
+///
+///     == main.pravic | hosts: web1, web2
+///     web1
+///       changed         | file /srv/www: created file
+///       ok              | ensure rendered: exit 0
+///     web2
+///       ok              | file /srv/www: file present
+///
+/// `sink` receives complete lines (newline appended); if events can
+/// arrive from several threads it must be internally synchronized.
 struct TextRenderer
 {
     private void delegate(string line) emit;
     private bool tty_;
     private bool verbose_;
+    private bool tree_;
     private size_t nameWidth_;
+    private string treeHost_;   // tree mode: host whose group is open
 
-    this(void delegate(string line) sink, bool tty, bool verbose)
+    this(void delegate(string line) sink, bool tty, bool verbose,
+        bool tree = false)
     {
         emit = sink;
         tty_ = tty;
         verbose_ = verbose;
+        tree_ = tree;
     }
 
     void handle(JobEvent ev)
@@ -121,15 +137,21 @@ struct TextRenderer
         {
             case JobEvent.Kind.fileStart:
                 nameWidth_ = 0;
+                treeHost_ = null; // each file re-announces its hosts
                 foreach (h; ev.hosts)
                     nameWidth_ = h.length > nameWidth_ ? h.length : nameWidth_;
                 put(format!"== %s | hosts: %s"(ev.file, ev.hosts.join(", ")));
                 break;
             case JobEvent.Kind.job:
+                if (tree_ && ev.host != treeHost_)
+                {
+                    treeHost_ = ev.host;
+                    put(ev.host);
+                }
                 jobLine(ev.host, ev.label, ev.status, ev.msg);
                 if (verbose_)
                     foreach (d; ev.details)
-                        put("    " ~ d);
+                        put((tree_ ? "      " : "    ") ~ d);
                 break;
             case JobEvent.Kind.fileDone:
                 put(format!"-- %s: ok=%d changed=%d failed=%d%s"(ev.file, ev.ok,
@@ -157,7 +179,7 @@ struct TextRenderer
                 color = "\033[32m";
         }
         const string reset = tty_ ? "\033[0m" : "";
-        string line = format!"%-*s | "(nameWidth_, host);
+        string line = tree_ ? "  " : format!"%-*s | "(nameWidth_, host);
         if (color.length)
             line ~= color;
         line ~= format!"%-16s"(status);

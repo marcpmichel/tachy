@@ -223,6 +223,62 @@ private auto withEnv(string[] names, string[] values, alias dg)()
     return dg();
 }
 
+@("output section: format picks the event output shape")
+unittest
+{
+    auto base = buildPath(tempDir, "tachy_config_output_ut");
+    if (exists(base)) rmdirRecurse(base);
+    mkdirRecurse(buildPath(base, "cfg"));
+    scope (exit) rmdirRecurse(base);
+
+    // the default needs no file: flat
+    assert(Config().outputFormat == "flat");
+
+    write(buildPath(base, "cfg", "tree.pravic"),
+        "output { format = \"tree\" }\n");
+    auto s = loadConfig(buildPath(base, "cfg", "tree.pravic"));
+    assert(s.outputFormat == "tree", s.outputFormat);
+
+    write(buildPath(base, "cfg", "flat.pravic"),
+        "output { format = \"flat\" }\n");
+    s = loadConfig(buildPath(base, "cfg", "flat.pravic"));
+    assert(s.outputFormat == "flat", s.outputFormat);
+
+    // alongside the other entries
+    write(buildPath(base, "cfg", "all.pravic"),
+        "identity \"key.txt\"\nimports { paths = [\"libs\"] }\n"
+        ~ "webui { projects = [\"site\"] }\noutput { format = \"tree\" }\n");
+    s = loadConfig(buildPath(base, "cfg", "all.pravic"));
+    assert(s.identity.length && s.importPaths.length == 1
+        && s.webuiProjects.length == 1 && s.outputFormat == "tree");
+
+    // empty section is fine (keeps the default)
+    write(buildPath(base, "cfg", "empty.pravic"), "output { }\n");
+    s = loadConfig(buildPath(base, "cfg", "empty.pravic"));
+    assert(s.outputFormat == "flat");
+
+    // wrong shapes, values and forms are load-time errors with context
+    foreach (content; [
+        "output { format = \"auto\" }\n",
+        "output { format = 1 }\n",
+        "output { bogus = \"tree\" }\n",
+        "output = \"tree\"\n",
+        "output { format = \"tree\" }\noutput { format = \"flat\" }\n",
+    ])
+    {
+        string msg;
+        try
+        {
+            write(buildPath(base, "cfg", "bad.pravic"), content);
+            loadConfig(buildPath(base, "cfg", "bad.pravic"));
+            assert(false, "expected TachyError for: " ~ content);
+        }
+        catch (TachyError e)
+            msg = e.msg;
+        assert(canFind(msg, "bad.pravic"), msg);
+    }
+}
+
 @("identity entry: both spellings, resolution, shapes")
 unittest
 {

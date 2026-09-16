@@ -79,3 +79,83 @@ unittest
     assert(s.webuiProjects.length == 0); // so are these
     assertThrown!TachyError(runGenerate(["config", path]));
 }
+
+@("generate project: scaffold, loadability, no overwrite, '.' fills cwd")
+unittest
+{
+    import tachy.config : loadConfig;
+    import tachy.inventory : Inventory;
+    import tachy.models : loadTasksFile;
+
+    auto base = buildPath(tempDir, "tachy_generate_project_ut");
+    if (exists(base)) rmdirRecurse(base);
+    mkdirRecurse(base);
+    scope (exit) rmdirRecurse(base);
+
+    // a named folder is created and filled with the three samples
+    const string dir = buildPath(base, "demo");
+    assert(runGenerate(["project", dir]) == 0);
+    foreach (f; ["inventory.pravic", "main.pravic", "config.pravic"])
+        assert(exists(buildPath(dir, f)), f);
+
+    // all three samples load like any project's files
+    auto inv = Inventory.load(buildPath(dir, "inventory.pravic"), "");
+    auto hosts = inv.select("all");
+    assert(hosts.length == 1 && hosts[0].name == "example", hosts[0].name);
+    assert(hosts[0].address == "tachy.example.com");
+    assert(hosts[0].tags.canFind("demo"));
+    assert(inv.select("@demo").length == 1); // the sample tag selects
+    assert(loadTasksFile(buildPath(dir, "main.pravic")).jobs.length >= 3);
+    auto s = loadConfig(buildPath(dir, "config.pravic"));
+    assert(s.importPaths.length == 0 && s.webuiProjects.length == 0
+        && s.outputFormat == "flat"); // entries are commented out
+
+    // second generation refuses to overwrite, naming the file
+    string msg;
+    try
+    {
+        runGenerate(["project", dir]);
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(canFind(msg, "already exists"), msg);
+
+    // a partially populated folder refuses too, naming the existing
+    // file, and never overwrites the sentinels (all three or nothing)
+    import std.file : write;
+    auto partial = buildPath(base, "partial");
+    mkdirRecurse(partial);
+    foreach (f; ["inventory.pravic", "main.pravic", "config.pravic"])
+    {
+        write(buildPath(partial, f), "sentinel"); // one more each round
+        msg = "";
+        try
+        {
+            runGenerate(["project", partial]);
+            assert(false, "expected TachyError");
+        }
+        catch (TachyError e)
+            msg = e.msg;
+        assert(canFind(msg, "already exists"), msg);
+        assert(canFind(msg, ".pravic"), msg); // names the offending file
+        foreach (g; ["inventory.pravic", "main.pravic", "config.pravic"])
+            if (exists(buildPath(partial, g)))
+                assert(readText(buildPath(partial, g)) == "sentinel", g);
+    }
+
+    // '.' fills the current directory
+    {
+        import std.file : chdir, getcwd;
+        auto keep = getcwd();
+        scope (exit) chdir(keep);
+        chdir(base);
+        assert(runGenerate(["project", "."]) == 0);
+        foreach (f; ["inventory.pravic", "main.pravic", "config.pravic"])
+            assert(exists(f), f);
+        assertThrown!TachyError(runGenerate(["project", "."]));
+    }
+
+    // empty path is rejected
+    assertThrown!TachyError(runGenerate(["project", ""]));
+}

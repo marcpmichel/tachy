@@ -56,7 +56,7 @@ This doc owns the source tree's structure and conventions;
     entry-local `vars` context of `file`/`service` and `processApply`
     the apply bindings through resolveEnvVars at load, so their
     markers behave like every other var of the file
-  - `events.d` — execution events (producer/consumer split): `JobEvent` + builders, `foldCounters`, `TextRenderer` (the one renderer for both modes), NDJSON `eventLine`/`parseEventLine` for the stream between inner runs and the controller
+  - `events.d` — execution events (producer/consumer split): `JobEvent` + builders, `foldCounters`, `TextRenderer` (the one renderer for both modes; flat lines or tree groups per host, chosen by config), NDJSON `eventLine`/`parseEventLine` for the stream between inner runs and the controller
   - `vars.d` — variable scopes, `{ env, default, from }` resolution
     (environment or dotenv file), `{ run, stream }` command capture
     (stdout/stderr through /bin/sh in the declaring file's directory,
@@ -87,14 +87,18 @@ This doc owns the source tree's structure and conventions;
     written over their ciphertext copies, generated one-host
     inventory), Val → Pravic serialization
   - `generate.d` — the `generate` command: age key pairs (`age-keygen`),
-    sample tasks/config files (controller-side scaffolding; the sample
-    texts are assets — `sampleTask.txt`/`sampleConfig.txt` — embedded
-    with `import()` like app.d's help/man blocks)
+    sample tasks/config files and the sample project folder
+    `generate project <path>` (inventory + tasks + config;
+    controller-side scaffolding; the sample texts are assets —
+    `sampleTask.txt`/`sampleConfig.txt`/`sampleInventory.txt` —
+    embedded with `import()` like app.d's help/man blocks)
   - `config.d` — the optional config.pravic (discovery: `--config`,
     `TACHY_CONFIG`, ./config.pravic, XDG; the `identity` age entry
     — both spellings, `effectiveIdentity` makes the `--identity` flag
     supersede it, wired once per entry point in runner.d/web.d —
-    `imports` search paths and `webui` projects, strict validation)
+    `imports` search paths, `webui` projects and the `output`
+    `format` entry (`flat`/`tree`, consumed by runner.d's
+    TextRenderer), strict validation)
   - `web.d` — the `webui` command AND the shared ad-hoc HTTP layer:
     a tiny server (thread per connection, `Connection: close`, a
     Router with `:param` segments — `Request`/`Response`/`Router`/

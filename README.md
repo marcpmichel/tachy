@@ -55,8 +55,9 @@ tachy apply '@web'     # applies main.pravic; its directory is the project
   binary (always current for the binary being run); the site shares
   the web console's stylesheet (dark, like the webui).
 - **Generate** (`tachy generate`): scaffolding — a new age key pair
-  (`generate key <path>`) or a commented sample tasks file
-  (`generate task <path>`).
+  (`generate key <path>`), a commented sample tasks file
+  (`generate task <path>`) or a sample project folder
+  (`generate project <path>`: inventory, tasks file, config).
 - Strict validation everywhere: unknown keys, undefined variables, invalid
   states, duplicate targets, apply cycles, applies escaping the
   project and unknown hosts/tags are reported with file context before
@@ -210,6 +211,7 @@ tachy apply '@web' ~/site/main.pravic    # explicit entry file
 tachy generate key key.txt               # a new age key pair
 tachy generate task main.pravic          # a sample tasks file
 tachy generate config config.pravic     # a sample config file
+tachy generate project demo           # a sample project folder (inventory, tasks, config)
 tachy webui                              # graphical console (random port)
 tachy webdoc                             # the docs as a site (random port)
 tachy man                                # the full manual, man-page style
@@ -240,6 +242,7 @@ tachy — Pravic-driven configuration management (Ansible-like)
     generate    key <path> : writes a new age key pair.
                 task <path> : write a sample tasks file. 
                 config <path> : write a sample config file (note: all refuse to overwrite).
+                project <path> : write a sample project folder (inventory.pravic, main.pravic, config.pravic).
     webui       start a local web server: a graphical version of this CLI
     webdoc      start a local web server serving this documentation as a browsable site
     man         show the full manual, unix man-page style
@@ -255,7 +258,7 @@ tachy — Pravic-driven configuration management (Ansible-like)
         --direct-report P  With --direct: write "ok changed failed" counters to P
         --events           Print one JSON event per line on stdout instead of text (machine mode): with --direct, the local run's own events; otherwise the raw events streamed live from each host, wrapped in the controller's fileStart/fileDone events
         --keep-bundle      Keep each host's temporary bundle directory after the run, for inspection (project copy, generated inventory, report)
-        --config PATH      Optional config file (the identity entry, imports search paths, webui projects); default: TACHY_CONFIG, then config.pravic in the current directory, then ~/.config/tachy/config.pravic
+        --config PATH      Optional config file (the identity entry, imports search paths, webui projects, output format); default: TACHY_CONFIG, then config.pravic in the current directory, then ~/.config/tachy/config.pravic
         --identity PATH    Age identity for { age = ... } inventory vars and file sources marked age = true; supersedes the config file's identity entry. Default: that entry, then AGE_IDENTITY (path or key material), then ~/.ssh/id_ed25519 (age accepts ssh keys)
         --color            Force colored statuses even when stdout is not a tty (forwarded to the run on each host)
         --address ADDR     Webui/webdoc only: address to bind (default 127.0.0.1; an IP — use 0.0.0.0 to listen on every interface)
@@ -285,7 +288,8 @@ project copied to every selected host together with the tachy binary
 `--config PATH` (must exist), the `TACHY_CONFIG` variable (must
 exist), `./config.pravic`, then `~/.config/tachy/config.pravic` — with
 none present, settings are empty. Today it holds the age `identity`,
-the `imports` search paths and the `webui` project list:
+the `imports` search paths, the `webui` project list and the `output`
+section:
 
 ```pravic
 identity "key.txt"
@@ -297,6 +301,10 @@ imports {
 webui {
     projects = ["~/Code/site"],
 }
+
+output {
+    format = "tree",           # "flat" (the default) or "tree"
+}
 ```
 
 The identity and the entries of both lists are `~`-expanded and, when
@@ -306,6 +314,10 @@ path that does not resolve relative to its defining tasks file is
 searched in `paths`, in order; `projects` is what `tachy webui`
 offers in the browser (a directory is a project whose entry point is
 its `main.pravic`; a plain file is used as the entry point directly).
+`output.format` picks the shape of the event output `apply`/`check`
+print: `flat` (the default) keeps one `host | status | task` line per
+job; `tree` opens a group per host — the host name on its own line —
+and indents its job lines beneath it.
 `tachy generate config <path>` writes a commented sample.
 
 ### Web UI

@@ -207,7 +207,8 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
     // mode (--direct-report, how the bundled inner run executes) emits
     // job events only: the controller owns the header/footer events,
     // so the raw --events stream is not doubled.
-    TextRenderer renderer = TextRenderer((string l) => terminalSink(l), tty, opts.verbose);
+    TextRenderer renderer = TextRenderer((string l) => terminalSink(l), tty,
+        opts.verbose, config.outputFormat == "tree");
     void consume(JobEvent ev)
     {
         if (machine && ev.kind != JobEvent.Kind.job)
@@ -370,7 +371,8 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
 {
     const bool tty = isStdoutTty();
     const bool rawEvents = opts.events; // display the raw event stream
-    TextRenderer renderer = TextRenderer((string l) => terminalSink(l), tty, opts.verbose);
+    TextRenderer renderer = TextRenderer((string l) => terminalSink(l), tty,
+        opts.verbose, config.outputFormat == "tree");
     int totalFailed;
     DeployedBundle[string] deployed; // host \0 project dir -> bundle (reused)
 

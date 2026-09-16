@@ -178,6 +178,13 @@ never contacts a host and never overwrites an existing file.
   the common directives (`var`, `directory`, `file`, `ensure`, composition
 - `tachy generate config <path>` — a commented sample config file
   (see [config](#config-configpravic)).
+- `tachy generate project <path>` — a sample project folder: the
+  directory is created when missing (`.` fills the current one) and
+  receives `inventory.pravic` (one fictitious `example` host at
+  `tachy.example.com`, tagged `@demo`), `main.pravic` and
+  `config.pravic` — the two samples above. An existing sample aborts
+  the whole scaffold (generate never overwrites); `cd <path> && tachy
+  hosts list` is the natural next step.
 
 ### man
 
@@ -210,7 +217,7 @@ then `$XDG_CONFIG_HOME/tachy/config.pravic` (default
 `~/.config/tachy/config.pravic`). An explicit `--config` path or
 `TACHY_CONFIG` that does not exist is an error; with no file found
 anywhere, settings are empty. Unknown keys in the file are load-time
-errors (strict). Today it holds the age `identity` entry and two
+errors (strict). Today it holds the age `identity` entry and three
 sections:
 
 The top-level `identity` entry names the age identity file decrypting
@@ -225,6 +232,7 @@ then `~/.ssh/id_ed25519`. Like every config entry the path is
 |---|---|---|
 | `imports` | `paths` | Array of directories searched, in order, for `import` keys that do not resolve relative to their defining tasks file (first existing match wins; unresolved keys keep the defining-relative path, which the deploy-time existence check reports). Entries are `~`-expanded; relative entries resolve against the config file's directory, never the cwd. |
 | `webui` | `projects` | Array of project paths offered by [`tachy webui`](#web-ui-tachy-webui) in the browser. A directory is a project whose entry point is its `main.pravic`; a plain file is used as the entry point directly. Entries resolve like `imports.paths` (`~`-expanded, relative to the config file); existence is not required at load time — the interface reports missing paths per project. |
+| `output` | `format` | The shape of the event output `apply`/`check` print: `flat` (the default) keeps one `host \| status \| task` line per job; `tree` opens a group per host — the host name on its own line — and indents its job lines beneath it (sample below). Machine output (`--events`) is unaffected. |
 
 ```pravic
 identity "key.txt"
@@ -236,6 +244,23 @@ imports {
 webui {
     projects = ["~/Code/site"]
 }
+
+output {
+    format = "tree"            # "flat" (the default) or "tree"
+}
+```
+
+With `format = "tree"` the same events print grouped under a host line
+instead of one flat line per job:
+
+```
+== main.pravic | hosts: web1, web2
+web1
+  changed         | file /srv/www/index.html: created file
+  ok              | ensure content rendered: exit 0
+web2
+  ok              | file /srv/www/index.html: file present
+-- main.pravic: ok=1 changed=1 failed=0
 ```
 
 ### What a run does

@@ -2073,3 +2073,80 @@
     keywords pravicKeyword, `repofoo` pravicKey) after refreshing the
     stale user installs with `mise run syntax`; DOX: modules/AGENTS.md
     repomod bullet with the fetch-in-check-mode rule.
+64. improve the events output => tree-like: host, task-files, tasks, with a
+    config option choosing between 'flat' and 'tree'.
+   - `output { format = "tree" }` in config.pravic (new group-form keyword,
+     `output` added to the parser's groupKeywords and LANGUAGE.md's grammar)
+     picks the shape of the apply/check event output: `flat` (the default,
+     the classic `host | status | task` line per job) or `tree` — the host
+     prints once on its own line when its first job arrives (hosts run one
+     after another, so a job from a new host opens its group) and its job
+     lines indent two spaces beneath it, `-v` details at six. Machine modes
+     (`--events`, `--direct-report`, the webui stream) are untouched.
+   - `TextRenderer` (events.d) owns the layout: a `tree` constructor flag,
+     `treeHost_` reset at every fileStart (each file re-announces its
+     hosts), plain host group lines, statuses colored on a tty exactly as
+     in flat mode. Both renderer constructions in runner.d pass
+     `config.outputFormat == "tree"`.
+   - config.d: `outputFormat` field ("flat" default, kept on an empty
+     section), strict parsing — `output` holds only `format`, a string,
+     and only "flat"/"tree"; anything else is a load-time error with file
+     context. `Config()` with no file stays flat.
+   - Unittests: tests/events.d tree layout (host groups, host-change
+     boundary, verbose detail indent, colored status column, two-file
+     re-announcement); tests/config.d output section (tree, flat, alongside
+     the other entries, empty section, bad value/key/form/duplicate
+     errors). `dub build`; `dub test`: 177 passed, 0 failed (was 175).
+   - E2E on testing.internal (root over ssh; fixture and scratch under
+     /tmp, all removed): bundled and --direct runs byte-identical in each
+     format; flat output byte-identical to the classic shape; tree shows
+     `vm` group with indented jobs; check mode with drift shows
+     `changed (check)` and a failed ensure under the group with the
+     check-mode footer; `--events` NDJSON stream unchanged. `tachy help`
+     re-diffed byte-identical against the README CLI reference block.
+   - Docs: DOCUMENTATION.md config section (three sections, `output` table
+     row, example, tree sample output), README.md (config section +
+     enumeration + example + --config line), LANGUAGE.md (grammar
+     GroupKeyword, group-form prose, config-files note, config example),
+     optionEntries.txt + app.d --config help text (output format added to
+     the enumeration), sampleConfig.txt (commented output block), DOX:
+     source/AGENTS.md events.d and config.d bullets; syntax/pravic.vim
+     gained `output` — verified headlessly in vim and nvim (synID after
+     `mise run syntax` refresh: `output` pravicKeyword, `outputfoo` and
+     the inner `format` pravicKey, `repos`/`identity` unaffected).
+65. add a generate command: `tachy generate project <name>` — creates a
+   folder based on the given <name> ('.' fills the current directory)
+   containing an example inventory (fictitious machine 'example' at
+   'tachy.example.com', tagged `@demo` per operator request), a sample
+   tasks file 'main.pravic' and a sample config 'config.pravic' (the two
+   existing generate samples).
+   - generate.d: `generateProject` (package(tachy), unit-tested) creates
+     the folder when missing (an existing non-directory is an error),
+     refuses to overwrite — any already-present sample aborts the whole
+     scaffold before anything is written (all three or nothing, error
+     naming the offending file) — then writes inventory.pravic,
+     main.pravic and config.pravic; runGenerate dispatches 'project',
+     with its usage/unknown-thing errors extended. New embedded asset
+     `source/assets/sampleInventory.txt` (commented header; host
+     `example` with address, active `tags = ["demo"]`, commented
+     user/port/vars hints) — stringImportPaths picks it up, no
+     dub.json change.
+   - Unittests (tests/generate.d): scaffold creates dir + three files;
+     all three load (Inventory.load → one host example/tachy.example.com
+     with the demo tag, `@demo` selects it, loadTasksFile jobs ≥ 3,
+     loadConfig entries commented); second generation refuses naming
+     the file; a partially populated folder refuses without touching
+     the sentinels; '.' fills the cwd (chdir with scope-exit restore);
+     empty path rejected. `dub build`; `dub test`: 178 passed, 0
+     failed (was 177).
+   - Smoke: `tachy generate project demo` → folder + three files;
+     `tachy hosts list` and `hosts list @demo` from inside show
+     `example (ssh tachy.example.com)`; re-run refuses exit 1; '.'
+     fills cwd; `generate bogus` lists 'project' among the expected
+     things; `tachy man` embeds the new example.
+   - Docs: commandEntries.txt + README CLI reference (`project <path>`
+     line; help re-diffed byte-identical against the README block),
+     README features bullet and example block, DOCUMENTATION.md
+     generate section bullet, manExamples.txt, sampleInventory asset;
+     DOX: root AGENTS.md CLI shape (generate sub-commands list) and
+     source/AGENTS.md generate.d bullet updated.

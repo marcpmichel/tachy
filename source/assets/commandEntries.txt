@@ -6,6 +6,7 @@
     generate    key <path> : writes a new age key pair.
                 task <path> : write a sample tasks file. 
                 config <path> : write a sample config file (note: all refuse to overwrite).
+                project <path> : write a sample project folder (inventory.pravic, main.pravic, config.pravic).
     webui       start a local web server: a graphical version of this CLI
     webdoc      start a local web server serving this documentation as a browsable site
     man         show the full manual, unix man-page style

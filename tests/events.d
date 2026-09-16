@@ -9,10 +9,11 @@ import std.exception : assertThrown;
 import std.array;
 import tachy.errors : TachyError;
 
-private string[] rendered(JobEvent[] events, bool tty = false, bool verbose = false)
+private string[] rendered(JobEvent[] events, bool tty = false, bool verbose = false,
+    bool tree = false)
 {
     string[] lines;
-    auto r = TextRenderer((string l) { lines ~= l[0 .. $ - 1]; }, tty, verbose);
+    auto r = TextRenderer((string l) { lines ~= l[0 .. $ - 1]; }, tty, verbose, tree);
     foreach (ev; events)
         r.handle(ev);
     return lines;
@@ -64,6 +65,54 @@ unittest
     assert(canFind(colored[0], "\033[0m"));
     auto coloredChk = rendered([evJob("h", "f", "l", "changed (check)", "m")], true);
     assert(canFind(coloredChk[0], "\033[33m"), coloredChk[0]);
+}
+
+@("renderer: tree output groups jobs under host lines")
+unittest
+{
+    auto lines = rendered([
+        evFileStart("main.pravic", ["web1", "web2"]),
+        evJob("web1", "main.pravic", "directory /srv/www", "changed",
+            "created directory; owner root -> www-data"),
+        evJob("web1", "main.pravic", "file /srv/www/index.html", "ok",
+            "file present", ["sha256 e3b0…"]),
+        evJob("web2", "main.pravic", "directory /srv/www", "changed",
+            "created directory"),
+        evJob("web2", "main.pravic", "ensure rendered", "failed", "exit 3"),
+        evFileDone("main.pravic", 1, 2, 1, false),
+    ], false, true, true); // verbose: the detail line participates too
+    assert(lines[0] == "== main.pravic | hosts: web1, web2", lines[0]);
+    assert(lines[1] == "web1", lines[1]);
+    assert(lines[2] == "  changed         | directory /srv/www:"
+        ~ " created directory; owner root -> www-data", lines[2]);
+    assert(lines[3] == "  ok              | file /srv/www/index.html: file present",
+        lines[3]);
+    assert(lines[4] == "      sha256 e3b0…", lines[4]); // details indent deeper
+    assert(lines[5] == "web2", lines[5]); // a new host opens its group
+    assert(lines[6] == "  changed         | directory /srv/www: created directory",
+        lines[6]);
+    assert(lines[7] == "  failed          | ensure rendered: exit 3", lines[7]);
+    assert(lines[8] == "-- main.pravic: ok=1 changed=2 failed=1", lines[8]);
+
+    // colors land on the status column, under the indented tree lines
+    auto colored = rendered([
+        evFileStart("f", ["h"]),
+        evJob("h", "f", "l", "changed", "m"),
+    ], true, false, true);
+    assert(colored[1] == "h", colored[1]);
+    assert(colored[2] == "  \033[33mchanged         \033[0m| l: m", colored[2]);
+
+    // each file re-announces its hosts: the group resets at fileStart
+    auto twoFiles = rendered([
+        evFileStart("a.pravic", ["h"]),
+        evJob("h", "a.pravic", "l1", "ok", "m"),
+        evFileDone("a.pravic", 1, 0, 0, false),
+        evFileStart("b.pravic", ["h"]),
+        evJob("h", "b.pravic", "l2", "ok", "m"),
+        evFileDone("b.pravic", 1, 0, 0, false),
+    ], false, false, true);
+    assert(twoFiles[1] == "h", twoFiles[1]);
+    assert(twoFiles[5] == "h", twoFiles[5]);
 }
 
 @("foldCounters")

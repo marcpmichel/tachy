@@ -59,9 +59,10 @@ Every plural directive has both forms; they merge (two `var` statements
 and one `vars` block naming the same variable is a duplicate-key error,
 exactly as inside a single block). Directives with no plural —
 `apply`, `ensure`, `compose`, `import` — only ever appear in the
-single form, with the key inline, since they are keyed too. `webui` and
-config's `imports` are group-form blocks whose entries are plain data
-(no keyed targets), so they have no single form. Config's `identity`
+single form, with the key inline, since they are keyed too. `webui`,
+config's `imports` and config's `output` are group-form blocks whose
+entries are plain data (no keyed targets), so they have no single
+form. Config's `identity`
 spells both forms with one word: `identity "key.txt"` (the path is the
 key) and `identity { path = "key.txt" }` — a `{` after the keyword
 picks the group form.
@@ -122,7 +123,7 @@ StmtList     ← Stmt (LineEnd+ Stmt)*
 
 GroupKeyword ← ( 'vars' / 'files' / 'directories' / 'packages'
                / 'groups' / 'users' / 'services' / 'hosts'
-               / 'imports' / 'webui' / 'identity'             ) !KeyChar
+               / 'imports' / 'webui' / 'identity' / 'output'  ) !KeyChar
 SingleKeyword ← ( 'var' / 'file' / 'directory' / 'package'
                 / 'group' / 'user' / 'service' / 'host'
                 / 'apply' / 'ensure' / 'compose' / 'import'
@@ -223,7 +224,8 @@ Inventory files add `hosts { name { ... } }` / `host name { ... }`
 (entries: `address`, `user`, `port`, `key`, `connection`, `tags`,
 `vars`) and share `vars`/`var`. Config files use `identity "path"`
 and `identity { path = "path" }` (both forms), plus `imports {
-paths = [...] }` and `webui { projects = [...] }` — group form only.
+paths = [...] }`, `webui { projects = [...] }` and `output {
+format = "flat" | "tree" }` — group form only.
 
 ## Examples
 
@@ -336,6 +338,10 @@ imports {
 
 webui {
     projects = ["/srv/site"],
+}
+
+output {
+    format = "tree",
 }
 ```
 
