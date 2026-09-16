@@ -2175,3 +2175,21 @@
      `tachy help` (cmp), DOCUMENTATION.md command table + note and
      generate/version sections; DOX: root AGENTS.md CLI shape and
      source/AGENTS.md app.d bullet updated.
+67. change the mise `release` task to upload the binary as a GitHub
+   release asset named `tachy-<version>-linux-amd64` (<version> = the
+   build date in source/assets/version).
+   - mise.toml: the release script now builds the binary first
+     (`dub build --build=release`, so a broken build aborts before
+     anything is tagged), copies it to `tachy-$version-linux-amd64`
+     and passes it to `gh release create ... --generate-notes` as the
+     asset (gh uploads under the file's basename); a trap removes the
+     copy afterwards. Header comment and task description updated.
+   - Verification: `mise tasks` shows the new description; live
+     `mise run release` on the dirty tree refuses "working tree is
+     dirty — commit first" (exit 1, before any tag/push/gh call —
+     which also proves the script parses); `dub build --build=release`
+     links; the naming lines simulated in /tmp produce exactly
+     `tachy-26.09.16-linux-amd64` (cleaned up). The publish itself
+     (git push, gh) is not exercisable without publishing.
+   - DOX: root AGENTS.md mise release bullet extended (build + asset);
+     no doc trio — dev task, not tachy CLI behavior.

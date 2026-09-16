@@ -2,8 +2,10 @@
 #
 # release — publish a GitHub release with gh: tags the committed source
 # as v<version> (version = the build date in source/assets/version, the
-# same source `tachy version` prints) and lets GitHub generate the
-# notes. Run it from a clean tree, after committing the version bump:
+# same source `tachy version` prints), builds the release binary and
+# uploads it as tachy-<version>-linux-amd64, and lets GitHub generate
+# the notes. Run it from a clean tree, after committing the version
+# bump:
 #
 #     mise run release
 #
@@ -15,7 +17,7 @@
 #     mise run syntax
 
 [tasks.release]
-description = "Tag v<version> (from source/assets/version) and create the GitHub release with gh"
+description = "Tag v<version> (from source/assets/version), build the release binary and create the GitHub release with gh, uploading tachy-<version>-linux-amd64"
 run = '''
 set -eu
 die() { echo "release: $*" >&2; exit 1; }
@@ -25,10 +27,15 @@ version=$(tr -d ' \t\r\n' < source/assets/version)
 [ -n "$version" ] || die "source/assets/version is empty"
 tag="v$version"
 git rev-parse -q --verify "refs/tags/$tag" >/dev/null && die "$tag already exists"
+asset="tachy-$version-linux-amd64"
+echo "release: building $asset from $(git rev-parse --short HEAD)"
+dub build --build=release || die "release build failed"
+cp tachy "$asset"
+trap 'rm -f "$asset"' EXIT
 echo "release: tagging $(git rev-parse --short HEAD) as $tag"
 git tag "$tag"
 git push origin "refs/tags/$tag"
-gh release create "$tag" --verify-tag --title "tachy $version" --generate-notes
+gh release create "$tag" --verify-tag --title "tachy $version" --generate-notes "$asset"
 '''
 
 [tasks.syntax]

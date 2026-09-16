@@ -100,8 +100,10 @@ When the user requests a durable behavior change, record it here or in the relev
   is gone (no dual reader ever shipped)
 - `mise.toml` holds dev tasks: `mise run release` tags the committed
   source `v<version>` (the build date in `source/assets/version`), pushes
-  the tag to `origin` and creates the GitHub release with
-  `gh release create --verify-tag --generate-notes`; it refuses a dirty
+  the tag to `origin`, builds the release binary (`dub build
+  --build=release`) and creates the GitHub release with
+  `gh release create --verify-tag --generate-notes`, uploading the
+  binary as the `tachy-<version>-linux-amd64` asset; it refuses a dirty
   tree, an empty version file or an existing tag; `mise run syntax`
   installs `syntax/pravic.vim` and `*.pravic` filetype detection into
   the current user's Vim (`~/.vim`) and Neovim (`$XDG_CONFIG_HOME/nvim`,
