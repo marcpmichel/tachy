@@ -63,28 +63,33 @@ foreach (w; ["h", "w", "m", "x"])
 {
     const h = helpText();
     assert(canFind(h, "tachy — Pravic-driven"));
-    assert(canFind(h, "tachy apply|check [options] <selection> [<tasks.pravic>...]"));
+    assert(canFind(h, "__Usage:__ **tachy** `<command>` `[options]` `[<args>...]`"));
     assert(canFind(h, "Commands:"));
     assert(canFind(h, "Options:"));
+    assert(canFind(h, "\"tachy help <command>\""), "help must point at per-command help");
     assert(canFind(h, "\"tachy man\""), "help must point at tachy man");
     foreach (deep; ["Every task is an idempotent", "Examples:",
         "INVENTORY FILE", "file /etc/app", "source order", "Projects",
         "graphical version of this CLI.  The projects listed"])
         assert(!canFind(h, deep), "help must not contain: " ~ deep);
 
-    const m = manText();
+    const m = renderMarkup(manText(), false);
     foreach (s; ["NAME", "SYNOPSIS", "DESCRIPTION", "COMMANDS", "OPTIONS",
         "EXAMPLES", "PROJECTS", "WEB UI", "WEB DOCS", "INVENTORY FILE",
         "TASKS FILE", "COMPOSITION", "VARIABLES", "EXECUTION ORDER"])
         assert(canFind(m, "\n" ~ s ~ "\n"), "man page lacks section " ~ s);
     assert(startsWith(m, "TACHY(1)"), "man page needs the TACHY(1) banner");
-    // every non-blank line of the commands and options entries appears
-    // in man (indented by its four-space body offset)
+    // the options entries appear in man verbatim, and every command's
+    // one-line description appears in the composed COMMANDS section
     import std.string : lineSplitter, strip;
-    foreach (block; [commandEntries, optionEntries])
-        foreach (l; block.lineSplitter)
-            if (l.strip.length)
-                assert(canFind(m, l.strip()), "man must document: " ~ l);
+    foreach (l; optionEntries.lineSplitter)
+        if (l.strip.length)
+            assert(canFind(m, renderMarkup(l, false).strip()),
+                "man must document: " ~ l);
+    foreach (w; ["apply", "check", "hosts", "generate", "webui", "webdoc",
+                 "man", "version"])
+        assert(canFind(m, renderMarkup(commandOneLinerText(w), false)),
+            "man COMMANDS lacks: " ~ w);
 }
 
 foreach (o; ["--keep-bundle", "--color", "--events",
@@ -153,6 +158,52 @@ assert(match(tachyVersion, regex(r"^\d{2}\.\d{2}\.\d{2}$")), tachyVersion);
 assert(versionText() == "tachy " ~ tachyVersion);
 
 // help and man carry the version entry
-assert(canFind(helpText(), "version (v)  show the version"), "help");
-assert(canFind(manText(), "version (v)  show the version"), "man");
+assert(canFind(helpText(), "**version (v)**  Print the version"), "help");
+assert(canFind(manText(), "version"), "man");
+}
+
+@("render markup: bold and code, colored or stripped")
+unittest
+{
+import app : renderMarkup;
+
+// colors: markers become ANSI codes
+assert(renderMarkup("**Usage:** `tachy man`", true)
+    == "\033[1mUsage:\033[0m \033[36mtachy man\033[0m", renderMarkup("**Usage:** `tachy man`", true));
+// headers are bold + underlined
+assert(renderMarkup("__Commands:__", true) == "\033[1;4mCommands:\033[0m");
+// colorless: markers are stripped
+assert(renderMarkup("**Usage:** `tachy man`", false) == "Usage: tachy man");
+// unmatched markers pass through verbatim
+assert(renderMarkup("a ** b ` c", true) == "a ** b ` c");
+assert(renderMarkup("a ** b ` c", false) == "a ** b ` c");
+}
+
+@("command screens: every command has a complete mise-style screen")
+unittest
+{
+import app : commandHelpText, commandOneLinerText, parseCommand;
+import std.algorithm.searching : canFind;
+
+foreach (w; ["apply", "check", "hosts", "generate", "webui", "webdoc",
+    "man", "version"])
+{
+    auto c = parseCommand(w);
+    const s = commandHelpText(c);
+    assert(canFind(s, commandOneLinerText(w)), s); // the one-liner header
+    assert(canFind(s, "__Usage:__ **tachy " ~ w) || canFind(s, "__Usage:__ **tachy**"), s);
+    assert(canFind(s, "__Options:__"), s);         // the shared options block
+    assert(canFind(s, "--inventory"), s);
+    assert(canFind(s, "tachy man\" for the full manual"), s);
+    // the body exists and is more than the one-liner
+    assert(s.length > 600, w ~ " screen too short");
+}
+
+// screens carry their body from commandScreens.txt
+const hosts = commandHelpText(Cmd.hosts);
+assert(canFind(hosts, "no host is contacted"), hosts);
+const gen = commandHelpText(Cmd.generate);
+assert(canFind(gen, "refuses to"), gen);
+
+// help has no screen of its own (it prints the short help)
 }

@@ -109,10 +109,19 @@ tachy <command> [options] <selection> [<tasks.pravic>...]
   | `webdoc` | Serve this documentation as a browsable web site — see [Web docs](#web-docs-tachy-webdoc). |
   | `man` | Print the full built-in manual, unix man-page style — see [man](#man). |
   | `version` (`v`) | Print the version: the build date, `YY.mm.dd` — see [version](#version). |
-  | `help` | Show the short help: project and usage lines, commands, options (same as `--help`). |
+  | `help` | Show the short help: project and usage lines, commands, options (same as `--help`); `help <command>` shows one command's full screen. |
 
   The four common commands also take a one-letter short form (shown in
   parentheses); the others take none.
+
+- **Per-command help screens**: `tachy help <command>` and
+  `<command> -h` print the command's screen — description, `Usage:`
+  line, the shared options block. An incomplete invocation (e.g.
+  `tachy apply` with no selection) shows the screen too, with the
+  reason on stderr and exit code 1.
+- **Colors**: help and manual output is colored on a terminal (bold
+  labels, highlighted usage) and plain when piped; `--color` forces
+  colors on.
 
 - `<selection>` is a comma-separated list of host names and `@tag`
   selectors; the special selector `all` matches every host.

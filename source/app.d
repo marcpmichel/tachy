@@ -29,7 +29,7 @@ enum Cmd
 /// Map a command word; `a`/`c`/`g`/`v` are the short forms of the four
 /// common commands (apply, check, generate, version) — the rest take
 /// none. Anything else is an error naming the commands.
-Cmd parseCommand(string word)
+Cmd parseCommand(string word) @safe pure
 {
     switch (word)
     {
@@ -79,10 +79,24 @@ int main(string[] args)
     try
     {
         parseOptions(args, opts, wantHelp);
+        const bool color = helpColors(opts);
 
         if (wantHelp || args.length < 2)
         {
-            printHelp();
+            // `-h` after a command word shows that command's screen
+            // ("tachy apply -h"); without a command word, the short help.
+            if (args.length >= 2)
+            {
+                try
+                {
+                    printCommandHelp(parseCommand(args[1]), color);
+                    return 0;
+                }
+                catch (TachyError)
+                {
+                }
+            }
+            printHelp(color);
             return 0;
         }
 
@@ -93,14 +107,19 @@ int main(string[] args)
             case Cmd.apply:
             case Cmd.check:
                 opts.checkMode = args[1] == "check" || args[1] == "c";
-                if (args.length >= 3)
+                if (args.length < 3)
                 {
-                    opts.selection = args[2];
-                    // A tasks file argument may be a directory (its
-                    // main.pravic is the entry point); with no argument,
-                    // main.pravic in the current directory is used.
-                    opts.tasksFiles = resolveTasksFiles(args[3 .. $]);
+                    // an incomplete invocation shows the command's screen
+                    printCommandHelp(parseCommand(args[1]), color);
+                    stderr.writeln("tachy: missing hosts selection "
+                        ~ "(comma-separated host names or @tags, or \"all\")");
+                    return 1;
                 }
+                opts.selection = args[2];
+                // A tasks file argument may be a directory (its
+                // main.pravic is the entry point); with no argument,
+                // main.pravic in the current directory is used.
+                opts.tasksFiles = resolveTasksFiles(args[3 .. $]);
                 if (!opts.inventoryPath.length)
                     opts.inventoryPath = "inventory.pravic";
                 if (opts.directReport.length && !opts.direct)
@@ -108,7 +127,23 @@ int main(string[] args)
 
                 return runTachy(opts);
             case Cmd.hosts:
+                if (args.length < 3)
+                {
+                    printCommandHelp(Cmd.hosts, color);
+                    stderr.writeln("tachy: missing sub-command "
+                        ~ "(\"hosts list [<selection>]\" or \"hosts info <host>\")");
+                    return 1;
+                }
                 return runHosts(args[2 .. $], opts);
+            case Cmd.generate:
+                if (args.length < 3)
+                {
+                    printCommandHelp(Cmd.generate, color);
+                    stderr.writeln("tachy: missing <what> and <path> "
+                        ~ "(key, task, config or project)");
+                    return 1;
+                }
+                return runGenerate(args[2 .. $]);
             case Cmd.webui:
                 // webui takes no positional arguments: the projects
                 // come from config.pravic (webui projects) and runs
@@ -128,23 +163,26 @@ int main(string[] args)
                         ~ " serves the documentation compiled into this"
                         ~ " binary)");
                 return runWebDoc(opts);
-            case Cmd.generate:
-                return runGenerate(args[2 .. $]);
             case Cmd.man:
-                printMan();
+                printMan(color);
                 return 0;
             case Cmd.showVersion:
                 printVersion();
                 return 0;
             case Cmd.help:
-                printHelp();
+                if (args.length >= 3)
+                {
+                    printCommandHelp(parseCommand(args[2]), color);
+                    return 0;
+                }
+                printHelp(color);
                 return 0;
         }
     }
     catch (GetOptException e)
     {
         stderr.writeln("tachy: ", e.msg);
-        printHelp();
+        printHelp(helpColors(opts));
         return 1;
     }
     catch (TachyError e)
@@ -194,9 +232,9 @@ private immutable string helpHead = import("assets/helpHead.txt");
 immutable string commandEntries = import("assets/commandEntries.txt");
 immutable string optionEntries = import("assets/optionEntries.txt");
 
-private enum commandsBlock = "  Commands:\n" ~ commandEntries;
+private enum commandsBlock = "__Commands:__\n" ~ commandEntries;
 
-private enum optionsBlock = "  Options:\n" ~ optionEntries;
+private enum optionsBlock = "__Options:__\n" ~ optionEntries;
 
 private immutable string helpTail = import("assets/helpTail.txt");
 private immutable string manDescription = import("assets/manDescription.txt");
@@ -212,25 +250,223 @@ private immutable string orderBody = import("assets/orderBody.txt");
 
 string helpText() @safe pure
 {
-    return helpHead ~ "\n\n" ~ commandsBlock ~ "\n\n" ~ optionsBlock ~ "\n\n"
-        ~ helpTail;
+    import std.string : strip;
+    return helpHead.strip ~ "\n\n" ~ commandsBlock.strip ~ "\n\n"
+        ~ optionsBlock.strip ~ "\n\n" ~ helpTail.strip;
 }
 
-private void printHelp()
+// ---------------------------------------------------------------------------
+// Per-command help screens and the assets' micro markup.
+//
+// The help and screen assets carry a tiny markdown-like markup —
+// `**bold**` and `` `code` `` — that the printers render as ANSI codes
+// on a tty (or with --color) and strip when colors are off.  Each
+// command has a screen in the mise/clap shape: a one-line description,
+// the Usage line, the command's body from assets/commandScreens.txt
+// (`=== <command> ===` sections), the shared options block and a
+// footer.  `tachy help <command>` and `<command> -h` print it; an
+// incomplete invocation (`tachy apply` with no selection) shows it
+// instead of a bare error.
+// ---------------------------------------------------------------------------
+
+private immutable string commandScreensSrc = import("assets/commandScreens.txt");
+
+/// The `=== <command> ===` sections of commandScreens.txt, keyed by
+/// command word.
+private string[string] commandScreens() @safe pure
 {
-    writeln(helpText());
+    string[string] r;
+    string current;
+    import std.algorithm.searching : startsWith, endsWith;
+    import std.string : lineSplitter, strip;
+    foreach (line; lineSplitter(commandScreensSrc))
+    {
+        const s = strip(line);
+        if (s.startsWith("=== ") && s.endsWith(" ==="))
+        {
+            current = s[4 .. $ - 4];
+            r[current] = null;
+            continue;
+        }
+        if (current.length)
+            r[current] ~= line ~ "\n";
+    }
+    return r;
+}
+
+/// The command word of a Cmd ("version" for Cmd.showVersion).
+private string commandWord(Cmd c) @safe pure nothrow
+{
+    final switch (c)
+    {
+        case Cmd.apply: return "apply";
+        case Cmd.check: return "check";
+        case Cmd.hosts: return "hosts";
+        case Cmd.generate: return "generate";
+        case Cmd.webui: return "webui";
+        case Cmd.webdoc: return "webdoc";
+        case Cmd.man: return "man";
+        case Cmd.showVersion: return "version";
+        case Cmd.help: return "help";
+    }
+}
+
+/// The one-line description a command carries in the general help.
+private string commandOneLiner(Cmd c) @safe pure nothrow
+{
+    final switch (c)
+    {
+        case Cmd.apply: return "Apply the tasks files to the selected hosts";
+        case Cmd.check: return "Check mode: report would-be changes without applying anything";
+        case Cmd.hosts: return "Inspect hosts: \"hosts list [<selection>]\", \"hosts info <host>\"";
+        case Cmd.generate: return "Write scaffolding: age keys, sample tasks/config/project files";
+        case Cmd.webui: return "Start a local web console: a graphical version of this CLI";
+        case Cmd.webdoc: return "Serve the built-in documentation as a local web site";
+        case Cmd.man: return "Print the full manual, unix man-page style";
+        case Cmd.showVersion: return "Print the version (the build date, YY.mm.dd)";
+        case Cmd.help: return "Show this help, or \"tachy help <command>\" for one command";
+    }
+}
+
+/// The one-line description of a command, by command word.
+string commandOneLinerText(string word) @safe pure
+{
+    return commandOneLiner(parseCommand(word));
+}
+
+/// The Usage line(s) of a command's screen (without the label): the
+/// command word bold, placeholders colored — the clap/mise scheme.
+private string commandSynopsis(Cmd c) @safe pure nothrow
+{
+    final switch (c)
+    {
+        case Cmd.apply:
+            return "**tachy apply** `[options] <selection> [<tasks.pravic>...]`";
+        case Cmd.check:
+            return "**tachy check** `[options] <selection> [<tasks.pravic>...]`";
+        case Cmd.hosts:
+            return "**tachy hosts list** `[<selection>]`\n       **tachy hosts info** `<host>`";
+        case Cmd.generate:
+            return "**tachy generate** `<what> <path>`   # what: key, task, config, project";
+        case Cmd.webui:
+            return "**tachy webui** `[options]`";
+        case Cmd.webdoc:
+            return "**tachy webdoc** `[options]`";
+        case Cmd.man:
+            return "**tachy man**";
+        case Cmd.showVersion:
+            return "**tachy version**";
+        case Cmd.help:
+            return "**tachy help** `[command]`";
+    }
+}
+
+/// One command's help screen, mise/clap shaped: the one-liner, Usage,
+/// the command's body, the shared options block, the footer.
+string commandHelpText(Cmd c) @safe pure
+{
+    const string word = commandWord(c);
+    string s = commandOneLiner(c) ~ "\n\n";
+    s ~= "__Usage:__ " ~ commandSynopsis(c) ~ "\n\n";
+    if (auto body = word in commandScreens())
+        s ~= *body;
+    s ~= "\n__Options:__\n" ~ optionEntries ~ "\n\n";
+    s ~= "Run \"tachy man\" for the full manual.";
+    return s;
+}
+
+/// Render the assets' micro markup — `__header__` (bold + underline),
+/// `**literal**` (bold), `` `placeholder` `` (color) — as ANSI codes
+/// when `color`, the markers stripped when not.  Unmatched markers
+/// pass through verbatim.
+string renderMarkup(string s, bool color) @safe pure
+{
+    import std.string : indexOf;
+    string out_;
+    size_t i;
+    while (i < s.length)
+    {
+        string mark;
+        string code;
+        if (s[i] == '_' && i + 1 < s.length && s[i + 1] == '_')
+        {
+            mark = "__";
+            code = "\033[1;4m";
+        }
+        else if (s[i] == '*' && i + 1 < s.length && s[i + 1] == '*')
+        {
+            mark = "**";
+            code = "\033[1m";
+        }
+        else if (s[i] == '`')
+        {
+            mark = "`";
+            code = "\033[36m";
+        }
+        if (mark is null)
+        {
+            out_ ~= s[i];
+            i++;
+            continue;
+        }
+        const ptrdiff_t close = indexOf(s[i + mark.length .. $], mark);
+        if (close < 0)
+        {
+            out_ ~= s[i];
+            i++;
+            continue;
+        }
+        const content = s[i + mark.length .. i + mark.length + close];
+        if (color)
+            out_ ~= code ~ content ~ "\033[0m";
+        else
+            out_ ~= content;
+        i = i + mark.length + close + mark.length;
+    }
+    return out_;
+}
+
+/// Whether help output may carry ANSI codes: a tty, or --color.
+private bool helpColors(const RunOptions opts) @trusted
+{
+    version (Posix)
+    {
+        import core.sys.posix.unistd : isatty;
+        return opts.forceColor || isatty(1) != 0;
+    }
+    else
+        return opts.forceColor;
+}
+
+private void printHelp(bool color)
+{
+    import std.stdio : stdout;
+    stdout.writeln(renderMarkup(helpText(), color));
+}
+
+private void printMan(bool color)
+{
+    import std.stdio : stdout;
+    stdout.writeln(renderMarkup(manText(), color));
+}
+
+private void printCommandHelp(Cmd c, bool color)
+{
+    import std.stdio : stdout;
+    stdout.writeln(renderMarkup(commandHelpText(c), color));
 }
 
 /// One man-page banner line: TACHY(1) on both edges, centered text
-/// between, padded to 80 columns.
+/// between, padded to 80 columns.  Bold + underline via the micro
+/// markup — the colorizing printer renders it, plain output strips it.
 private string manBanner(string center) @safe pure
 {
     import std.array : replicate;
     enum W = 80;
     enum edge = "TACHY(1)";
     const pad = (W - edge.length * 2 - center.length) / 2;
-    return edge ~ " ".replicate(pad) ~ center
-        ~ " ".replicate(W - edge.length * 2 - center.length - pad) ~ edge;
+    return "__" ~ edge ~ " ".replicate(pad) ~ center
+        ~ " ".replicate(W - edge.length * 2 - center.length - pad) ~ edge ~ "__";
 }
 
 /// Indent every non-blank line of a body block by four spaces, the
@@ -246,7 +482,30 @@ private string manIndent(string body) @safe pure
 
 private string manSection(string title, string body) @safe pure
 {
-    return title ~ "\n" ~ manIndent(body) ~ "\n";
+    return "__" ~ title ~ "__\n" ~ manIndent(body) ~ "\n";
+}
+
+/// The man page's COMMANDS body, composed from the per-command screens
+/// (single source with `tachy help <command>`): each command's
+/// one-liner, usage and body.
+private string manCommands() @safe pure
+{
+    import std.string : strip;
+    const screens = commandScreens();
+    string s;
+    foreach (w; ["apply", "check", "hosts", "generate", "webui", "webdoc",
+                 "man", "version"])
+    {
+        const c = parseCommand(w);
+        s ~= w ~ "\n";
+        s ~= manIndent(commandOneLiner(c)) ~ "\n";
+        s ~= manIndent("usage: " ~ commandSynopsis(c)) ~ "\n";
+        if (auto body = w in screens)
+        {
+            s ~= manIndent(strip(*body)) ~ "\n";
+        }
+    }
+    return s;
 }
 
 string manText() @safe pure
@@ -258,7 +517,7 @@ string manText() @safe pure
             "tachy <command> [options] <selection> [<tasks.pravic>...]\n"
             ~ "tachy webui [options]\ntachy webdoc [options]")
         ~ manSection("DESCRIPTION", manDescription)
-        ~ manSection("COMMANDS", commandEntries)
+        ~ manSection("COMMANDS", manCommands())
         ~ manSection("OPTIONS", optionEntries)
         ~ manSection("EXAMPLES", manExamples)
         ~ manSection("PROJECTS", projectsBody)
@@ -270,11 +529,6 @@ string manText() @safe pure
         ~ manSection("VARIABLES", variablesBody)
         ~ manSection("EXECUTION ORDER", orderBody)
         ~ manBanner("User Commands");
-}
-
-private void printMan()
-{
-    writeln(manText());
 }
 
 /// Option registration, extracted from main so a unittest can verify

@@ -55,6 +55,9 @@ tachy apply '@web'     # applies main.pravic; its directory is the project
 - Check mode (`tachy check`): dry-run that reports would-be changes
   without applying anything. `debug "msg"` prints a templated message
   as a job line — a task that never fails, in apply or check mode.
+- Per-command help screens (`tachy help <command>` or
+  `<command> -h`; an incomplete invocation shows one too), colored on
+  a terminal (`--color` forces), from a micro markup in the help text.
 - **Web UI** (`tachy webui`): a local web server that is a graphical
   version of the CLI — projects from config.pravic, apply/check runs
   with the events streaming in live. The interface is embedded in the
@@ -240,58 +243,35 @@ tachy version                            # the build date (YY.mm.dd)
 ```
 tachy — Pravic-driven configuration management (Ansible-like)
 
-  tachy apply|check [options] <selection> [<tasks.pravic>...]
-  tachy host list|info
-  tachy webui [options]
-  tachy webdoc [options]
-  tachy man
+Usage: tachy <command> [options] [<args>...]
 
+Commands:
+  apply (a)    Apply the tasks files to the selected hosts
+  check (c)    Check mode: report would-be changes without applying anything
+  hosts        Inspect hosts: "hosts list [<selection>]", "hosts info <host>"
+  generate (g) Write scaffolding: age keys, sample tasks/config/project files
+  webui        Start a local web console: a graphical version of this CLI
+  webdoc       Serve the built-in documentation as a local web site
+  man          Print the full manual, unix man-page style
+  version (v)  Print the version (the build date, YY.mm.dd)
+  help         Show this help, or "tachy help <command>" for one command
 
-  Commands:
-    apply (a)    apply tasks to the selected hosts.
-    check (c)    check mode: report changes without applying them.
-    hosts        inspect hosts:
-                  "hosts list [<selection>]" lists the hosts matching a selection (default: all) 
-                  "hosts info <host>" shows one host's attributes
-    generate (g) key <path> : writes a new age key pair.
-                  task <path> : write a sample tasks file. 
-                  config <path> : write a sample config file (note: all refuse to overwrite).
-                  project <path> : write a sample project folder (inventory.pravic, main.pravic, config.pravic).
-    webui        start a local web server: a graphical version of this CLI
-    webdoc       start a local web server serving this documentation as a browsable site
-    man          show the full manual, unix man-page style
-    version (v)  show the version (the build date, YY.mm.dd)
-    help         show this help
+Options:
+  -i, --inventory PATH  Inventory file (default: inventory.pravic)
+  -v, --verbose         Show executed commands, change details and command output (stdout/stderr)
+  --direct              Apply tasks files directly in this process, without bundling a project (this is how the copied binary runs on each host)
+  --direct-report P     With --direct: write "ok changed failed" counters to P
+  --events              Print one JSON event per line on stdout instead of text (machine mode): with --direct, the local run's own events; otherwise the raw events streamed live from each host, wrapped in the controller's fileStart/fileDone events
+  --keep-bundle         Keep each host's temporary bundle directory after the run, for inspection (project copy, generated inventory, report)
+  --config PATH         Optional config file (the identity entry, imports search paths, webui projects, output format); default: TACHY_CONFIG, then config.pravic in the current directory, then ~/.config/tachy/config.pravic
+  --identity PATH       Age identity for { age = ... } inventory vars and file sources marked age = true; supersedes the config file's identity entry. Default: that entry, then AGE_IDENTITY (path or key material), then ~/.ssh/id_ed25519 (age accepts ssh keys)
+  --color               Force colored statuses even when stdout is not a tty (forwarded to the run on each host)
+  --address ADDR        Webui/webdoc only: address to bind (default 127.0.0.1; an IP — use 0.0.0.0 to listen on every interface)
+  --port PORT           Webui/webdoc only: port to listen on (default: a random port between 10000 and 65534; 0 does the same)
+  -h, --help            Show this help
 
-
-  Options:
-    -i, --inventory PATH   Inventory file (default: inventory.pravic)
-    -v, --verbose          Show executed commands, change details and command output (stdout/stderr)
-        --direct           Apply tasks files directly in this process, without bundling a project (this is how the copied binary runs on each host)
-        --direct-report P  With --direct: write "ok changed failed" counters to P
-        --events           Print one JSON event per line on stdout instead of text (machine mode): with --direct, the local run's own events; otherwise the raw events streamed live from each host, wrapped in the controller's fileStart/fileDone events
-        --keep-bundle      Keep each host's temporary bundle directory after the run, for inspection (project copy, generated inventory, report)
-        --config PATH      Optional config file (the identity entry, imports search paths, webui projects, output format); default: TACHY_CONFIG, then config.pravic in the current directory, then ~/.config/tachy/config.pravic
-        --identity PATH    Age identity for { age = ... } inventory vars and file sources marked age = true; supersedes the config file's identity entry. Default: that entry, then AGE_IDENTITY (path or key material), then ~/.ssh/id_ed25519 (age accepts ssh keys)
-        --color            Force colored statuses even when stdout is not a tty (forwarded to the run on each host)
-        --address ADDR     Webui/webdoc only: address to bind (default 127.0.0.1; an IP — use 0.0.0.0 to listen on every interface)
-        --port PORT        Webui/webdoc only: port to listen on (default: a random port between 10000 and 65534; 0 does the same)
-    -h, --help             Show this help
-
-
-  The full manual — selection syntax, projects, the web console and web docs, the inventory and tasks file reference, variables and the execution order — is one command away: "tachy man".
-
+Run "tachy help <command>" for a command's screen, "tachy man" for the full manual.
 ```
-
-This is the whole of `tachy help` (and `--help`). The reference that
-used to live there moved on: `tachy man` prints it all — selection
-syntax, project bundling, the web UI and web docs, the inventory and
-tasks file reference, composition, variables and the execution order —
-formatted like a unix man page. `<selection>` is a comma-separated
-list of host names and `@tag`s (`all` matches everything); a
-`<tasks.pravic>` argument may be a directory, in which case its
-`main.pravic` is the entry point, and its parent directory is the
-project copied to every selected host together with the tachy binary
 (linux/amd64 only).
 
 ### Config (optional)

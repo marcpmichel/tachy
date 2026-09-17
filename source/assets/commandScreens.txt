@@ -1,0 +1,61 @@
+=== apply ===
+Runs the tasks files against the selected hosts, in statement order. The
+tasks file's parent directory is its **project**: bundled mode (the
+default) copies the project and the tachy binary to every selected host
+and executes the composition there; `--direct` applies in this process
+instead.
+
+<selection> is a comma-separated list of host names and `@tag` selectors
+("all" matches everything). Every `{{ ... }}` reference is dry-rendered
+against each host's effective variables before anything is deployed. A
+failing host is dropped from the rest of its tasks file; other hosts
+continue. Exit code: 0 success, 1 when a job failed, 128 + signal when
+interrupted (Ctrl-C stops cleanly and prints the summary).
+
+=== check ===
+Check mode: like apply, but applies nothing — probes run, mutations are
+suppressed, and would-be changes report as `changed (check)`. `ensure`,
+`http` and `debug` jobs are checks by nature and run normally. The same
+bundled/direct execution, selection and validation rules apply. Exit
+code: 0 when conformant, 1 when an assertion failed or configuration is
+invalid.
+=== hosts ===
+Inspect the inventory; no host is contacted and no tasks file is needed.
+
+`list [<selection>]` prints the hosts a selection matches (default:
+"all"); `info <host>` shows one host's attributes and effective
+variables.
+
+=== generate ===
+Scaffolding on the controller; never contacts a host and refuses to
+overwrite.
+
+`key <path>` writes a new age key pair; `task <path>` a sample tasks
+file; `config <path>` a sample config file; `project <path>` a complete
+sample project (inventory.pravic, main.pravic, config.pravic).
+
+=== webui ===
+Start a local web server: a graphical version of this CLI. Projects come
+from the `webui` section of config.pravic; apply/check runs start from
+the browser and stream their job lines live as Server-Sent Events.
+
+Binds to `--address` (default 127.0.0.1) and `--port` (default: a random
+port between 10000 and 65534); the bound URL is printed and tachy tries
+to open it in the local browser. Anyone who can reach the port can run
+tachy.
+
+=== webdoc ===
+Serve the documentation compiled into this binary as a small multi-page
+web site — the same `DOCUMENTATION.md` reference, always in sync with
+the binary that serves it. Read-only; same `--address` and `--port`
+options as the webui.
+
+=== man ===
+Print the full manual on stdout, formatted like a unix man page: NAME,
+SYNOPSIS, DESCRIPTION, COMMANDS, OPTIONS, EXAMPLES, PROJECTS, WEB UI,
+WEB DOCS, the inventory and tasks file reference, composition,
+variables and the execution order.
+
+=== version ===
+Print the version: the build date, "YY.mm.dd" (kept current by dub's
+pre-build commands).

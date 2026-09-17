@@ -2411,3 +2411,58 @@
      the raw `--events` stream carries
      `"details":[...,"stdout: to-out","stderr: to-err"]`; check mode
      shows no streams for suppressed mutations.
+
+74. add a help screen per subcommand, colorized, in the mise/clap
+    shape — plus a micro markup syntax for the help text assets.
+   - Markup: the help/screen assets now carry a tiny markdown-like
+     markup — `**bold**` and `` `code` `` — rendered by `renderMarkup`
+     as ANSI codes when colors are on (a tty, or `--color`) and
+     stripped when piped; unmatched markers pass through. `helpHead`
+     (bold Usage label), `commandEntries` (bold command names),
+     `optionEntries` (bold flags), `helpTail` (code ticks) and the man
+     banners/section titles carry it; help and man plain output is
+     unchanged in content.
+   - Screens: `commandHelpText(Cmd)` composes each command's screen
+     mise-style — one-line description, `**Usage:**` line, the
+     command's body from the new `assets/commandScreens.txt`
+     (`=== <command> ===` sections), the shared options block, and a
+     `tachy man` footer. `tachy help <command>` and `<command> -h`
+     print it (exit 0); an incomplete invocation (`tachy apply`,
+     `tachy hosts`, `tachy generate` with no arguments) prints the
+     screen with the reason on stderr and exits 1. The general help
+     was restyled to match: generic Usage line, one-line Commands
+     entries (the former generate/hosts detail moved into their
+     screens), Options block, footer pointing at per-command help and
+     man. The man page's COMMANDS section is now composed from the
+     same screens (single source), with its banners and section titles
+     bold via the markup.
+   - Fixed en route: the general help's `tachy host list|info` typo
+     (the command is `hosts`) and LANGUAGE.md's malformed
+     SingleKeyword production were corrected in the previous-previous
+     and this task respectively (this one: helpHead rewritten, so the
+     typo is gone from the help).
+   - Tests: 2 new unittests (renderMarkup colored/stripped/unmatched;
+     every command's screen carries one-liner, Usage, Options, footer
+     and body) + updated contracts (usage line, version entry markup,
+     man COMMANDS composition, rendered-entries comparison).
+     `dub test` 199 passed. Verified live: `tachy help apply`,
+     `tachy hosts -h`, incomplete `tachy apply` (screen + reason +
+     exit 1), `--color` emits ANSI and piped output stays plain, man
+     banners/sections bold; a real apply/hosts/version dispatch still
+     works; README CLI reference block byte-identical to `tachy help`.
+   - Docs: DOCUMENTATION Command line section (per-command screens,
+     colors), README features bullet, root AGENTS.md CLI-shape bullet
+     (help command word + micro markup contract).
+   - Amended after operator feedback ("barely colorized; format the
+     screens similarly to mise"): the markup grew a third form —
+     `__header__` (bold + underline, the clap/mise header style) along
+     `**literal**` (bold command/flag names) and `` `placeholder` ``
+     (color, e.g. `<selection>`, `PATH`) — applied across the usage
+     lines, option entries (flags split from their placeholders, both
+     colored), man banners/sections and screens. Option-entry columns
+     re-aligned by a one-off rdmd script (description column constant,
+     padding computed on visible width so colored and plain renders
+     align). The option padding changed, so the README CLI reference
+     block was re-synced byte-identically (and repaired after a
+     mis-splice dropped its heading). renderMarkup test extended for
+     `__`; screen test updated to the new label markup.

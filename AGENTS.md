@@ -133,7 +133,11 @@ When the user requests a durable behavior change, record it here or in the relev
  manual, unix man-page style), `version` (prints the version — the
  build date `YY.mm.dd`, kept in `source/assets/version` and refreshed
  by dub's preBuildCommands) or
-`help` (short form only: usage lines, commands, options); the common
+`help` (short form only: usage lines, commands, options; `help
+<command>` or `<command> -h` shows one command's screen — an
+incomplete invocation shows it too; help and man output carries a
+`**bold**`/`` `code` `` micro markup rendered as colors on a tty or
+with --color, stripped when piped); the common
  commands `apply`, `check`, `generate` and `version` also answer to
  their one-letter short forms `a`, `c`, `g` and `v` (the others take
  none); selection mixes host names, `@tag` and `all`; default
