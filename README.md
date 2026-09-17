@@ -71,7 +71,9 @@ tachy apply '@web'     # applies main.pravic; its directory is the project
 - **Generate** (`tachy generate`): scaffolding — a new age key pair
   (`generate key <path>`), a commented sample tasks file
   (`generate task <path>`) or a sample project folder
-  (`generate project <path>`: inventory, tasks file, config).
+  (`generate project <path>`: inventory, tasks file, config);
+  `generate completions bash|zsh|fish` prints the shell completion
+  script for the given shell.
 - Strict validation everywhere: unknown keys, undefined variables, invalid
   states, duplicate targets, apply cycles, applies escaping the
   project and unknown hosts/tags are reported with file context before
@@ -249,7 +251,7 @@ Commands:
   apply (a)    Apply the tasks files to the selected hosts
   check (c)    Check mode: report would-be changes without applying anything
   hosts        Inspect hosts: "hosts list [<selection>]", "hosts info <host>"
-  generate (g) Write scaffolding: age keys, sample tasks/config/project files
+  generate (g) Write scaffolding: age keys, sample tasks/config/project files, shell completions
   webui        Start a local web console: a graphical version of this CLI
   webdoc       Serve the built-in documentation as a local web site
   man          Print the full manual, unix man-page style
@@ -269,6 +271,7 @@ Options:
   --color               Force colored statuses even when stdout is not a tty (forwarded to the run on each host)
   --address ADDR        Webui/webdoc only: address to bind (default 127.0.0.1; an IP — use 0.0.0.0 to listen on every interface)
   --port PORT           Webui/webdoc only: port to listen on (default: a random port between 10000 and 65534; 0 does the same)
+  --completion          Hosts list only: print selection candidates (all, host names, @tags), one per line, for shell completions
   -y, --yes             With upgrade: skip the y/N confirmation and upgrade unattended
   -h, --help            Show this help
 

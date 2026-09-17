@@ -2575,3 +2575,61 @@
      optionEntries row, README, DOCUMENTATION (command table, options
      table, `### upgrade`) and the AGENTS.md / source/AGENTS.md
      bullets updated.
+
+77. add `generate completions <shell>` (bash, zsh, fish): print the
+    shell completion script on stdout, plus the machine output it
+    feeds on — `hosts list --completion`.
+   - `hosts list --completion` (new `--completion` option, global
+     getopt like every option, `RunOptions.completion`): prints the
+     selection vocabulary instead of the human list — `all`, every
+     host name (list order), then every `@tag` sorted and deduped,
+     one candidate per line (`selectionCandidatesText`, unit-tested
+     in tests/runner.d: exact text for the two-host fixture). Takes
+     no selection argument — completing a selection wants the whole
+     vocabulary — and errors namingly otherwise; honours `-i` like
+     the human list. The human `hosts list` output is unchanged.
+   - `generate completions <shell>` (`completionsText`, dispatched in
+     runGenerate): unknown/missing shell errors naming bash, zsh or
+     fish; the output per shell is exactly the embedded asset.
+   - The scripts are static hand-maintained assets
+     (`completionBash.txt`/`completionZsh.txt`/`completionFish.txt`,
+     embedded with `import()`), each carrying its install commands in
+     the header (bash-completion user dir, zsh fpath + compinit,
+     ~/.config/fish/completions). They complete: commands + short
+     forms, all options (short and long, value-taking ones with file
+     completion), hosts list/info, generate key/task/config/project/
+    completions, the shells after `completions`, `help <command>`,
+     and the selection dynamically — host names and `@tags` from
+     `hosts list --completion` at completion time (no host is
+     contacted; only the inventory is read), with `-i` on the line
+     being completed passed through and comma-separated selections
+     completed element-wise (bash `##*,` + prefix re-insertion, zsh
+     IPREFIX, fish token counting). Fish opts out of default file
+     completion (`complete -c tachy -f`) and enables
+     `__fish_complete_path` explicitly where files belong (tasks
+     files after the selection, generate paths).
+   - Drift guard: a unittest in tests/generate.d asserts every
+     command word, sub-command word and registered long option
+     appears in each script (shorts per shell spelling: bash words,
+     zsh braces, fish `-s`/`-l`), and that all three call
+     `hosts list --completion` — the asset goes stale with the CLI,
+     `dub test` fails. The guard caught its first real gap during
+     development (fish never spells `--verbose`). RunOptions
+     contract test in tests/app.d covers `--completion`.
+   - Verified live (bash 5, zsh, fish all on the machine): `bash -n`
+     / `zsh -n` / `fish -n` clean; bash behaviourally driven over 11
+     scenarios (command list, selection candidates, `-i` passthrough
+     to a custom inventory, comma-element completion, option
+     prefixes, generate/completions/hosts sub-positions, help,
+     `--y`→`--yes`); zsh registers `_tachy` via compinit; fish
+     driven through `complete -C` — selection candidates, `-i`
+     passthrough, shells, bare `hosts info` names, explicit file
+     completion at tasks-file positions, nothing for `upgrade` (it
+     takes no arguments). The fish run found and fixed three real
+     bugs pre-release (`string match -x` does not exist; positional
+     counter off by one; file fallback polluting every position).
+     `dub test` 211 passed, 0 failed (repeated runs). CLI help
+     screen/synopsis/entries, optionEntries, README (feature bullet,
+     help mirror, options), DOCUMENTATION (options table, hosts
+     section, generate section) and AGENTS.md / source/AGENTS.md
+     updated; the FUTURE.md idea line is implemented and removed.

@@ -1,5 +1,4 @@
 
-
  - implement an 'upgrade' command that self-updates based on a hard-coded github link (choosing the latest release binary)
 
 - tasks: when <condition> for tasks (i.e. when = {{ myvar }} (only truthy/falsy, no expression to keep it simple )

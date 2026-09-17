@@ -153,6 +153,7 @@ Example: `tachy apply @web req/web`, `tachy check all`,
 | `--identity PATH` | Age identity for `{ age = ... }` inventory vars and `file` sources marked `age = true`; supersedes the config file's `identity` entry. Default: that entry, then `AGE_IDENTITY` (path or key material), then `~/.ssh/id_ed25519` (age accepts ssh keys). |
 | `--color` | Force colored statuses even when stdout is not a tty. |
 | `--address ADDR`, `--port PORT` | Webui/webdoc only: address (default 127.0.0.1) and port to listen on. The default port (and `0`) is a random port between 10000 and 65534 — both commands are localhost conveniences; the bound URL is printed, and tachy tries to open it in the local browser (`gio open`, best-effort). |
+| `--completion` | With `hosts list`: print the selection candidates — `all`, every host name, every `@tag` — one per line, the machine format the `generate completions` scripts call. |
 | `-y, --yes` | With `upgrade`: skip the y/N confirmation and upgrade unattended. |
 
 ### hosts
@@ -164,6 +165,11 @@ like every other command.
 - `tachy hosts list [<selection>]` — lists the hosts a selection
   matches (default: `all`), one line per host with its connection
   target. This replaces the former `--list-hosts` option (removed).
+- `tachy hosts list --completion` — machine output for the
+  `generate completions` scripts: the selection candidates — `all`,
+  every host name, every `@tag` — one per line, no header or
+  formatting. Takes no selection argument (completing a selection
+  wants the whole vocabulary); honours `-i` like the human list.
 - `tachy hosts info <host>` — one host's attributes: `connection`,
   `address`, `user`, `port`, `key` and `tags` (set keys plus the
   connection/port defaults), then its effective variables — global
@@ -200,6 +206,14 @@ existing file.
   `config.pravic` — the two samples above. An existing sample aborts
   the whole scaffold (generate never overwrites); `cd <path> && tachy
   hosts list` is the natural next step.
+- `tachy generate completions <shell>` — prints the shell completion
+  script for `bash`, `zsh` or `fish` on stdout (redirect it to where
+  your shell looks; the script's header carries the exact commands).
+  The scripts complete commands, options, sub-commands and the
+  selection: host names and `@tags` come from
+  `tachy hosts list --completion` at completion time — no host is
+  contacted, only the inventory is read, and `-i` on the line being
+  completed is honoured.
 
 ### man
 

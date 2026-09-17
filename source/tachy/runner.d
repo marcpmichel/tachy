@@ -57,6 +57,7 @@ struct RunOptions
     string webAddress = "127.0.0.1"; // webui/webdoc: bind address
     int webPort = 0;       // webui/webdoc: listen port (0 = random in 10000..65534)
     bool yes;              // upgrade: skip the y/N confirmation
+    bool completion;       // hosts list: selection candidates for completions
     string[] tasksFiles;
 }
 
@@ -109,8 +110,10 @@ int runTachy(RunOptions optsIn)
 /// `tachy hosts <sub-command> ...`: `hosts list [<selection>]` prints
 /// the hosts a selection matches (`all` when the selection is omitted),
 /// `hosts info <host>` one host's attributes with its effective
-/// variables.  No host is contacted and no tasks
-/// file is needed.
+/// variables.  `hosts list --completion` prints the selection
+/// vocabulary instead — `all`, every host name, every `@tag`, one per
+/// line — the machine format the `generate completions` scripts call.
+/// No host is contacted and no tasks file is needed.
 int runHosts(in string[] args, const RunOptions opts)
 {
     if (!args.length)
@@ -123,6 +126,10 @@ int runHosts(in string[] args, const RunOptions opts)
     if (args[0] == "list" && args.length > 2)
         throw new TachyError("hosts list: expected at most one selection"
             ~ " (host names, @tags or \"all\"), not " ~ text(args.length - 1));
+    if (args[0] == "list" && opts.completion && args.length > 1)
+        throw new TachyError("hosts list --completion takes no selection —"
+            ~ " it prints every candidate (all, host names, @tags),"
+            ~ " which a selection would only trim");
     if (args[0] == "info" && args.length != 2)
         throw new TachyError("hosts info: expected exactly one host name");
 
@@ -135,7 +142,9 @@ int runHosts(in string[] args, const RunOptions opts)
         auto hosts = inventory.select(selection);
         if (!hosts.length)
             throw new TachyError(text("selection '", selection, "' matched no hosts"));
-        writeln(hostsListText(selection, hosts));
+        writeln(opts.completion
+            ? selectionCandidatesText(hosts)
+            : hostsListText(selection, hosts));
     }
     else
     {
@@ -145,6 +154,28 @@ int runHosts(in string[] args, const RunOptions opts)
         writeln(hostInfoText(h, vars));
     }
     return 0;
+}
+
+/// Selection candidates for `hosts list --completion`: `all`, every
+/// host name and every `@tag`, one per line — the machine format the
+/// `generate completions` scripts parse.  Not human output; the human
+/// list is `hostsListText`.
+package(tachy) string selectionCandidatesText(HostConfig[] hosts) @safe
+{
+    import std.algorithm.iteration : uniq;
+    import std.algorithm.sorting : sort;
+
+    string[] tags;
+    foreach (ref h; hosts)
+        tags ~= h.tags;
+    tags.sort();
+
+    string out_ = "all\n";
+    foreach (ref h; hosts)
+        out_ ~= h.name ~ "\n";
+    foreach (t; uniq(tags))
+        out_ ~= "@" ~ t ~ "\n";
+    return out_;
 }
 
 /// Text of `hosts list`: the selection header line, then one line per

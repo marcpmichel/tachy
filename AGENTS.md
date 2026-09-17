@@ -122,10 +122,15 @@ When the user requests a durable behavior change, record it here or in the relev
 - CLI shape: `tachy <command> [options] <selection> [<tasks.pravic>...]`;
  command is one of `apply`, `check` (check mode; the old `-c` option is
  gone), `hosts` (`hosts list [<selection>]` — `all` when omitted,
- `hosts info <host>`; the old `--list-hosts` option is gone),
+ `hosts info <host>`; the old `--list-hosts` option is gone;
+ `hosts list --completion` prints the selection candidates — all,
+ host names, @tags, one per line — for the completion scripts),
  `generate` (`generate key <path>`,
  `generate task <path>`, `generate config <path>`,
- `generate project <path>`),
+ `generate project <path>`, `generate completions <shell>` — the
+ bash/zsh/fish completion script on stdout, static assets
+ drift-guarded by a unittest; selections complete dynamically via
+ `hosts list --completion`),
  `webui` (local web console; no selection — projects come from
  config.pravic `webui` projects, runs start from the browser),
  `webdoc` (serves the compiled-in DOCUMENTATION.md as a multi-page

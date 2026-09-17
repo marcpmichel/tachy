@@ -330,7 +330,7 @@ private string commandOneLiner(Cmd c) @safe pure nothrow
         case Cmd.apply: return "Apply the tasks files to the selected hosts";
         case Cmd.check: return "Check mode: report would-be changes without applying anything";
         case Cmd.hosts: return "Inspect hosts: \"hosts list [<selection>]\", \"hosts info <host>\"";
-        case Cmd.generate: return "Write scaffolding: age keys, sample tasks/config/project files";
+        case Cmd.generate: return "Write scaffolding: age keys, sample tasks/config/project files, shell completions";
         case Cmd.upgrade: return "Upgrade tachy to the latest GitHub release";
         case Cmd.webui: return "Start a local web console: a graphical version of this CLI";
         case Cmd.webdoc: return "Serve the built-in documentation as a local web site";
@@ -359,7 +359,8 @@ private string commandSynopsis(Cmd c) @safe pure nothrow
         case Cmd.hosts:
             return "**tachy hosts list** `[<selection>]`\n       **tachy hosts info** `<host>`";
         case Cmd.generate:
-            return "**tachy generate** `<what> <path>`   # what: key, task, config, project";
+            return "**tachy generate** `<what> <path>`   # what: key, task, config, project\n"
+                ~ "       **tachy generate completions** `<shell>`   # shell: bash, zsh, fish";
         case Cmd.upgrade:
             return "**tachy upgrade** `[-y|--yes]`";
         case Cmd.webui:
@@ -565,6 +566,7 @@ void parseOptions(ref string[] args, ref RunOptions opts, ref bool wantHelp)
         "identity", "PATH  age identity for { age = ... } inventory vars; supersedes the config identity entry (default: AGE_IDENTITY, then ~/.ssh/id_ed25519)", &opts.identity,
         "address", "ADDR  webui/webdoc: address to bind (default 127.0.0.1)", &opts.webAddress,
         "port", "N  webui/webdoc: port to listen on (default: a random port between 10000 and 65534)", &opts.webPort,
+        "completion", "hosts list: print selection candidates (all, host names, @tags), one per line, for shell completions", &opts.completion,
         "y|yes", "with upgrade: skip the y/N confirmation and upgrade unattended", &opts.yes,
         "h|help", "show this help", &wantHelp,
     );

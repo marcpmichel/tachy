@@ -270,6 +270,12 @@ assert(listAll == "== all | hosts: buildbox, web1\n"
     ~ "  buildbox (local)\n"
     ~ "  web1 (ssh deploy@10.0.0.1:2222)\n", listAll);
 
+// --completion: machine candidates for the completion scripts — all,
+// every host name (same order as the list), then every @tag sorted
+// and deduplicated
+const string cands = selectionCandidatesText(inv.select("all"));
+assert(cands == "all\nbuildbox\nweb1\n@front\n@web\n", cands);
+
 // info: header, set attributes plus connection/port defaults, then
 // effective vars (global < host, sorted, no inventory_hostname)
 auto vars = inv.varsFor("web1");

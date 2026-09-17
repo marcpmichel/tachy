@@ -31,8 +31,16 @@ Scaffolding on the controller; never contacts a host and refuses to
 overwrite.
 
 `key <path>` writes a new age key pair; `task <path>` a sample tasks
-file; `config <path>` a sample config file; `project <path>` a complete
-sample project (inventory.pravic, main.pravic, config.pravic).
+file; `config <path>` a sample config file; `project <path>` a
+complete sample project (inventory.pravic, main.pravic, config.pravic).
+
+`completions <shell>` prints the shell completion script for bash,
+zsh or fish on stdout — installation paths differ per shell and
+distro, so redirect it where your shell looks (the script's header
+carries the exact commands). The scripts complete commands, options,
+sub-commands and the selection dynamically: host names and `@tags`
+come from `hosts list --completion`, honoring `-i` on the line being
+completed.
 
 === webui ===
 Start a local web server: a graphical version of this CLI. Projects come

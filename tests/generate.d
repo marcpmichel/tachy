@@ -31,6 +31,81 @@ unittest
     assertThrown!TachyError(runGenerate(["task", ""]));
 }
 
+@("generate completions: shell validation, asset output, drift guard")
+unittest
+{
+    import tachy.generate : completionBash, completionFish, completionZsh;
+
+    // unknown and missing shells are errors naming the valid ones
+    string msg;
+    try
+    {
+        completionsText("tcsh");
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(canFind(msg, "bash, zsh or fish"), msg);
+
+    try
+    {
+        completionsText("");
+        assert(false, "expected TachyError");
+    }
+    catch (TachyError e)
+        msg = e.msg;
+    assert(canFind(msg, "bash, zsh or fish"), msg);
+
+    // the output per shell is exactly the embedded asset
+    assert(completionsText("bash") == completionBash);
+    assert(completionsText("zsh") == completionZsh);
+    assert(completionsText("fish") == completionFish);
+
+    // drift guard: every command word, sub-command word and registered
+    // option must appear in each script, or the asset is stale —
+    // update all three together with the CLI surface
+    foreach (shell, script; ["bash": completionBash, "zsh": completionZsh,
+                             "fish": completionFish])
+    {
+        foreach (w; ["apply", "check", "hosts", "generate", "webui",
+                     "webdoc", "man", "version", "help", "upgrade",
+                     "list", "info", "key", "task", "config", "project",
+                     "completions", "bash", "zsh", "fish"])
+            assert(canFind(script, w),
+                shell ~ " completion lacks command word " ~ w);
+        // fish spells long options with -l (checked below)
+        if (shell == "fish")
+            continue;
+        foreach (o; ["--inventory", "--verbose", "--color", "--direct",
+                     "--direct-report", "--events", "--keep-bundle",
+                     "--config", "--identity", "--address", "--port",
+                     "--completion", "--yes", "--help"])
+            assert(canFind(script, o),
+                shell ~ " completion lacks option " ~ o);
+    }
+
+    // short forms: bare words in bash, brace forms in zsh, -s in fish
+    foreach (s; ["-i", "-v", "-y", "-h"])
+    {
+        assert(canFind(completionBash, s), "bash completion lacks " ~ s);
+        assert(canFind(completionZsh, s), "zsh completion lacks " ~ s);
+        assert(canFind(completionFish, "-s " ~ s[1 .. $]),
+            "fish completion lacks -s " ~ s[1 .. $]);
+    }
+    // fish spells long options with -l
+    foreach (o; ["inventory", "verbose", "color", "direct",
+                 "direct-report", "events", "keep-bundle", "config",
+                 "identity", "address", "port", "completion", "yes",
+                 "help"])
+        assert(canFind(completionFish, "-l " ~ o), "fish completion lacks -l " ~ o);
+
+    // the dynamic selection source is wired into every script
+    foreach (shell, script; ["bash": completionBash, "zsh": completionZsh,
+                             "fish": completionFish])
+        assert(canFind(script, "hosts list --completion"),
+            shell ~ " completion must call hosts list --completion");
+}
+
 @("generateTask writes a loadable sample and never overwrites")
 unittest
 {

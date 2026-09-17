@@ -19,6 +19,13 @@ module tachy.generate;
  *    main.pravic and config.pravic (the two samples above).  The
  *    folder is created when missing ('.' fills the current
  *    directory); existing files are never overwritten.
+ *  - `tachy generate completions <shell>`: the shell completion script
+ *    for bash, zsh or fish, printed on stdout (installation paths
+ *    differ per shell and distro, so the user redirects it — the
+ *    script's header carries the exact commands).  The scripts are
+ *    static assets, drift-guarded against the command surface by the
+ *    unittest in tests/generate.d; host and @tag selections complete
+ *    dynamically through `tachy hosts list --completion`.
  */
 import std.stdio : stdout;
 
@@ -29,10 +36,10 @@ int runGenerate(in string[] args)
 {
     if (args.length != 2)
         throw new TachyError("generate: expected 'key <path>', 'task <path>',"
-            ~ " 'config <path>' or 'project <path>' — examples: tachy"
-            ~ " generate key key.txt, tachy generate task main.pravic,"
-            ~ " tachy generate config config.pravic, tachy generate"
-            ~ " project demo");
+            ~ " 'config <path>', 'project <path>' or 'completions <shell>'"
+            ~ " — examples: tachy generate key key.txt, tachy generate"
+            ~ " task main.pravic, tachy generate config config.pravic,"
+            ~ " tachy generate project demo, tachy generate completions bash");
     switch (args[0])
     {
         case "key":
@@ -43,10 +50,36 @@ int runGenerate(in string[] args)
             return generateConfig(args[1]);
         case "project":
             return generateProject(args[1]);
+        case "completions":
+            import std.stdio : stdout;
+            stdout.write(completionsText(args[1]));
+            return 0;
         default:
             throw new TachyError("generate: unknown thing '" ~ args[0]
-                ~ "' to generate (expected 'key', 'task', 'config' or"
-                ~ " 'project')");
+                ~ "' to generate (expected 'key', 'task', 'config',"
+                ~ " 'project' or 'completions')");
+    }
+}
+
+/// The completion script for a shell: the embedded asset, validated
+/// shell name first.  Static text, so the dispatch test can compare
+/// the output against the asset directly.
+package(tachy) string completionsText(string shell)
+{
+    switch (shell)
+    {
+        case "bash":
+            return completionBash;
+        case "zsh":
+            return completionZsh;
+        case "fish":
+            return completionFish;
+        default:
+            throw new TachyError(shell.length
+                ? "generate completions: unknown shell '" ~ shell
+                    ~ "' (expected bash, zsh or fish)"
+                : "generate completions: expected a shell"
+                    ~ " (bash, zsh or fish)");
     }
 }
 
@@ -170,7 +203,14 @@ package(tachy) int generateProject(string name)
 }
 
 // The sample texts live in assets/*.txt and are embedded at compile
-// time with import(), like the help/man blocks in app.d.
+// time with import(), like the help/man blocks in app.d.  The
+// completion scripts are hand-maintained assets too — the drift-guard
+// unittest in tests/generate.d keeps them in sync with the command
+// surface.
 private immutable string sampleTasks = import("assets/sampleTask.txt");
 private immutable string sampleConfig = import("assets/sampleConfig.txt");
 private immutable string sampleInventory = import("assets/sampleInventory.txt");
+
+package(tachy) immutable string completionBash = import("assets/completionBash.txt");
+package(tachy) immutable string completionZsh = import("assets/completionZsh.txt");
+package(tachy) immutable string completionFish = import("assets/completionFish.txt");

@@ -1,7 +1,7 @@
   **apply (a)**    Apply the tasks files to the selected hosts
   **check (c)**    Check mode: report would-be changes without applying anything
   **hosts**        Inspect hosts: "hosts list [<selection>]", "hosts info <host>"
-  **generate (g)** Write scaffolding: age keys, sample tasks/config/project files
+  **generate (g)** Write scaffolding: age keys, sample tasks/config/project files, shell completions
   **webui**        Start a local web console: a graphical version of this CLI
   **webdoc**       Serve the built-in documentation as a local web site
   **man**          Print the full manual, unix man-page style

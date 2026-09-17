@@ -32,7 +32,10 @@ This doc owns the source tree's structure and conventions;
     command (`runHosts`: `hosts list [<selection>]` prints the former
     --list-hosts output — `all` when the selection is omitted,
     `hosts info <host>` one host's attributes
-    plus effective vars, values via project.d's `pravicValue`);
+    plus effective vars, values via project.d's `pravicValue`;
+    `hosts list --completion` prints the selection vocabulary
+    (`selectionCandidatesText`: `all`, host names, `@tags`, one per
+    line — the machine format the completion scripts call));
     direct mode and bundled mode, both preceded by render validation
     (`validateRenders`: every job's parameters and template files are
     dry-rendered against each selected host's effective variables, so
@@ -104,7 +107,12 @@ This doc owns the source tree's structure and conventions;
     `generate project <path>` (inventory + tasks + config;
     controller-side scaffolding; the sample texts are assets —
     `sampleTask.txt`/`sampleConfig.txt`/`sampleInventory.txt` —
-    embedded with `import()` like app.d's help/man blocks)
+    embedded with `import()` like app.d's help/man blocks);
+    `generate completions <shell>` writes the bash/zsh/fish completion
+    script to stdout (`completionBash/Zsh/Fish.txt` assets, hand-
+    maintained and drift-guarded against the command surface by
+    tests/generate.d; selections complete dynamically via
+    `hosts list --completion`, with `-i` passed through)
   - `upgrade.d` — the `upgrade` command: compares the running build
     with the latest GitHub release through the `releases/latest`
     redirect (curl on the local transport; the repo slug is

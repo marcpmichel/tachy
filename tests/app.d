@@ -94,7 +94,7 @@ foreach (w; ["h", "w", "m", "x"])
 
 foreach (o; ["--keep-bundle", "--color", "--events", "--yes",
     "--verbose", "--direct", "--config", "--identity", "--address",
-    "--port", "--direct-report"])
+    "--port", "--direct-report", "--completion"])
 {
     RunOptions opts;
     bool wantHelp;
