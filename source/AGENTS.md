@@ -47,7 +47,11 @@ This doc owns the source tree's structure and conventions;
     through the bundle — for applies deferred to an import landing it
     first shadow-composes the entry file in a staging mirror of the
     bundle layout (`makeStaging`, symlinks; removed after the tasks
-    file)
+    file); both modes stop dispatching on a SIGINT/SIGTERM
+    (`tachy.signals`), finish with the interrupted summary and exit
+    `128 + signal` — bundles, staging and the direct report are still
+    cleaned up, and a job killed by the signal is not folded as a
+    failed job
   - `models.d` — tasks-file composition: Pravic statements in source
     order (`apply` composes its file at the statement's position;
     vars/import statements are file-wide, not jobs), duplicate-target
@@ -57,7 +61,7 @@ This doc owns the source tree's structure and conventions;
     entry-local `vars` context of `file`/`service` and `processApply`
     the apply bindings through resolveEnvVars at load, so their
     markers behave like every other var of the file
-  - `events.d` — execution events (producer/consumer split): `JobEvent` + builders, `foldCounters`, `TextRenderer` (the one renderer for both modes; flat lines or tree groups per host, chosen by config), NDJSON `eventLine`/`parseEventLine` for the stream between inner runs and the controller
+  - `events.d` — execution events (producer/consumer split): `JobEvent` + builders, `foldCounters`, `TextRenderer` (the one renderer for both modes; flat lines or tree groups per host, chosen by config), NDJSON `eventLine`/`parseEventLine` for the stream between inner runs and the controller; a `fileDone` may carry `sig` (the interrupting signal, omitted when 0 so uninterrupted streams stay byte-identical), rendered as the "(interrupted by SIG..., stopped early)" footer suffix
   - `vars.d` — variable scopes, `{ env, default, from }` resolution
     (environment or dotenv file), `{ run, stream }` command capture
     (stdout/stderr through /bin/sh in the declaring file's directory,
@@ -76,7 +80,8 @@ This doc owns the source tree's structure and conventions;
     `identity` — takes its group form when a `{` follows)
   - `value.d` — `Val` trees, the `PracticStmt`/`PracticDoc` statement
     types and the validated accessors
-  - `transport.d` — `local` and `ssh` transports (abstract class; `runStreaming` delivers output lines live — POSIX `read`, not buffered `rawRead`, so streams are not batched), `shQuote`, stat helpers
+  - `transport.d` — `local` and `ssh` transports (abstract class; `runStreaming` delivers output lines live — POSIX `read`, not buffered `rawRead`, so streams are not batched), `shQuote`, stat helpers; every spawned child pid is registered with `tachy.signals` so a SIGINT/SIGTERM can reach it
+  - `signals.d` — the SIGINT/SIGTERM cooperative stop: handler (no SA_RESTART) sets a flag and terminates tracked children; run loops check between jobs and finish with a summary + exit `128 + signal` (second signal kills hard, old die-now behavior); the web loops leave their accept on the same flag
   - `http.d` — the minimal HTTP/1.1 client behind the `http` directive:
     plain TCP via std.socket (no libcurl, no external processes), plain
     `http://` only, one deadline bounding connect/send/receive
@@ -109,7 +114,10 @@ This doc owns the source tree's structure and conventions;
     as `tachy <mode> --events ...` and relays its NDJSON stream as
     Server-Sent Events (`/api/events/<id>`, resumable via
     `Last-Event-ID`, terminated by an `event: end` frame); child stderr
-    and non-event stdout become `log` records. Both web commands try
+    and non-event stdout become `log` records. A SIGINT/SIGTERM ends
+    `serveForever`; the webui drains its running children (bounded) so
+    their summaries reach the registry, lets SSE threads flush, and
+    exits `128 + signal` (webdoc leaves immediately). Both web commands try
     to open the bound URL in the local browser (`tryOpenBrowser`,
     `gio open`, best-effort). The browser application in `webui/`
     (plain index.html/app.js/app.css) is embedded at compile time with

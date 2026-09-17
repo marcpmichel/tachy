@@ -250,7 +250,10 @@ function applyEvent(ev, ts) {
       h("td", { colspan: "3", class: "msg" },
         "-- " + (ev.file || "") + ": ok=" + ev.ok + " changed=" + ev.changed
         + " failed=" + ev.failed
-        + (ev.check ? " (check mode, nothing applied)" : "")),
+        + (ev.check ? " (check mode, nothing applied)" : "")
+        + (ev.sig ? " (interrupted by SIG"
+          + (ev.sig === 2 ? "INT" : ev.sig === 15 ? "TERM" : ev.sig)
+          + ", stopped early)" : "")),
     ));
     return;
   }

@@ -78,8 +78,14 @@ int runWebUi(RunOptions optsIn) @trusted
 
     tryOpenBrowser(browserUrl(addr.toAddrString(), addr.port));
 
+    import tachy.signals : installSignalHandlers, signalExitCode;
+    installSignalHandlers();
     serveForever(listener, app.router);
-    return 0;
+    // A signal stopped the serving loop: ask nothing more of the
+    // browser, but give the running children (which the handler asked
+    // to terminate) their last moments to record their summary.
+    app.drainRuns();
+    return signalExitCode();
 }
 
 /// The listener for either web command: an explicit --port binds that
@@ -254,6 +260,35 @@ private final class WebApp
         r.contentType = "text/event-stream";
         r.stream = (ChunkSink send) { Run.streamRun(run, since, send); };
         return r;
+    }
+
+    /// Wait, bounded, for runs still executing when the server was
+    /// asked to stop: the signal already told their children to
+    /// terminate, so each inner run finishes within moments and its
+    /// final records land in the registry instead of being cut off.
+    /// A short grace afterwards lets the SSE connection threads flush
+    /// the final frames before the process leaves.
+    void drainRuns() @trusted
+    {
+        import core.thread : Thread;
+        import core.time : msecs;
+
+        bool waited;
+        foreach (_; 0 .. 100) // 100 x 100 ms — at most ten seconds
+        {
+            bool active;
+            synchronized (regM)
+                foreach (r; runs)
+                    synchronized (r.m)
+                        if (!r.done)
+                            active = true;
+            if (!active)
+                break;
+            waited = true;
+            Thread.sleep(100.msecs);
+        }
+        if (waited)
+            Thread.sleep(500.msecs);
     }
 }
 
@@ -583,20 +618,29 @@ package(tachy) void tryOpenBrowser(string url) @trusted
 }
 
 
-public void serveForever(TcpSocket listener, Router router) @trusted
+/// Serve until the listener dies or a SIGINT/SIGTERM arrives (the
+/// handler has no SA_RESTART, so a signal wakes the blocking accept
+/// and the loop notices).  Returns 0, or the signal that ended the
+/// serving loop.
+public int serveForever(TcpSocket listener, Router router) @trusted
 {
+    import tachy.signals : signalReceived;
+
     for (;;)
     {
+        if (signalReceived())
+            return signalReceived();
         Socket sock;
         try
             sock = listener.accept();
         catch (Exception e)
-            continue; // transient accept error: keep serving
+            continue; // transient accept error (or a signal waking accept): keep serving
         auto conn = new Conn(sock, router);
         auto t = new Thread(&conn.run);
         t.isDaemon = true;
         t.start();
     }
+    return 0; // unreachable
 }
 
 private final class Conn

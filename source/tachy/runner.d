@@ -36,6 +36,7 @@ import tachy.models;
 import tachy.modules;
 import tachy.project;
 import tachy.config;
+import tachy.signals;
 import tachy.transport;
 import tachy.value;
 import tachy.vars;
@@ -77,6 +78,8 @@ string[] resolveTasksFiles(in string[] args)
 
 int runTachy(RunOptions optsIn)
 {
+    installSignalHandlers();
+
     if (!optsIn.selection.length)
         throw new TachyError("missing hosts selection (comma-separated host names or @tags, or \"all\")");
 
@@ -223,7 +226,7 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
     }
 
     int totalFailed;
-
+    bool stop; // a SIGINT/SIGTERM arrived: finish the summary and leave
 
     foreach (tasksFile; opts.tasksFiles)
     {
@@ -244,6 +247,11 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
         ulong ok, changed, failed;
         foreach (ref const host; hosts)
         {
+            if (stop || signalReceived())
+            {
+                stop = true;
+                break;
+            }
             Transport t;
             try
                 t = makeTransport(host);
@@ -259,6 +267,11 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
 
             foreach (ref const job; loaded.jobs)
             {
+                if (stop || signalReceived())
+                {
+                    stop = true;
+                    break;
+                }
                 try
                 {
                     auto vars = deepMerge(hostVars, job.overlay);
@@ -279,6 +292,15 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
                 }
                 catch (Exception e)
                 {
+                    if (stop || signalReceived())
+                    {
+                        // The in-flight command died because the signal
+                        // killed it, not because the host misbehaved:
+                        // no failure to report — the interrupted
+                        // summary below tells what happened.
+                        stop = true;
+                        break;
+                    }
                     auto ev = evJob(host.name, tasksFile, job.origin, "failed", e.msg);
                     foldCounters(ev, ok, changed, failed);
                     consume(ev);
@@ -289,10 +311,17 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
 
         if (machine)
             writeDirectReport(opts.directReport, ok, changed, failed);
-        consume(evFileDone(tasksFile, ok, changed, failed, opts.checkMode));
+        consume(evFileDone(tasksFile, ok, changed, failed, opts.checkMode,
+            signalReceived()));
         totalFailed += cast(int) failed;
+        if (stop)
+            break; // the summary above is the report; nothing else runs
     }
 
+    // An interrupted run exits with the conventional 128 + signal —
+    // even when the jobs it completed before the signal all succeeded.
+    if (signalReceived())
+        return signalExitCode();
     return totalFailed > 0 ? 1 : 0;
 }
 
@@ -374,6 +403,7 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
     TextRenderer renderer = TextRenderer((string l) => terminalSink(l), tty,
         opts.verbose, config.outputFormat == "tree");
     int totalFailed;
+    bool stop; // a SIGINT/SIGTERM arrived: clean up and report, don't die
     DeployedBundle[string] deployed; // host \0 project dir -> bundle (reused)
 
     void display(JobEvent ev)
@@ -447,6 +477,11 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
             ulong ok, changed, failed;
             foreach (ref const host; hosts)
             {
+                if (stop || signalReceived())
+                {
+                    stop = true;
+                    break;
+                }
                 Transport t;
                 try
                     t = makeTransport(host);
@@ -544,12 +579,23 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
                 catch (Exception e)
                 {
                     failed++;
+                    if (stop || signalReceived())
+                    {
+                        // The inner run died because the signal killed
+                        // the streaming ssh, not because the host
+                        // misbehaved: the interrupted summary tells it.
+                        stop = true;
+                        break;
+                    }
                     display(evJob(host.name, tasksFile, "project", "failed", e.msg));
                 }
             }
 
-            display(evFileDone(tasksFile, ok, changed, failed, opts.checkMode));
+            display(evFileDone(tasksFile, ok, changed, failed, opts.checkMode,
+                signalReceived()));
             totalFailed += cast(int) failed;
+            if (stop)
+                break; // the finally below removes the deployed bundles
         }
     }
     finally
@@ -571,6 +617,10 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
         }
     }
 
+    // An interrupted run exits with the conventional 128 + signal; the
+    // finally above already removed the deployed bundles (cleanup).
+    if (signalReceived())
+        return signalExitCode();
     return totalFailed > 0 ? 1 : 0;
 }
 

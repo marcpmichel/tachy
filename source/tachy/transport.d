@@ -97,6 +97,15 @@ private CommandResult runCommand(string[] argv, string input = null,
 
     auto pid = spawnProcess(argv, stdinFile, pout.writeEnd, perr.writeEnd);
 
+    // A SIGINT/SIGTERM asks this child to terminate too, so the run
+    // loop unblocks and can stop between jobs (tachy.signals).  The
+    // numeric pid is captured before wait() invalidates it.
+    import tachy.signals : trackChild, untrackChild;
+    import core.sys.posix.sys.types : pid_t;
+    const pid_t pidNum = pid.processID;
+    trackChild(pidNum);
+    scope (exit) untrackChild(pidNum);
+
     // Parent must drop its copies so EOF semantics work.
     pout.writeEnd.close();
     perr.writeEnd.close();

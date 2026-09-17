@@ -20,6 +20,7 @@ import std.array : Appender, appender, join;
 import std.format : format;
 
 import tachy.errors;
+import tachy.signals : signalName;
 
 private bool startsWithChanged(string status) @safe pure
 {
@@ -43,6 +44,7 @@ struct JobEvent
     string msg;         // one-line summary or error message
     string[] details;   // verbose details (-v)
     ulong ms;           // execution duration in milliseconds
+    int sig;            // fileDone: signal that interrupted the run (0 = none)
 }
 
 /// Builds the three event shapes.
@@ -70,7 +72,8 @@ JobEvent evJob(string host, string file, string label, string status, string msg
     return ev;
 }
 
-JobEvent evFileDone(string file, ulong ok, ulong changed, ulong failed, bool check)
+JobEvent evFileDone(string file, ulong ok, ulong changed, ulong failed, bool check,
+    int sig = 0)
 {
     JobEvent ev;
     ev.kind = JobEvent.Kind.fileDone;
@@ -79,6 +82,7 @@ JobEvent evFileDone(string file, ulong ok, ulong changed, ulong failed, bool che
     ev.changed = changed;
     ev.failed = failed;
     ev.check = check;
+    ev.sig = sig;
     return ev;
 }
 
@@ -154,9 +158,11 @@ struct TextRenderer
                         put((tree_ ? "      " : "    ") ~ d);
                 break;
             case JobEvent.Kind.fileDone:
-                put(format!"-- %s: ok=%d changed=%d failed=%d%s"(ev.file, ev.ok,
+                put(format!"-- %s: ok=%d changed=%d failed=%d%s%s"(ev.file, ev.ok,
                     ev.changed, ev.failed,
-                    ev.check ? " (check mode, nothing applied)" : ""));
+                    ev.check ? " (check mode, nothing applied)" : "",
+                    ev.sig ? " (interrupted by " ~ signalName(ev.sig)
+                        ~ ", stopped early)" : ""));
                 break;
         }
     }
@@ -240,6 +246,11 @@ string eventLine(ref const JobEvent ev) @safe pure
             app.put(",\"failed\":");
             app.put(ulongText(ev.failed));
             jsonBool(app, "check", ev.check);
+            if (ev.sig)
+            {
+                app.put(",\"sig\":");
+                app.put(ulongText(ev.sig));
+            }
             break;
     }
     app.put("}");
@@ -343,6 +354,7 @@ bool parseEventLine(string line, ref JobEvent ev)
             case "changed": ev.changed = p.parseUlong(); break;
             case "failed": ev.failed = p.parseUlong(); break;
             case "check": ev.check = p.parseBool(); break;
+            case "sig": ev.sig = cast(int) p.parseUlong(); break;
             default: throw new TachyError("event line: unknown key '" ~ key ~ "'");
         }
         if (p.peek() == ',')

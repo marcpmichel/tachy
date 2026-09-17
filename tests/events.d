@@ -60,6 +60,12 @@ unittest
     auto done = rendered([evFileDone("f.toml", 0, 0, 0, true)]);
     assert(done[0] == "-- f.toml: ok=0 changed=0 failed=0 (check mode, nothing applied)", done[0]);
 
+    auto killed = rendered([evFileDone("f.pravic", 1, 0, 0, false, 15)]);
+    assert(killed[0] == "-- f.pravic: ok=1 changed=0 failed=0"
+        ~ " (interrupted by SIGTERM, stopped early)", killed[0]);
+    auto killedInt = rendered([evFileDone("f.pravic", 0, 0, 0, false, 2)]);
+    assert(canFind(killedInt[0], "(interrupted by SIGINT, stopped early)"), killedInt[0]);
+
     auto colored = rendered([evJob("h", "f", "l", "failed", "m")], true);
     assert(canFind(colored[0], "\033[31m"), colored[0]);
     assert(canFind(colored[0], "\033[0m"));
@@ -138,6 +144,7 @@ unittest
         evJob("web1", "main.toml", `file "/tmp/a "b\"`, "changed (check)",
             "line1\nline2\ttab \\ back", ["det\"ail", "d2"], 4242),
         evFileDone("main.toml", 3, 2, 1, true),
+        evFileDone("killed.toml", 1, 0, 0, false, 15),
     ];
     foreach (ref const ev; events)
     {
@@ -154,7 +161,12 @@ unittest
         assert(back.ms == ev.ms);
         assert(back.ok == ev.ok && back.changed == ev.changed && back.failed == ev.failed);
         assert(back.check == ev.check);
+        assert(back.sig == ev.sig);
     }
+
+    // an uninterrupted run's wire format carries no "sig" key at all
+    const plain = evFileDone("f", 1, 2, 3, false);
+    assert(!canFind(eventLine(plain), "sig"));
 
     // non-event lines are refused, not errors
     JobEvent ev;

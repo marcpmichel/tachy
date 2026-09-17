@@ -2193,3 +2193,101 @@
      (git push, gh) is not exercisable without publishing.
    - DOX: root AGENTS.md mise release bullet extended (build + asset);
      no doc trio — dev task, not tachy CLI behavior.
+
+68. checked: "starting a service that starts as a non-root user leads to
+    timeout while waiting for the service to start" — no tachy issue;
+    nothing to fix.
+   - Reproduced the full path on the Debian 12 VM (root@testing.internal,
+    systemd 252): created `svcuser`, installed a `Type=simple` unit with
+    `User=svcuser`, stopped it and ran `tachy apply` (bundled mode over
+    ssh) — `systemctl start` returns in milliseconds, tachy reports
+    `started`, the `ensure is-active` check passes; second run idempotent
+    (`ok`, no drift). Unit management via `src` (checksum compare, write,
+    daemon-reload, start) equally fast; `Type=notify` as a non-root user
+    also completes instantly on this systemd.
+   - tachy has no internal timeout on `service` commands at all: it waits
+    exactly as long as systemd's start job takes. A "timeout while
+    waiting for the service to start" can only come from systemd itself
+    (`TimeoutStartSec` firing for services that never signal readiness —
+    `Type=notify`/`forking` units), which tachy then reports as a failed
+    `systemctl start`. VM cleaned up afterwards (unit, user, probe
+    script, bundles).
+   - No behavior change, no doc trio, no tests added (the existing
+    servicemod suite covers the decision logic).
+69. handle Ctrl-C (SIGINT) and SIGTERM: cleanup and report instead of
+    dying immediately.
+   - New `tachy.signals` module: SIGINT/SIGTERM handler installed once
+     per entry point that runs jobs or serves (`runTachy`, `runWebUi`,
+     `runWebDoc`). First signal sets a flag and SIGTERMs the in-flight
+     child processes (the transport registers every spawned `ssh`/`/bin/sh`
+     pid in a fixed lock-free-read registry); the run loops check the flag
+     between jobs and stop dispatching. A second signal SIGKILLs the
+     children and leaves immediately (`_exit(128+sig)`) — the old
+     die-now behavior stays available. `accept(2)` wakes on the signal
+     (handler has no SA_RESTART), so the web loops stop serving.
+   - Reporting: the run finishes with its usual summary —
+     `-- main.pravic: ok=1 changed=0 failed=0 (interrupted by SIGTERM,
+     stopped early)` — and exit code `128 + signal` (130/143), taking
+     precedence over the failed-jobs exit 1. A job killed by the signal
+     is not reported as a failed job (the interrupted summary is the
+     story); in bundled mode a killed inner run still counts as failed
+     per the existing "killed or crashed" accounting. Bundles are still
+     removed (runBundled's finally), the direct report file is still
+     written, deferred-apply staging still removed.
+   - Event protocol: `fileDone` events carry an optional `sig` field
+     (signal number, omitted when 0 — normal streams stay byte-identical;
+     `--direct` vs bundled output byte-compared equal). TextRenderer
+     prints the interrupted suffix; the webui's app.js renders the same
+     suffix in its footer.
+   - Webui/webdoc: `serveForever` returns the signal; webui drains
+     running children (bounded 10 s) — each child handles the signal
+     itself, stops at the next job boundary and writes its summary —
+     plus a short grace so the SSE connection threads flush the final
+     footer/done/end frames; then the server exits `128 + signal`
+     (webdoc exits immediately, nothing to drain).
+   - Unittests: signals naming/exit-code/registry round-trip;
+     events round-trip with `sig`, wire omission for sig=0, renderer
+     suffix for both signals. End-to-end verified live: `--direct` runs
+     interrupted by SIGTERM (exit 143) and SIGINT (130) with clean
+     summaries, raw `--events` stream carrying `"sig":15`, bundled run
+     over ssh interrupted mid-job with the bundle removed from the host,
+     webui run interrupted from outside with the SSE stream showing
+     `sig:15` + `done exit 143` + `event: end` and the server exiting
+     143, webdoc exiting 143, `dub test` 181 passed.
+   - Docs: DOCUMENTATION.md "Stopping a run" section, README feature
+     bullet + exit-code paragraph, man EXECUTION ORDER asset (help text
+     unchanged — no new option; README CLI reference still byte-identical
+     to `tachy help`). DOX: source/AGENTS.md layering list gained
+     signals.d and the runner/events/web bullets note the interruption
+     contract.
+
+70. follow-up on item 68: the reported service-start timeout was real,
+    but it lived in the Ops project (/home/marc/Ops/tachy), not in
+    tachy — `tachy apply devops infra/devops` stalled ~90s on
+    `service forgejo` and failed with "Job for forgejo.service failed
+    because a timeout was exceeded" while forgejo kept serving.
+   - Reproduced and instrumented live: during the stall the host showed
+    `ActiveState=activating`, `SubState=start`, MainPID alive; journal
+    showed forgejo listening on :3000 but never sending sd_notify, and
+    the start that succeeded was a `Restart=always` resurrection 2s
+    after the previous timeout kill — a permanent ~92s crash-loop.
+   - Root cause 1: `tasks/services/forgejo/forgejo.service` declared
+    `Type=notify`, which holds the start job open until the service
+    sends `READY=1`; the stock forgejo build (16.0.4+gitea-1.22.0,
+    build tags bindata/timetzdata/sqlite/sqlite_unlock_notify) never
+    does. Fixed to `Type=simple` with an explanatory comment.
+   - Root cause 2: the unit was managed as a plain `file` job, and
+    tachy's `file` module never runs `systemctl daemon-reload` — only
+    the `service` entry's own `src`/`template` management does — so
+    systemd kept starting the stale in-memory Type=notify definition
+    even with Type=simple on disk (systemd's own "unit file changed on
+    disk. Run daemon-reload" warning surfaced in the failure output).
+    Fixed the composition: dropped the file job, moved the unit to
+    `service forgejo { src = "forgejo.service", state = "started" }`,
+    the documented servicemod path (checksum-compare, write,
+    daemon-reload on drift).
+   - One-time host bootstrap to break the running stale loop
+    (`systemctl daemon-reload && systemctl restart forgejo`), then
+    verified: apply completes in 1.9s, all ok, idempotent second run;
+    95s later `NRestarts=0`, `active (running)`, HTTP 200 on :3000, no
+    new journal start attempts. tachy itself needed no change.

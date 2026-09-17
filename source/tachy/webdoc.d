@@ -55,8 +55,10 @@ int runWebDoc(const RunOptions opts) @trusted
 
     tryOpenBrowser(browserUrl(addr.toAddrString(), addr.port));
 
+    import tachy.signals : installSignalHandlers, signalExitCode;
+    installSignalHandlers();
     serveForever(listener, site.router);
-    return 0;
+    return signalExitCode();
 }
 
 // ---------------------------------------------------------------------------

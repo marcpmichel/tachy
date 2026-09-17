@@ -293,6 +293,22 @@ environment for this check, so only their values can differ host-side,
 and a template file unreadable on the controller is skipped — it may
 live under an import landing, which only exists inside the bundle.
 
+### Stopping a run
+
+Ctrl-C (SIGINT) and SIGTERM stop a run cleanly instead of killing it:
+no further job is dispatched, the in-flight command is asked to
+terminate, the deployed bundles are still removed, and the run prints
+its usual summary — with the interrupted jobs and hosts noted, e.g.
+`-- main.pravic: ok=1 changed=0 failed=0 (interrupted by SIGINT,
+stopped early)`. The exit code is the conventional `128 + signal`
+(130 for Ctrl-C, 143 for SIGTERM) when the run was interrupted, `1`
+when any job failed, `0` otherwise. A second signal is the user
+insisting: children are killed hard and tachy leaves immediately,
+skipping the rest of the cleanup. `--events` streams carry the
+interruption in the `fileDone` event's `sig` field. The webui stops
+serving on the same signal and lets its running children finish their
+summaries before it leaves.
+
 ### Web UI (tachy webui)
 
 `tachy webui [--address ADDR] [--port PORT]` starts a local web server

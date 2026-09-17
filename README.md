@@ -72,6 +72,9 @@ tachy apply '@web'     # applies main.pravic; its directory is the project
   anything touches a machine.
 - Per-host failure isolation: a failing host is dropped from the rest of its
   tasks file; other hosts continue; exit code 1 if anything failed.
+- Clean stop: Ctrl-C (SIGINT) or SIGTERM stops dispatching, lets the
+  in-flight command die, removes the bundles and prints the summary —
+  exit code 128+signal; a second signal kills immediately.
 
 ## Build
 
@@ -374,8 +377,11 @@ the binary at compile time, so they always document the binary being
 run. The server is read-only and takes no arguments.
 
 Exit code is `1` when any job failed or configuration is invalid, `0`
-otherwise. Multiple tasks files run in order; a host that fails inside one
-file is retried in the next.
+otherwise — `128 + signal` (130 for Ctrl-C, 143 for SIGTERM) when a
+signal stopped the run, which then reports what completed and removes
+the bundles before leaving (a second signal skips even that). Multiple
+tasks files run in order; a host that fails inside one file is retried
+in the next.
 
 ## Configuration reference
 
@@ -776,6 +782,7 @@ source/tachy/
   models.d                   tasks files: jobs, applies, scope chaining
   project.d                  bundles: project + binary + generated inventory
   transport.d                Transport interface, local/ssh, shell helpers
+  signals.d                  SIGINT/SIGTERM: cooperative stop, child registry
   runner.d                   orchestration: bundled and direct modes
   http.d                     minimal HTTP/1.1 client (the http directive)
   generate.d                 the generate command: age keys, sample files

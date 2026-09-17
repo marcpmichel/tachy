@@ -3,3 +3,4 @@ Jobs run in source order — there is no fixed order and no sorting:
   What a fixed order used to guarantee is the author's to express: a directory before the files that live in it, a user's primary group before the user, a health ensure between the statements it checks. 
   vars/var and import statements are not jobs — they take effect file-wide regardless of position. 
 Ensure jobs are checks by nature: they run even in check mode and never report "changed". Managing the same target twice anywhere in a composition is an error.
+Ctrl-C (SIGINT) and SIGTERM stop a run cleanly: no further job is dispatched, the in-flight command is asked to terminate, the bundles are still removed and the summary is printed with an interrupted note — the exit code is 128 + signal (130, 143). A second signal kills tachy and its in-flight commands immediately.
