@@ -14,10 +14,28 @@ import tachy.errors : TachyError;
 @("discovery: explicit, env, cwd, xdg (first found wins)")
 unittest
 {
+    // Every span below observes process-global state (env and cwd):
+    // hold the shared lock for the whole test, not span by span, or a
+    // concurrent chdir test moves ./ out from under the XDG discovery
+    // (the monitor is reentrant, so the inner spans stay as written).
+    synchronized (envM)
+        discoveryUT();
+}
+
+private void discoveryUT()
+{
     auto base = buildPath(tempDir, "tachy_config_ut");
     if (exists(base)) rmdirRecurse(base);
     mkdirRecurse(base);
     scope (exit) rmdirRecurse(base);
+
+    // Hermetic cwd: the discovery spans below assume ./ has no
+    // config.pravic, whatever the invoking directory contains.  The
+    // chdir-back is registered after the rmdir, so it runs first.
+    import std.file : chdir, getcwd;
+    const keep = getcwd();
+    scope (exit) chdir(keep);
+    chdir(base);
 
     // missing explicit path is an error
     {
@@ -71,12 +89,9 @@ unittest
         () => loadConfig(""));
     assert(canFind(s.file, buildPath(base, "cfg")));
 
-    // cwd config.pravic is found before xdg
+    // cwd config.pravic is found before xdg (the whole test already
+    // runs with cwd = base under the shared lock)
     {
-        import std.file : chdir, getcwd;
-        auto keep = getcwd();
-        scope (exit) chdir(keep);
-        chdir(base);
         write("config.pravic", "");
         s = withEnv(["TACHY_CONFIG", "XDG_CONFIG_HOME", "HOME"],
             ["", buildPath(base, "cfg"), buildPath(base, "home")],

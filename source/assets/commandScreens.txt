@@ -56,6 +56,23 @@ SYNOPSIS, DESCRIPTION, COMMANDS, OPTIONS, EXAMPLES, PROJECTS, WEB UI,
 WEB DOCS, the inventory and tasks file reference, composition,
 variables and the execution order.
 
+=== upgrade ===
+Keep an installed tachy current with the GitHub releases of this
+repository, in one step: it resolves the latest release through
+GitHub's "releases/latest" redirect (one curl call — curl must be
+installed) and compares it with the running version. Same version: it
+says so and exits. An update available: it asks "upgrade tachy now?
+[y/N]" on a terminal, downloads the release asset
+(tachy-<version>-linux-amd64) next to the running binary, verifies it
+and renames it over the running binary — an atomic rename; the running
+process keeps its old image until it exits, so no restart is forced.
+
+`-y, --yes` upgrades without asking; without a terminal it is
+required, so scripts never hang on a prompt. The downloaded file must
+be executable and answer `version` with exactly the expected version
+before anything is replaced — a failed download or verification keeps
+the installed tachy. Replacing a system-wide install may need sudo.
+
 === version ===
 Print the version: the build date, "YY.mm.dd" (kept current by dub's
 pre-build commands).

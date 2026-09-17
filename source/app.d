@@ -8,6 +8,7 @@ import std.stdio : stderr, writeln;
 import tachy.errors;
 import tachy.generate;
 import tachy.runner;
+import tachy.upgrade : runUpgrade;
 import tachy.web;
 import tachy.webdoc;
 
@@ -19,6 +20,7 @@ enum Cmd
     check,
     hosts,
     generate,
+    upgrade,
     webui,
     webdoc,
     man,
@@ -50,6 +52,8 @@ Cmd parseCommand(string word) @safe pure
             return Cmd.webdoc;
         case "man":
             return Cmd.man;
+        case "upgrade":
+            return Cmd.upgrade;
         case "version":
         case "v":
             return Cmd.showVersion;
@@ -58,7 +62,7 @@ Cmd parseCommand(string word) @safe pure
         default:
             throw new TachyError("unknown command '" ~ word
                 ~ "' (commands: apply (a), check (c), hosts, generate (g),"
-                ~ " webui, webdoc, man, version (v), help)");
+                ~ " upgrade, webui, webdoc, man, version (v), help)");
     }
 }
 
@@ -144,6 +148,12 @@ int main(string[] args)
                     return 1;
                 }
                 return runGenerate(args[2 .. $]);
+            case Cmd.upgrade:
+                // One step: check, ask (unless --yes), download, replace.
+                if (args.length > 2)
+                    throw new TachyError("upgrade takes no sub-commands — just run"
+                        ~ " \"tachy upgrade\" (add --yes to skip the confirmation)");
+                return runUpgrade(opts, tachyVersion, args[2 .. $]);
             case Cmd.webui:
                 // webui takes no positional arguments: the projects
                 // come from config.pravic (webui projects) and runs
@@ -303,6 +313,7 @@ private string commandWord(Cmd c) @safe pure nothrow
         case Cmd.check: return "check";
         case Cmd.hosts: return "hosts";
         case Cmd.generate: return "generate";
+        case Cmd.upgrade: return "upgrade";
         case Cmd.webui: return "webui";
         case Cmd.webdoc: return "webdoc";
         case Cmd.man: return "man";
@@ -320,6 +331,7 @@ private string commandOneLiner(Cmd c) @safe pure nothrow
         case Cmd.check: return "Check mode: report would-be changes without applying anything";
         case Cmd.hosts: return "Inspect hosts: \"hosts list [<selection>]\", \"hosts info <host>\"";
         case Cmd.generate: return "Write scaffolding: age keys, sample tasks/config/project files";
+        case Cmd.upgrade: return "Upgrade tachy to the latest GitHub release";
         case Cmd.webui: return "Start a local web console: a graphical version of this CLI";
         case Cmd.webdoc: return "Serve the built-in documentation as a local web site";
         case Cmd.man: return "Print the full manual, unix man-page style";
@@ -348,6 +360,8 @@ private string commandSynopsis(Cmd c) @safe pure nothrow
             return "**tachy hosts list** `[<selection>]`\n       **tachy hosts info** `<host>`";
         case Cmd.generate:
             return "**tachy generate** `<what> <path>`   # what: key, task, config, project";
+        case Cmd.upgrade:
+            return "**tachy upgrade** `[-y|--yes]`";
         case Cmd.webui:
             return "**tachy webui** `[options]`";
         case Cmd.webdoc:
@@ -493,8 +507,8 @@ private string manCommands() @safe pure
     import std.string : strip;
     const screens = commandScreens();
     string s;
-    foreach (w; ["apply", "check", "hosts", "generate", "webui", "webdoc",
-                 "man", "version"])
+    foreach (w; ["apply", "check", "hosts", "generate", "upgrade", "webui",
+                 "webdoc", "man", "version"])
     {
         const c = parseCommand(w);
         s ~= w ~ "\n";
@@ -551,6 +565,7 @@ void parseOptions(ref string[] args, ref RunOptions opts, ref bool wantHelp)
         "identity", "PATH  age identity for { age = ... } inventory vars; supersedes the config identity entry (default: AGE_IDENTITY, then ~/.ssh/id_ed25519)", &opts.identity,
         "address", "ADDR  webui/webdoc: address to bind (default 127.0.0.1)", &opts.webAddress,
         "port", "N  webui/webdoc: port to listen on (default: a random port between 10000 and 65534)", &opts.webPort,
+        "y|yes", "with upgrade: skip the y/N confirmation and upgrade unattended", &opts.yes,
         "h|help", "show this help", &wantHelp,
     );
 }

@@ -137,7 +137,11 @@ When the user requests a durable behavior change, record it here or in the relev
 <command>` or `<command> -h` shows one command's screen — an
 incomplete invocation shows it too; help and man output carries a
 `**bold**`/`` `code` `` micro markup rendered as colors on a tty or
-with --color, stripped when piped); the common
+with --color, stripped when piped), or `upgrade` (one step: compare
+the running build with the latest GitHub release via the
+`releases/latest` redirect and curl; ask y/N on a tty — `--yes`
+upgrades unattended — then download the `tachy-<version>-linux-amd64`
+asset, verify it and rename it over the running binary); the common
  commands `apply`, `check`, `generate` and `version` also answer to
  their one-letter short forms `a`, `c`, `g` and `v` (the others take
  none); selection mixes host names, `@tag` and `all`; default

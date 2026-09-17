@@ -2466,3 +2466,112 @@
      block was re-synced byte-identically (and repaired after a
      mis-splice dropped its heading). renderMarkup test extended for
      `__`; screen test updated to the new label markup.
+
+75. implement `tachy upgrade check` (first step of the FUTURE.md
+    upgrade command) — report-only comparison against the latest
+    GitHub release; per operator feedback the shape is a sub-command
+    (`upgrade check`), not an option.
+   - New `tachy.upgrade` module (`source/tachy/upgrade.d`), wired as
+     the `upgrade` command word (no short form) in app.d (enum,
+     parseCommand + the unknown-commands message, commandWord/
+     commandOneLiner/commandSynopsis switches, man COMMANDS list) and
+     dispatched with the version baked into the binary. Downloading
+     and replacing the binary is explicitly not implemented yet
+     (unknown sub-commands error with `expected "check"`).
+   - Mechanism: GitHub's `releases/latest` redirect — `curl -fsSI -o
+     /dev/null -w '%{redirect_url}' https://github.com/marcpmichel/
+     tachy/releases/latest` answers with the Location of the newest
+     tag; one tiny HEAD request, no API, no rate limit, no JSON
+     (verified live: `-I` does not follow the redirect and
+     `%{url_effective}` stays on the input URL — `%{redirect_url}` is
+     the correct variable). `latestFromEffectiveUrl` strips the
+     `/tag/` prefix and the leading `v`; `compareVersions` compares
+     dates segment-wise numeric (so padding and future segments don't
+     matter) and errors on junk. The network call sits behind a
+     delegate hook (`latestReleaseHook`) for tests. curl must be
+     installed (HTTPS-only GitHub; tachy.http is plain HTTP by
+     design) — the error says so.
+   - Report: `tachy is up to date (26.09.17)` / `an update is
+     available: tachy <latest> (installed: <v>)` / `the installed
+     tachy <v> is newer than the latest release (<latest>)`; exit 0 in
+     all three (the report is the result). `tachy upgrade` alone shows
+     the command screen with a missing-sub-command hint (exit 1),
+     like hosts/generate.
+   - Help system: command screen (`=== upgrade ===` in
+     commandScreens.txt), commandEntries row, synopsis/one-liner
+     switches; man COMMANDS includes it via the screens; the general
+     help and README CLI reference block gained the `upgrade` row
+     (block re-synced byte-identically).
+   - Tests: 3 silly-named unittests in tests/upgrade.d (URL parsing
+     incl. no-tag and empty-version errors; segment-wise comparison
+     incl. padding, missing segments, century rollover and junk
+     errors; sub-command dispatch through the hook). `dub test` 202
+     passed. Verified live against the real repository: `tachy
+     upgrade check` → `tachy is up to date (26.09.17)` (repo's latest
+     release v26.09.17), exit 0.
+   - Docs: DOCUMENTATION command table row + `### upgrade` section,
+     README commandEntries row (block synced), root AGENTS.md CLI
+     bullet + source/AGENTS.md layering bullet for upgrade.d.
+
+76. implement the real `upgrade`: the check sub-command is gone —
+    `tachy upgrade` is one step that either reports the same version
+    or upgrades, asking y/N on a tty (`-y/--yes` upgrades unattended).
+   - `runUpgrade` (upgrade.d) reshaped: any positional argument errors
+     with "takes no sub-commands" (app.d drops the missing-sub-command
+     screen and refuses extra arguments the same way). The release
+     check reuses the redirect mechanism (item 75); same or newer
+     installed version reports and exits 0, an update available
+     reports `an update is available: tachy <latest> (installed:
+     <v>)` and proceeds to the confirmation.
+   - Confirmation: with `--yes` (new `y|yes` option in parseOptions,
+     `RunOptions.yes`) the upgrade runs unattended; without it, a tty
+     stdin gets the `upgrade tachy now? [y/N]` prompt (`promptYesNo`:
+     only y/yes in any case proceeds; EOF and anything else decline →
+     "upgrade cancelled", exit 0); without a tty the run is refused
+     with a pointer at `--yes`, so scripts never hang on a prompt.
+   - Download/verify/replace: `assetUrl` builds the release asset URL
+     `.../releases/download/v<version>/tachy-<version>-linux-amd64`
+     (the name `mise run release` uploads); curl -fsSL writes it to a
+     `.tachy-upgrade-<pid>.tmp` file next to the running binary (same
+     filesystem, atomic rename; cleaned up on every failure path via
+     scope(failure)). `verifyDownloaded` chmods it executable and runs
+     `<tmp> version` — the output must equal `tachy <expected>`, so a
+     truncated download or an error page never replaces anything.
+     `defaultReplace` renames the temp file over `thisExePath()` (the
+     running process keeps its old image; a Permission denied failure
+     hints at sudo). Success reports `upgraded: tachy <old> ->
+     <new> (the new version takes effect on the next run)`.
+   - Testability: one delegate hook per step — `latestReleaseHook`,
+     `downloadReleaseHook(url, tmp)`, `confirmHook(question)`,
+     `replaceHook(tmp, exe)` — each falling back to the real
+     implementation when null.
+   - Tests: 10 silly-named unittests in tests/upgrade.d (URL parsing
+     and comparison from item 75 kept; sub-command refusal; up-to-date
+     and newer-installed touch nothing; no-tty refusal forced via
+     dup2(/dev/null) onto fd 0; declined prompt cancels without
+     downloading; accepted prompt and --yes both drive
+     download→verify→replace with a fake release script and assert the
+     URL, the temp placement next to the binary and the bytes handed
+     to replace; a broken download errors naming the expected version
+     and leaves no temp file; defaultReplace really renames over a
+     target). RunOptions contract test in tests/app.d covers `--yes`
+     registration.
+   - Test-infra fix exposed by the new scheduling: silly runs tests in
+     parallel and chdir is process-global — tests/config.d's discovery
+     test and tests/generate.d's `.` case raced over the cwd (deleted
+     directory under one test's feet, `./config.pravic` from a
+     concurrent chdir leaking into XDG discovery). The discovery test
+     now holds the shared `envM` mutex (envsync.d, doc extended to
+     cwd) for its whole body and runs hermetically with cwd = its own
+     base; generate's chdir span takes the same lock.
+   - Verified live against the real repository: up-to-date report;
+     `upgrade check` / extra arguments refused; with the binary's
+     embedded version patched to 26.09.16 (same-length in-place): no
+     tty → refusal naming --yes (exit 1); pty + "n" → cancelled (exit
+     0); pty + "y", `--yes` and `-y` (stdin /dev/null) → real download
+     of the v26.09.17 asset, verification, atomic replace — `tachy
+     version` then reports the release build and no temp file remains.
+     `dub test` 210 passed, 0 failed (repeated runs). CLI help screen,
+     optionEntries row, README, DOCUMENTATION (command table, options
+     table, `### upgrade`) and the AGENTS.md / source/AGENTS.md
+     bullets updated.

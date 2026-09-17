@@ -56,6 +56,7 @@ struct RunOptions
     string config;         // optional config file (default: discovered)
     string webAddress = "127.0.0.1"; // webui/webdoc: bind address
     int webPort = 0;       // webui/webdoc: listen port (0 = random in 10000..65534)
+    bool yes;              // upgrade: skip the y/N confirmation
     string[] tasksFiles;
 }
 

@@ -109,6 +109,7 @@ tachy <command> [options] <selection> [<tasks.pravic>...]
   | `webdoc` | Serve this documentation as a browsable web site — see [Web docs](#web-docs-tachy-webdoc). |
   | `man` | Print the full built-in manual, unix man-page style — see [man](#man). |
   | `version` (`v`) | Print the version: the build date, `YY.mm.dd` — see [version](#version). |
+  | `upgrade` | Upgrade tachy to the latest GitHub release — see [upgrade](#upgrade). |
   | `help` | Show the short help: project and usage lines, commands, options (same as `--help`); `help <command>` shows one command's full screen. |
 
   The four common commands also take a one-letter short form (shown in
@@ -152,6 +153,7 @@ Example: `tachy apply @web req/web`, `tachy check all`,
 | `--identity PATH` | Age identity for `{ age = ... }` inventory vars and `file` sources marked `age = true`; supersedes the config file's `identity` entry. Default: that entry, then `AGE_IDENTITY` (path or key material), then `~/.ssh/id_ed25519` (age accepts ssh keys). |
 | `--color` | Force colored statuses even when stdout is not a tty. |
 | `--address ADDR`, `--port PORT` | Webui/webdoc only: address (default 127.0.0.1) and port to listen on. The default port (and `0`) is a random port between 10000 and 65534 — both commands are localhost conveniences; the bound URL is printed, and tachy tries to open it in the local browser (`gio open`, best-effort). |
+| `-y, --yes` | With `upgrade`: skip the y/N confirmation and upgrade unattended. |
 
 ### hosts
 
@@ -220,6 +222,28 @@ in `YY.mm.dd` form (for example `26.09.11`). The date lives in
 `source/assets/version`, stamped in by dub's pre-build commands — only
 the `version` command reads it, and rebuilding on a later day picks
 up the new date automatically.
+
+### upgrade
+
+`tachy upgrade` keeps an installed tachy current with the latest
+release of `marcpmichel/tachy` on GitHub, in one step. The latest
+version comes from GitHub's `releases/latest` redirect — one HEAD
+request, no API and no rate limit — so **curl must be installed** on
+the controller (GitHub is HTTPS-only; tachy's own HTTP client is
+plain HTTP by design).
+
+Same version: tachy reports and exits. An update available: tachy
+asks `upgrade tachy now? [y/N]` on a terminal. `--yes` (or `-y`)
+skips the question; without a terminal it is required, so scripts
+never hang on a prompt.
+
+It then downloads the release asset `tachy-<version>-linux-amd64`
+next to the running binary, verifies it (the file must be executable
+and answer `version` with exactly the expected version) and renames
+it over the running binary — an atomic same-filesystem rename, so the
+running process keeps its old image until it exits. Any failure
+before the rename leaves the installed tachy untouched; replacing a
+system-wide install may need sudo.
 
 ### Config (config.pravic)
 

@@ -145,6 +145,8 @@ unittest
     }
 
     // '.' fills the current directory
+    import tachy.tests.envsync : envM;
+    synchronized (envM) // chdir is process-global
     {
         import std.file : chdir, getcwd;
         auto keep = getcwd();

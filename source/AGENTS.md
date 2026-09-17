@@ -105,6 +105,16 @@ This doc owns the source tree's structure and conventions;
     controller-side scaffolding; the sample texts are assets —
     `sampleTask.txt`/`sampleConfig.txt`/`sampleInventory.txt` —
     embedded with `import()` like app.d's help/man blocks)
+  - `upgrade.d` — the `upgrade` command: compares the running build
+    with the latest GitHub release through the `releases/latest`
+    redirect (curl on the local transport; the repo slug is
+    hard-coded), then asks y/N on a tty (`--yes` skips; no tty
+    requires `--yes`), downloads the `tachy-<version>-linux-amd64`
+    release asset next to the running binary, verifies it answers
+    `version` with the expected version and renames it over the
+    running binary. One delegate hook per step (latest release,
+    download, confirm, replace) stands in for the network, the
+    prompt and the swap in tests
   - `config.d` — the optional config.pravic (discovery: `--config`,
     `TACHY_CONFIG`, ./config.pravic, XDG; the `identity` age entry
     — both spellings, `effectiveIdentity` makes the `--identity` flag

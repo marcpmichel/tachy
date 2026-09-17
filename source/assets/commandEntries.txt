@@ -6,4 +6,5 @@
   **webdoc**       Serve the built-in documentation as a local web site
   **man**          Print the full manual, unix man-page style
   **version (v)**  Print the version (the build date, YY.mm.dd)
+  **upgrade**      Upgrade tachy to the latest GitHub release
   **help**         Show this help, or "tachy help <command>" for one command

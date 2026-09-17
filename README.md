@@ -254,6 +254,7 @@ Commands:
   webdoc       Serve the built-in documentation as a local web site
   man          Print the full manual, unix man-page style
   version (v)  Print the version (the build date, YY.mm.dd)
+  upgrade      Upgrade tachy to the latest GitHub release
   help         Show this help, or "tachy help <command>" for one command
 
 Options:
@@ -268,6 +269,7 @@ Options:
   --color               Force colored statuses even when stdout is not a tty (forwarded to the run on each host)
   --address ADDR        Webui/webdoc only: address to bind (default 127.0.0.1; an IP — use 0.0.0.0 to listen on every interface)
   --port PORT           Webui/webdoc only: port to listen on (default: a random port between 10000 and 65534; 0 does the same)
+  -y, --yes             With upgrade: skip the y/N confirmation and upgrade unattended
   -h, --help            Show this help
 
 Run "tachy help <command>" for a command's screen, "tachy man" for the full manual.

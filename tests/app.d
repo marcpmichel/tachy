@@ -92,7 +92,7 @@ foreach (w; ["h", "w", "m", "x"])
             "man COMMANDS lacks: " ~ w);
 }
 
-foreach (o; ["--keep-bundle", "--color", "--events",
+foreach (o; ["--keep-bundle", "--color", "--events", "--yes",
     "--verbose", "--direct", "--config", "--identity", "--address",
     "--port", "--direct-report"])
 {
