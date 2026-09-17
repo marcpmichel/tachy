@@ -285,7 +285,7 @@ void parseOptions(ref string[] args, ref RunOptions opts, ref bool wantHelp)
     getopt(
         args,
         "i|inventory", "PATH  inventory file (default: inventory.pravic)", &opts.inventoryPath,
-        "v|verbose", "show executed commands and change details", &opts.verbose,
+        "v|verbose", "show executed commands, change details and command output (stdout/stderr)", &opts.verbose,
         "color", "force colored statuses even when stdout is not a tty", &opts.forceColor,
         "direct", "apply tasks files directly in this process, without bundling a project", &opts.direct,
         "direct-report", "PATH  with --direct: write \"ok changed failed\" counters to PATH", &opts.directReport,

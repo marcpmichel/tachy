@@ -38,7 +38,10 @@ This doc owns module-level contracts.
   `httpmod` (the `http` directive: one request through the in-process
   client in `tachy.http` — no transport, no curl — asserting on the
   status and body; a check by nature, so it runs even in check mode
-  and never reports `changed`)
+  and never reports `changed`), `debugmod` (the `debug` directive: the
+  statement key is the message, printed as the job line; no attributes,
+  no transport, never fails and never reports `changed`, runs in check
+  mode like the other checks by nature)
 - Directives → module names are wired in `models.d` (`addJob` over the
   ordered Pravic statements): keys are targets, `path`/`dir`/`url`/`name`
   is injected, duplicate/cycle detection comes free — modules never
@@ -47,9 +50,14 @@ This doc owns module-level contracts.
   (stat/getent/dpkg-query/systemctl), act only on drift, report
   `changed` truthfully; `ok` when already conformant
 - Check mode: probes run, mutations go through `mustRun` (suppressed in
-  check mode, i.e. the `check` command); `ensure`- and `http`-directive
-  jobs are checks by nature and run even in check mode, never reporting
-  `changed`
+  check mode, i.e. the `check` command); `ensure`-, `http`- and
+  `debug`-directive jobs are checks by nature and run even in check
+  mode, never reporting `changed`
+- Command output: `mustRun`/`mustRunWithInput` and `ensuremod` capture
+  a command's stdout and stderr into the job's `details` (the event
+  payload `-v` displays) as `stdout: `/`stderr: ` excerpts — empty
+  streams add nothing, check mode captures nothing (commands don't
+  run), and the excerpts share the error-message cap
 - All shell input through `shQuote`; multi-step remote changes prefer
   one command over dribble; errors must name what failed and why
   (actual status/output, not just exit codes)

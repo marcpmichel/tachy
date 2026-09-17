@@ -269,7 +269,7 @@ function applyEvent(ev, ts) {
     h("td", { class: "host" }, ev.host),
     h("td", { class: "status" }, ev.status),
     h("td", { class: "msg" },
-      ev.label + ": " + ev.msg
+      ev.label + (ev.msg ? ": " + ev.msg : "")
       + (ev.ms ? " ("
         + (ev.ms >= 1000 ? (ev.ms / 1000).toFixed(1) + "s" : ev.ms + "ms")
         + ")" : "")),

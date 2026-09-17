@@ -53,3 +53,7 @@ for dir in "$HOME/.vim" "$cfg/nvim"; do
 done
 '''
 
+[tasks.update]
+description = "update tachy on the local system"
+run = "sudo install tachy /usr/local/bin"
+

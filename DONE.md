@@ -2342,3 +2342,72 @@
      choose + inventory host-var choose rendered into managed file
      content (`size=large label=France`), idempotent second run,
      check mode validates the renders; VM cleaned up afterwards.
+
+72. add the `debug` directive: `debug "a message"` /
+    `debug "myvar = {{myvar}}"` — a task that never fails, printing
+    its (templated) message as a job line.
+   - New `debugmod` module (registered in package.d's module list,
+     `validateModuleParams` and `runModule`; wired in `models.d`
+     `addJob`/`kindFor`/the tasks-file kind list): the statement key is
+     the message, injected as `name` like every name-keyed directive;
+     the module touches no transport and returns `changed = false` with
+     an empty msg, so the rendered line is exactly `ok | debug
+     <message>`. Load-time validation rejects any attribute beyond the
+     injected message (`debug "x" { extra = 1 }` errors); the message
+     renders like every string in job parameters (per host, check mode
+     included) and `{{ inventory_hostname }}` resolves.
+   - Renderer: a job with an empty msg prints without the trailing
+     `": "` (TextRenderer + the webui's app.js row builder); all other
+     modules have non-empty msgs, so existing output is unchanged.
+   - Semantics: `debug` runs in check mode (pure display, like
+     `ensure`/`http` — the checks-by-nature category), never reports
+     `changed`, and participates in the uniform duplicate detection
+     (two identical messages — in one file, or across applied files —
+     are composition errors, per the strictness contract).
+   - Tests: 3 silly-named unittests in tests/debugmod.d (module
+     behavior in both modes, load-time validation, wiring: injection,
+     kind, templated key, same-file parser duplicate + cross-file
+     loader duplicate wording). `dub test` 192 passed.
+   - End-to-end on testing.internal (bundled over ssh): debug
+     statements before and after a file job, templated with a var and
+     `{{ inventory_hostname }}`, in source order; check mode prints
+     them with "nothing applied"; VM cleaned up.
+   - Docs: LANGUAGE.md (debug in the SingleKeyword production — which
+     also gained its missing `) !KeyChar` closure and the previously
+     unlisted `repo` — plus the directive-inventory row), man
+     TASKS FILE asset, README (statement list, features bullet,
+     tasks-file table row), DOCUMENTATION.md (`debug — messages`
+     subsection + check-mode command row), modules/AGENTS.md (module
+     list + checks-by-nature contract). Help text unchanged (no new
+     option/command; README CLI reference still byte-identical to
+     `tachy help`).
+
+73. capture both stdout and stderr as an event payload, displayed only
+    with `-v`.
+   - `mustRun`/`mustRunWithInput` (every mutation command of every
+     module) now append the executed command's captured streams to the
+     job's `details` — the event payload — as `stdout: ` / `stderr: `
+     excerpts (the same 3-line/200-char cap error messages use; empty
+     streams add nothing). `ensuremod` does the same for `ensure`
+     commands (the former single `output: ` detail line became
+     `stdout: `/`stderr: `), and a failing `ensure` with only stderr
+     now quotes `stderr: '...'` in its error. Details are `-v`-gated in
+     the renderer, so the streams display only in verbose mode — no
+     wire-format change (details already serialize into the event).
+   - Check mode captures nothing (mutations are suppressed before
+     running); `ensure` streams still appear there (checks by nature
+     run).
+   - Help text: `-v, --verbose` now reads "Show executed commands,
+     change details and command output (stdout/stderr)" — updated in
+     app.d's getopt, the man/help `optionEntries.txt` asset and the
+     README CLI reference block (byte-identical, verified); DOCUMENTATION
+     options row + `ensure` section note the capture.
+   - Tests: 4 new unittests in tests/modules.d (stream capture, silent
+     command, check mode suppression, failure message) + 1 in
+     tests/ensuremod.d (both streams in the payload, stderr-only
+     failure). `dub test` 197 passed.
+   - Verified live: without `-v` no stream content; with `-v` the
+     ensure and file-write job lines print `cmd:`/`stdout:`/`stderr:`;
+     the raw `--events` stream carries
+     `"details":[...,"stdout: to-out","stderr: to-err"]`; check mode
+     shows no streams for suppressed mutations.

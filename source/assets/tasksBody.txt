@@ -89,6 +89,10 @@
                                       # exclusive, neither: existence + origin
                                       # + fetch only
 
+  debug "myvar = {{ myvar }}"         # print a message (templated) as a job
+                                      # line: never fails, never changes, no
+                                      # attributes, runs in check mode too
+
   Plural directives also take a group form; path keys need no quotes (quotes are for spaces, braces and templates); and an instruction with no attributes may omit the braces:
   files {
       /etc/hosts { owner = "root", mode = "0644" }

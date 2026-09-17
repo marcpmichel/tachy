@@ -214,3 +214,32 @@ unittest
     catch (TachyError e) msg = e.msg;
     assert(canFind(msg, "'output' must be"), msg);
 }
+
+@("ensure captures both streams as the verbose payload")
+unittest
+{
+    import std.algorithm.searching : canFind;
+    import std.array : join;
+
+    auto ctx = ctxLocal;
+
+    Val[string] p;
+    p["name"] = Val("both");
+    p["run"] = Val("printf 'to-out\\n'; printf 'to-err\\n' >&2");
+    auto r = runEnsureModule(p, ctx);
+    assert(!r.changed);
+    assert(canFind(r.details.join("\n"), "stdout: to-out"), r.details.join("\n"));
+    assert(canFind(r.details.join("\n"), "stderr: to-err"), r.details.join("\n"));
+
+    // a failing command with only stderr quotes the stderr
+    Val[string] p2;
+    p2["name"] = Val("err");
+    p2["run"] = Val("echo problems >&2; exit 3");
+    string msg;
+    try
+        runEnsureModule(p2, ctx);
+    catch (TachyError e)
+        msg = e.msg;
+    assert(canFind(msg, "exit status 3"), msg);
+    assert(canFind(msg, "stderr: 'problems'"), msg);
+}

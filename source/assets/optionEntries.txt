@@ -1,5 +1,5 @@
     -i, --inventory PATH   Inventory file (default: inventory.pravic)
-    -v, --verbose          Show executed commands and change details
+    -v, --verbose          Show executed commands, change details and command output (stdout/stderr)
         --direct           Apply tasks files directly in this process, without bundling a project (this is how the copied binary runs on each host)
         --direct-report P  With --direct: write "ok changed failed" counters to P
         --events           Print one JSON event per line on stdout instead of text (machine mode): with --direct, the local run's own events; otherwise the raw events streamed live from each host, wrapped in the controller's fileStart/fileDone events

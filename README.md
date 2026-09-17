@@ -28,7 +28,8 @@ tachy apply '@web'     # applies main.pravic; its directory is the project
 
 - **Inventory**: hosts with connection details, tags and variables.
 - **Tasks files**: `file`, `directory`, `service`, `compose` (plus
-  `package`, `group`, `user`, `ensure`, `http`, `repo`) statements keyed by path,
+  `package`, `group`, `user`, `ensure`, `http`, `repo`, `debug`)
+  statements keyed by path,
   unit name, URL or stack dir — the target *is* the statement key. Two
   equivalent forms, group and single.
 - **Projects**: the tasks file's parent directory is the project; tachy
@@ -52,7 +53,8 @@ tachy apply '@web'     # applies main.pravic; its directory is the project
   shipped as a tar stream and file content over stdin — the host needs
   nothing but GNU coreutils and tar).
 - Check mode (`tachy check`): dry-run that reports would-be changes
-  without applying anything.
+  without applying anything. `debug "msg"` prints a templated message
+  as a job line — a task that never fails, in apply or check mode.
 - **Web UI** (`tachy webui`): a local web server that is a graphical
   version of the CLI — projects from config.pravic, apply/check runs
   with the events streaming in live. The interface is embedded in the
@@ -264,7 +266,7 @@ tachy — Pravic-driven configuration management (Ansible-like)
 
   Options:
     -i, --inventory PATH   Inventory file (default: inventory.pravic)
-    -v, --verbose          Show executed commands and change details
+    -v, --verbose          Show executed commands, change details and command output (stdout/stderr)
         --direct           Apply tasks files directly in this process, without bundling a project (this is how the copied binary runs on each host)
         --direct-report P  With --direct: write "ok changed failed" counters to P
         --events           Print one JSON event per line on stdout instead of text (machine mode): with --direct, the local run's own events; otherwise the raw events streamed live from each host, wrapped in the controller's fileStart/fileDone events
@@ -409,6 +411,7 @@ A tasks file is a sequence of statements, one per line (all optional):
 | `user NAME { ... }` | name | `group` (primary; default: a group named after the user), `groups` (supplementary, additive only), `shell` (default `/bin/sh` at creation), `comment`, `create_home` (default `true`, creation only), `home` (default `/home/<name>` at creation), `state` (default `present`; `absent` removes), `remove_home` (default `false`, with `state = "absent"`). |
 | `ensure "name" { ... }` | name | `run` (required), `exit_status` (integer, `{ not = N }`, or `{ cond = "OP N" }`; default 0), `output` (string, `{ contains = "..." }`, or `{ matches = "..." }`) |
 | `http URL { ... }` | url | `type` (any HTTP method, default `GET`), `headers` (array of `"Name=Value"`), `data` (body, sent verbatim), `code` (expected status, default `200`), `output` (body assertion, `ensure`'s shapes), `timeout` (seconds, default `10`). Plain `http://` only; queried by tachy itself (no curl) — on the host in bundled runs, from the controller with `--direct`; a check by nature: runs in check mode, never `changed`. |
+| `debug "message"` | message | No attributes: prints the (templated) message as a job line — never fails, never `changed`, runs in check mode too. |
 | `apply "path" { bindings }` | path | Composes another tasks file **at the statement's position**, carrying its own variables: the binding's entry keys, or the same grouped in a `vars { ... }` sub-block. Bindings resolve `{ env }`/`{ run }` markers at load like every other var. A path naming an existing directory uses its `main.pravic`, like a directory CLI argument. |
 | `import "path"` | path | Bundled mode only: an external file or directory (absolute, or relative to the defining tasks file) copied into the bundle next to the project copy under its base name — `import "tasks/install_gogs"` → `project/install_gogs` — so `src`/`template`/`run` can use it on the host. No parameters — the braces are optional; destinations colliding with project content or another import are load-time errors; a path that does not resolve relative to its defining file is searched in the `config.pravic` `imports` paths. An apply naming the import destination itself works too (`apply "neovim" { }` → its `main.pravic`); entries under a destination that are missing locally defer to the host (the inner run composes them, bindings included; a directory entry resolves to its `main.pravic`, as everywhere). |
 

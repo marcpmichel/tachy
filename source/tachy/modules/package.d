@@ -9,6 +9,7 @@ module tachy.modules;
  */
 public import tachy.modules.accounts : runGroupModule, runUserModule;
 public import tachy.modules.composemod : runComposeModule;
+public import tachy.modules.debugmod : runDebugModule;
 public import tachy.modules.ensuremod : runEnsureModule;
 public import tachy.modules.filemod : runFileModule;
 public import tachy.modules.httpmod : runHttpModule;
@@ -17,7 +18,7 @@ public import tachy.modules.repomod : runRepoModule;
 public import tachy.modules.servicemod : runServiceModule;
 
 import tachy.modules.composemod : validateComposeParams;
-import tachy.modules.ensuremod : parseExitStatus, parseOutput;
+import tachy.modules.ensuremod : excerpt, parseExitStatus, parseOutput;
 import tachy.modules.httpmod : validateHttpParams;
 import tachy.modules.packagemod : validatePackageKey;
 
@@ -43,7 +44,7 @@ struct TaskResult
     string[] details;  // commands executed + change details (shown with -v)
 }
 
-private immutable string[] allModules = ["file", "service", "ensure", "group", "user", "package", "compose", "http", "repo"];
+private immutable string[] allModules = ["file", "service", "ensure", "group", "user", "package", "compose", "http", "repo", "debug"];
 
 /// Registered module names.
 string[] moduleNames() @safe pure nothrow
@@ -166,6 +167,9 @@ void validateModuleParams(string moduleName, in Val[string] params, string conte
             validateComposeParams(params, context ~ " (compose)");
             break;
         }
+        case "debug":
+            checkKeys(params, ["name"], context ~ " (debug)");
+            break;
         case "service":
         {
             checkKeys(params, ["name", "state", "enabled", "src", "template", "vars"],
@@ -222,6 +226,7 @@ TaskResult runModule(string moduleName, Val[string] params, TaskContext ctx)
         case "repo": return runRepoModule(params, ctx);
         case "compose": return runComposeModule(params, ctx);
         case "http": return runHttpModule(params, ctx);
+        case "debug": return runDebugModule(params, ctx);
         default:
             throw new TachyError("unknown module '" ~ moduleName ~ "'");
     }
@@ -262,7 +267,10 @@ bool optBool(in Val[string] p, string key, string mod, bool def = false)
 }
 
 /// Execute `cmd`; records it and throws a descriptive error on failure.
-/// In check mode the command is recorded but not executed.
+/// In check mode the command is recorded but not executed.  The
+/// command's captured stdout and stderr become part of the job's
+/// verbose details (`stdout: ` / `stderr: ` excerpts), so `-v` shows
+/// what a command printed — both streams, empty ones adding nothing.
 void mustRun(Transport t, TaskContext ctx, ref string[] details, string cmd, string action)
 {
     import std.string : strip;
@@ -270,6 +278,7 @@ void mustRun(Transport t, TaskContext ctx, ref string[] details, string cmd, str
     if (ctx.checkMode)
         return;
     auto r = t.run(cmd);
+    appendStreamDetails(details, r);
     if (!r.ok)
     {
         auto m = r.errText.strip;
@@ -281,7 +290,8 @@ void mustRun(Transport t, TaskContext ctx, ref string[] details, string cmd, str
     }
 }
 
-/// Like `mustRun` but feeds `input` to the command's stdin.
+/// Like `mustRun` but feeds `input` to the command's stdin; the
+/// captured streams travel into the verbose details the same way.
 void mustRunWithInput(Transport t, TaskContext ctx, ref string[] details,
     string cmd, string input, string action)
 {
@@ -290,6 +300,7 @@ void mustRunWithInput(Transport t, TaskContext ctx, ref string[] details,
     if (ctx.checkMode)
         return;
     auto r = t.runWithInput(cmd, input);
+    appendStreamDetails(details, r);
     if (!r.ok)
     {
         auto m = r.errText.strip;
@@ -299,6 +310,20 @@ void mustRunWithInput(Transport t, TaskContext ctx, ref string[] details,
             m = "exit status " ~ intText(r.status);
         throw new TachyError(action ~ " failed on " ~ ctx.hostName ~ ": `" ~ cmd ~ "`: " ~ m);
     }
+}
+
+/// Append a command's captured streams to the job's verbose details —
+/// the event payload `-v` displays.  Both streams, excerpts only (the
+/// same cap error messages use), empty streams add nothing.
+private void appendStreamDetails(ref string[] details, in CommandResult r)
+{
+    import std.string : strip;
+    const string out_ = r.outText.strip;
+    const string err = r.errText.strip;
+    if (out_.length)
+        details ~= "stdout: " ~ excerpt(out_);
+    if (err.length)
+        details ~= "stderr: " ~ excerpt(err);
 }
 
 private string intText(int v) @safe pure

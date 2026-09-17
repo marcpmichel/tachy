@@ -191,7 +191,9 @@ struct TextRenderer
         line ~= format!"%-16s"(status);
         if (color.length)
             line ~= reset;
-        line ~= "| " ~ label ~ ": " ~ msg;
+        line ~= "| " ~ label;
+        if (msg.length)
+            line ~= ": " ~ msg;
         put(line);
     }
 }

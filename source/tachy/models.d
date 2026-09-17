@@ -124,7 +124,7 @@ private Val[string] loadInto(string path, Val[string] outerVars,
         else if (s.kind != "files" && s.kind != "directories" && s.kind != "packages"
                 && s.kind != "groups" && s.kind != "users" && s.kind != "services"
                 && s.kind != "repos" && s.kind != "compose" && s.kind != "ensure"
-                && s.kind != "apply" && s.kind != "http")
+                && s.kind != "apply" && s.kind != "http" && s.kind != "debug")
             throw new TachyError(path ~ ": line " ~ text(s.line) ~ ": '"
                 ~ s.kind ~ "' is not valid in a tasks file");
     }
@@ -300,6 +300,7 @@ private void addJob(ref LoadedTasks loaded, ref string[][string] seen,
         case "compose": moduleName = "compose"; break;
         case "ensure": moduleName = "ensure"; break;
         case "http": moduleName = "http"; break;
+        case "debug": moduleName = "debug"; break;
         default: assert(0, "not a job statement: " ~ s.kind);
     }
 
@@ -312,6 +313,7 @@ private void addJob(ref LoadedTasks loaded, ref string[][string] seen,
         case "repo": key = "path"; noun = "repository"; break;
         case "compose": key = "dir"; noun = "directory"; break;
         case "http": key = "url"; noun = "url"; break;
+        case "debug": key = "name"; noun = "message"; break;
         default: key = noun = "name"; break;
     }
     if (!target.length)
@@ -383,6 +385,7 @@ private string kindFor(string kind) @safe pure nothrow
         case "compose": return "compose";
         case "ensure": return "ensure";
         case "http": return "http";
+        case "debug": return "debug";
         default: assert(0, "unknown kind " ~ kind);
     }
 }

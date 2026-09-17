@@ -102,7 +102,7 @@ tachy <command> [options] <selection> [<tasks.pravic>...]
   | Command | Description |
   |---|---|
   | `apply` (`a`) | Apply the tasks files to the selected hosts. |
-  | `check` (`c`) | Check mode: report the changes that would be made, apply nothing. `ensure` and `http` jobs still run — they are checks by nature. |
+  | `check` (`c`) | Check mode: report the changes that would be made, apply nothing. `ensure` and `http` jobs still run — they are checks by nature — and `debug` messages still print. |
   | `hosts` | Inspect hosts without running anything — see [hosts](#hosts). |
   | `generate` (`g`) | Create something new — see [generate](#generate). |
   | `webui` | Start a local web server, a graphical version of the CLI — see [Web UI](#web-ui-tachy-webui). |
@@ -134,7 +134,7 @@ Example: `tachy apply @web req/web`, `tachy check all`,
 | Option | Description |
 |---|---|
 | `-i, --inventory PATH` | Inventory file (default: `inventory.pravic`). |
-| `-v, --verbose` | Show executed commands and change details under each job line. |
+| `-v, --verbose` | Show executed commands, change details and command output (stdout/stderr excerpts) under each job line. |
 | `--keep-bundle` | Keep each host's temporary bundle directory after the run (project copy, generated inventory, report) and print its location — for debugging. |
 | `--direct` | Apply tasks files directly in this process, without bundling a project (this is how the copied binary runs on each host). |
 | `--direct-report P` | With `--direct`: write `ok changed failed` counters to P. |
@@ -649,6 +649,23 @@ so must an `age`-marked `src`, for the same reason.
 
 ---
 
+### `debug` — messages
+
+```pravic
+debug "a message"
+debug "myvar = {{ myvar }}"
+debug "deployed {{ app }} at {{ inventory_hostname }}"
+```
+
+Prints the message as a job line (`ok | debug <message>`), exactly like a
+task that never fails: the statement key is the message, it renders like
+every string in job parameters against the host's scope, and the job never
+reports `changed`. It has no attributes, touches no transport, and runs in
+check mode too (pure display). Like every directive key it must be unique
+across the composition.
+
+---
+
 ### `package` — system packages
 
 Keyed by `"<manager>:<name>"`; only `apt` is implemented for now. State is
@@ -890,7 +907,10 @@ file's directory** (relative paths resolve next to the file that declares
 the job) and asserts on its exit status and/or output. A passing job
 reports `ok` and never `changed`; a failed assertion fails the host with
 the actual status/output. `ensure` jobs are checks by nature: they run even
-in check mode, so keep mutating commands out of them.
+in check mode, so keep mutating commands out of them. Both streams the
+command produces travel in the job's verbose payload — with `-v`, `stdout:`
+and `stderr:` excerpts print under the job line (the same is true of every
+command the run executes).
 
 ```pravic
 ensure "is debian" {

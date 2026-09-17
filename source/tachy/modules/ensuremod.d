@@ -234,13 +234,21 @@ TaskResult runEnsureModule(Val[string] params, TaskContext ctx)
     // Checks by nature: ensure jobs run even in check mode.
     auto r = ctx.transport.run(cmd);
     const string got = r.outText.strip;
+    const string errOut = r.errText.strip;
+
+    // Both streams travel as the job's verbose payload (`-v` shows
+    // them); the failure messages below quote the stdout (or stderr
+    // when stdout is empty), since that is what the assertions test.
     if (got.length)
-        details ~= "output: " ~ excerpt(got);
+        details ~= "stdout: " ~ excerpt(got);
+    if (errOut.length)
+        details ~= "stderr: " ~ excerpt(errOut);
 
     if (!exitExp.matches(r.status))
         throw new TachyError( "ensure '" ~ name ~ "': exit status " ~ text(r.status)
             ~ ", expected " ~ exitExp.describe()
-            ~ (got.length ? "; output: '" ~ excerpt(got) ~ "'" : ""));
+            ~ (got.length ? "; output: '" ~ excerpt(got) ~ "'"
+                : errOut.length ? "; stderr: '" ~ excerpt(errOut) ~ "'" : ""));
     if (checkOutput && !outputExp.matches(got))
         throw new TachyError( "ensure '" ~ name ~ "': output '" ~ excerpt(got)
             ~ "' does not satisfy " ~ outputExp.describe());
