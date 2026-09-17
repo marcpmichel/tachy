@@ -2,6 +2,12 @@ Precedence: global vars < host vars < apply chain < file vars.
 
 Strings are templated with {{ name }} / {{ table.key }}; 
 
+A value may also be a choose (switch/case), available only inside a var assignation (var/vars statements, and the vars blocks of inventory host entries): 
+  var label = { choose "{{ country_code }}" { "FR" = "France", "IT" = "Italy", _ = "Other" } }
+The subject is rendered first, matched exactly against the case patterns, and the matching case's value is taken; '_' is the mandatory default. 
+Case values may hold {{ ... }} references and nested chooses, and render in the scope doing the rendering (per host in bundled runs). 
+A choose anywhere else (job parameters, apply bindings, host attributes) is a load-time error. 
+
 The builtin {{ inventory_hostname }} holds the current host name. 
 
 Every {{ ... }} reference of a composition (template files included) is dry-rendered on the controller against each selected host's effective variables before anything is deployed: an undefined variable fails the run there, naming the entry and the host.

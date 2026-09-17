@@ -802,3 +802,87 @@ assert(!isAgeCiphertext(""));
 assert(!isAgeCiphertext("plain secret\n"));
 assert(!isAgeCiphertext("\x00\x01age-encryption.org/v1\n"));
 }
+
+@("choose: rendering picks the matching case, else the default")
+unittest
+{
+import tachy.parser : parsePractic;
+
+Val[string] vars;
+foreach (s; parsePractic(`
+var tier = "gold"
+var size = { choose "{{ tier }}" { "gold" = "large", "silver" = "medium", _ = "small" } }
+`, "choose.pravic").stmts)
+    vars[s.key] = s.value;
+
+assert(renderTemplate("{{ size }}", vars) == "large", renderTemplate("{{ size }}", vars));
+vars["tier"] = Val("silver");
+assert(renderTemplate("{{ size }}", vars) == "medium");
+vars["tier"] = Val("bronze");
+assert(renderTemplate("{{ size }}", vars) == "small"); // the '_' default
+}
+
+@("choose: case values render lazily against the scope")
+unittest
+{
+import tachy.parser : parsePractic;
+
+Val[string] vars;
+foreach (s; parsePractic(`
+var host_suffix = "01"
+var role = "web"
+var target = { choose "{{ role }}" { "web" = "web-{{ host_suffix }}", _ = "box-{{ host_suffix }}" } }
+`, "choose.pravic").stmts)
+    vars[s.key] = s.value;
+
+assert(renderTemplate("{{ target }}", vars) == "web-01");
+vars["role"] = Val("db");
+assert(renderTemplate("{{ target }}", vars) == "box-01");
+vars["host_suffix"] = Val("99");
+assert(renderTemplate("{{ target }}", vars) == "box-99");
+}
+
+@("choose: nested chooses resolve through the chain")
+unittest
+{
+import tachy.parser : parsePractic;
+
+Val[string] vars;
+foreach (s; parsePractic(`
+var env = "prod"
+var region = "eu"
+var placement = { choose "{{ env }}" { "prod" = { choose "{{ region }}" { "eu" = "EU-prod", _ = "US-prod" } }, _ = "dev" } }
+`, "choose.pravic").stmts)
+    vars[s.key] = s.value;
+
+assert(renderTemplate("{{ placement }}", vars) == "EU-prod");
+vars["region"] = Val("us");
+assert(renderTemplate("{{ placement }}", vars) == "US-prod");
+vars["env"] = Val("staging");
+assert(renderTemplate("{{ placement }}", vars) == "dev");
+}
+
+@("choose: scalar cases stringify, tables refuse, cycles are detected")
+unittest
+{
+import tachy.parser : parsePractic;
+import std.exception : assertThrown;
+
+Val[string] vars;
+foreach (s; parsePractic(`
+var n = 2
+var count = { choose "{{ n }}" { "2" = 22, _ = 0 } }
+var flag = { choose "{{ n }}" { "2" = true, _ = false } }
+var table = { choose "{{ n }}" { "2" = { a = 1 }, _ = { a = 0 } } }
+var loop_a = { choose "{{ loop_b }}" { "x" = "1", _ = "0" } }
+var loop_b = "{{ loop_a }}"
+`, "choose.pravic").stmts)
+    vars[s.key] = s.value;
+
+assert(renderTemplate("{{ count }}", vars) == "22");
+assert(renderTemplate("{{ flag }}", vars) == "true");
+assertThrown!TachyError(renderTemplate("{{ table }}", vars));
+
+// a choose whose subject chains back into itself is a cycle
+assertThrown!TachyError(renderTemplate("{{ loop_a }}", vars));
+}

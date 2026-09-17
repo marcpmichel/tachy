@@ -67,7 +67,9 @@ This doc owns the source tree's structure and conventions;
     (stdout/stderr through /bin/sh in the declaring file's directory,
     where the loading process runs), `{ age }` secret markers
     (controller-side age decryption, inventory vars only), `{{ expr }}`
-    templating, the shared `template = <path>` entry rendering
+    templating (a `choose` var evaluates lazily at render time: the
+    rendered subject is matched exactly, the `_` default otherwise),
+    the shared `template = <path>` entry rendering
     (`renderTemplateFile` with `resolveEntryPath`, used by
     `file`/`service` and `validateRenders` alike), plus the age file
     helpers `file` sources use
@@ -77,9 +79,14 @@ This doc owns the source tree's structure and conventions;
     ordered statements, `file: line N:` errors, duplicate-key
     detection; a hand-written recursive descent following the root
     `LANGUAGE.md` grammar exactly (a keyword registered in both forms —
-    `identity` — takes its group form when a `{` follows)
+    `identity` — takes its group form when a `{` follows); `choose`
+    values parse in value position and are rejected outside var
+    assignations (`var`/`vars` values and inventory `host` `vars`
+    blocks) with a load-time error
   - `value.d` — `Val` trees, the `PracticStmt`/`PracticDoc` statement
-    types and the validated accessors
+    types and the validated accessors; the `choose_` kind holds the
+    selector in `str_` plus parallel `choosePatterns_`/`chooseValues_`
+    arrays (`_` is the mandatory default, parser-enforced)
   - `transport.d` — `local` and `ssh` transports (abstract class; `runStreaming` delivers output lines live — POSIX `read`, not buffered `rawRead`, so streams are not batched), `shQuote`, stat helpers; every spawned child pid is registered with `tachy.signals` so a SIGINT/SIGTERM can reach it
   - `signals.d` — the SIGINT/SIGTERM cooperative stop: handler (no SA_RESTART) sets a flag and terminates tracked children; run loops check between jobs and finish with a summary + exit `128 + signal` (second signal kills hard, old die-now behavior); the web loops leave their accept on the same flag
   - `http.d` — the minimal HTTP/1.1 client behind the `http` directive:

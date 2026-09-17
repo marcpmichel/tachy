@@ -263,6 +263,18 @@ package(tachy) string pravicValue(in Val v)
                 parts ~= pravicKey(k) ~ " = " ~ pravicValue(v.table_[k]);
             return "{ " ~ parts.join(", ") ~ " }";
         }
+        case Val.Kind.choose_:
+        {
+            // The parser re-reads exactly this spelling, so a choose in
+            // an inventory var round-trips into the generated per-host
+            // inventory and is rendered on the host like any var.
+            string[] parts;
+            foreach (size_t i; 0 .. v.choosePatterns_.length)
+                parts ~= pravicKey(v.choosePatterns_[i]) ~ " = "
+                    ~ pravicValue(v.chooseValues_[i]);
+            return "choose " ~ pravicString(v.str_)
+                ~ " { " ~ parts.join(", ") ~ " }";
+        }
     }
 }
 

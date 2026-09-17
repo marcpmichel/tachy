@@ -44,7 +44,8 @@ tachy apply '@web'     # applies main.pravic; its directory is the project
   `main.pravic`, like a directory argument on the command line.
 - **Variables** — `vars` statements with precedence and
   `{{ name }}` / `{{ table.key }}` templating, including variables
-  referencing other variables (cycle-detected).
+  referencing other variables (cycle-detected) and a `choose`
+  switch/case value for per-scope selection.
 - **Selection**: comma-separated host names and `@tag` selectors, after
   the command word; `inventory.pravic` is the default inventory.
 - Transports: `local` (`/bin/sh`) and `ssh` (spawns `ssh`; bundles are
@@ -398,7 +399,7 @@ A tasks file is a sequence of statements, one per line (all optional):
 
 | Statement | Target | Entry keys |
 |---|---|---|
-| `var NAME = value` / `vars { ... }` | — | Variables for this file's jobs and everything it composes. Entries may be `{ env = "NAME", default = "...", from = ".env" }` to read the environment of the process loading the file (the host, in bundled runs), a dotenv file relative to it, or `{ run = "cmd" }` to capture a command's output. |
+| `var NAME = value` / `vars { ... }` | — | Variables for this file's jobs and everything it composes. Entries may be `{ env = "NAME", default = "...", from = ".env" }` to read the environment of the process loading the file (the host, in bundled runs), a dotenv file relative to it, or `{ run = "cmd" }` to capture a command's output. A value may also be a `choose` switch/case: `choose "{{ sel }}" { "A" = "one", _ = "other" }` — subject rendered then matched exactly, `_` the mandatory default; var assignations only. |
 | `directory PATH { ... }` | path | `state` (default `directory`; also `absent`), `mode`, `owner`, `group` |
 | `service UNIT { ... }` | unit | `state` (`started`, `stopped`, `restarted`, `reloaded`, or `enabled` = ensure boot enablement only), `enabled` (bool), `src`/`template` (manage the unit file at `/etc/systemd/system/<unit>`: verbatim copy or rendered template; mutually exclusive), `vars` (local template context, with `template` only; `{ env }`/`{ run }` markers resolve at load like every other var). |
 | `repo PATH { ... }` | path | `url` (required: cloned when the path is not a repository, enforced on the `origin` remote otherwise), `type` (only `git`), `branch` (checkout + fast-forward to `origin/<branch>`; mutually exclusive with `tag`), `tag` (detached checkout). Without `branch`/`tag`: existence, origin and fetch only — the working tree is left alone. |

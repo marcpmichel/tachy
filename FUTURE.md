@@ -1,16 +1,13 @@
 
 
-
-- tachy test [project]: check syntax and variables of the config, inventory and tasks files of the given project (or ./main.tachy if present and no project given)
-  or is it redundant with 'check' ??
-
-
-
  - implement an 'upgrade' command that self-updates based on a hard-coded github link (choosing the latest release binary)
 
 - tasks: when <condition> for tasks (i.e. when = {{ myvar }} (only truthy/falsy, no expression to keep it simple )
 
 - callbacks : run a task after a service changed its state
+
+- capture both stdout and stderr as an event payload
+  display the content of stdout and stderr only when the verbose mode ('-v' option) is set
 
 - download ? 
   1. use the existing http : `http { download: <path> }` 

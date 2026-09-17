@@ -36,6 +36,16 @@ unittest
     arr.array_ ~= Val("one");
     arr.array_ ~= Val("two");
     vars["list"] = arr;
+    Val choose;
+    choose.kind = Val.Kind.choose_;
+    choose.str_ = `"{{ tier }}"`;
+    choose.choosePatterns_ ~= "gold";
+    choose.chooseValues_ ~= Val("large");
+    choose.choosePatterns_ ~= "silver";
+    choose.chooseValues_ ~= Val(2L);
+    choose.choosePatterns_ ~= "_";
+    choose.chooseValues_ ~= Val(false);
+    vars["size"] = choose;
 
     auto text = hostInventoryPravic("web 1", vars);
     auto doc = parsePractic(text, "generated-inventory.pravic");
@@ -54,6 +64,15 @@ unittest
     assert(got["list"].array_.length == 2);
     assert(got["list"].array_[0].str_ == "one");
     assert(got["list"].array_[1].str_ == "two");
+
+    // a choose survives the serialization verbatim
+    auto back = got["size"];
+    assert(back.kind == Val.Kind.choose_, back.typeName());
+    assert(back.str_ == `"{{ tier }}"`);
+    assert(back.choosePatterns_ == ["gold", "silver", "_"]);
+    assert(back.chooseValues_[0].str_ == "large");
+    assert(back.chooseValues_[1].integer_ == 2);
+    assert(back.chooseValues_[2].kind == Val.Kind.boolean_ && !back.chooseValues_[2].boolean_);
 }
 
 @("empty vars still produce a valid inventory")

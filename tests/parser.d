@@ -319,3 +319,134 @@ repo /srv/bare
         msg = e.msg;
     assert(canFind(msg, "unknown directive 'repofoo'"), msg);
 }
+
+@("choose: both spellings, wrapped and bare")
+unittest
+{
+    auto t = varsTable(`
+var env = "dev"
+var name = {
+  choose "{{env}}" {
+    "dev" = "Development"
+    "prod" = "Production"
+    _ = "Unknown"
+  }
+}
+`);
+    auto c = t["name"];
+    assert(c.kind == Val.Kind.choose_, c.typeName());
+    assert(c.str_ == "{{env}}");
+    assert(c.choosePatterns_ == ["dev", "prod", "_"]);
+    assert(c.chooseValues_[0].str_ == "Development"
+        && c.chooseValues_[1].str_ == "Production"
+        && c.chooseValues_[2].str_ == "Unknown");
+
+    // inline wrapped form, per the spec's spelling
+    auto inline = varsTable(
+        `var test = { choose "{{ country_code }}" { "FR" = "France", "IT" = "Italy", _ = "Other" } }`);
+    assert(inline["test"].kind == Val.Kind.choose_);
+    assert(inline["test"].choosePatterns_ == ["FR", "IT", "_"]);
+
+    // bare form without the wrapper block
+    auto bare = varsTable(`var x = choose "{{e}}" { "a" = "1", _ = "0" }`);
+    assert(bare["x"].kind == Val.Kind.choose_ && bare["x"].str_ == "{{e}}");
+
+    // a single-entry choose (default only) and nested chooses in cases
+    auto nested = varsTable(`var x = { choose "{{e}}" { "a" = { choose "{{f}}" { "b" = "2", _ = "3" } }, _ = "0" } }`);
+    assert(nested["x"].chooseValues_[0].kind == Val.Kind.choose_);
+    assert(nested["x"].chooseValues_[0].choosePatterns_ == ["b", "_"]);
+
+    // a wrapped choose among a var's other entries is not confused with
+    // a key spelled "choose"
+    auto mixed = varsTable(`var x = { port = 8080, mode = "run" }`);
+    assert(mixed["x"].kind == Val.Kind.table_ && mixed["x"].table_.length == 2);
+    auto keyed = varsTable(`var x = { choose = "plain key", _ = "not a choose" }`);
+    assert(keyed["x"].kind == Val.Kind.table_);
+}
+
+@("choose: display and Pravic round-trip shape")
+unittest
+{
+    import std.algorithm.searching : canFind;
+
+    auto t = varsTable(`var x = { choose "{{e}}" { "a" = "1", _ = "z" } }`);
+    assert(canFind(t["x"].display(), `choose "{{e}}" { a = "1", _ = "z" }`),
+        t["x"].display());
+
+    // re-parsing the display reproduces the same value
+    auto back = varsTable("var y = " ~ t["x"].display());
+    assert(back["y"].kind == Val.Kind.choose_);
+    assert(back["y"].str_ == "{{e}}" && back["y"].choosePatterns_ == ["a", "_"]);
+}
+
+@("choose: placement is restricted to var assignations")
+unittest
+{
+    import std.algorithm.searching : canFind;
+    import std.exception : assertThrown;
+
+    void fails(string src, string needle)
+    {
+        string msg;
+        try
+        {
+            parseStmts(src);
+            assert(false, "expected TachyError for: " ~ src);
+        }
+        catch (TachyError e)
+            msg = e.msg;
+        assert(canFind(msg, needle), msg ~ " does not contain: " ~ needle);
+    }
+
+    // job parameters, apply bindings and host attributes reject it
+    fails(`file "/tmp/x" { content = { choose "{{e}}" { "a" = "1", _ = "0" } } }`,
+        "'choose' is only available inside a var assignation");
+    fails(`apply "other.pravic" { where = { choose "{{e}}" { "a" = "1", _ = "0" } } }`,
+        "'choose' is only available inside a var assignation");
+    fails(`host web1 { address = { choose "{{e}}" { "a" = "1", _ = "0" } } }`,
+        "'choose' is only available inside a var assignation");
+
+    // vars statements (both forms) and inventory host vars accept it
+    assert(parseStmts(`vars { x = { choose "{{e}}" { "a" = "1", _ = "0" } } }`).length == 1);
+    assert(parseStmts(`var x = { choose "{{e}}" { "a" = "1", _ = "0" } }`).length == 1);
+    assert(parseStmts(`host web1 { vars { x = { choose "{{e}}" { "a" = "1", _ = "0" } } } }`).length == 1);
+}
+
+@("choose: strictness errors")
+unittest
+{
+    import std.algorithm.searching : canFind;
+    import std.exception : assertThrown;
+
+    void fails(string src, string needle)
+    {
+        string msg;
+        try
+        {
+            parseStmts(src);
+            assert(false, "expected TachyError for: " ~ src);
+        }
+        catch (TachyError e)
+            msg = e.msg;
+        assert(canFind(msg, needle), msg ~ " does not contain: " ~ needle);
+    }
+
+    // the '_' default is mandatory
+    fails(`var x = { choose "{{e}}" { "a" = "1" } }`,
+        "a choose block needs a default '_' case");
+    // the selector must be a quoted string (bare choose form)
+    fails(`var x = choose env { "a" = "1", _ = "0" }`,
+        "the choose selector must be a quoted string");
+    // in the wrapped form an unquoted selector reads as a key first
+    fails(`var x = { choose 3 { "a" = "1", _ = "0" } }`,
+        "expected '{', '=' or a separator after key 'choose'");
+    // a duplicate pattern stays a duplicate key
+    fails(`var x = { choose "{{e}}" { "a" = "1", "a" = "2", _ = "0" } }`,
+        "duplicate key 'a'");
+    // an unterminated choose wrapper (the case block alone closed)
+    fails(`var x = { choose "{{e}}" { "a" = "1", _ = "0" }`,
+        "expected '}' to close the choose block");
+    // an unterminated case block
+    fails(`var x = { choose "{{e}}" { "a" = "1"`,
+        "unterminated block");
+}

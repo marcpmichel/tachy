@@ -443,6 +443,36 @@ var diag = { run = 'echo "error" >&2', stream = "stderr" }
 | `{ env = "NAME" }` | Replaced by the environment variable `NAME`. Unset without a `default` is an error; set-but-empty resolves to the empty string. |
 | `{ env = "NAME", from = "path" }` | Same, but the value is looked up in the dotenv file at `path` (relative to the declaring file) instead of the process environment; the environment is not consulted. `KEY=VALUE` lines, `#` comments, blank lines, optional `export ` prefix, single-line quoted values (double quotes process `\n \t \r \f \b \" \' \\`, single quotes are literal); empty values count, later keys win, malformed lines are errors naming file and line. `default` covers a key the file does not define; in bundled runs the file is read on the host, so it must live inside the project. |
 
+#### `choose` — a switch/case value
+
+Inside a var assignation only (`var NAME = ...`, entries of `vars`
+blocks, and the `vars` blocks of inventory `host` entries) a value may
+be a `choose`: the subject is rendered first, matched exactly against
+the case patterns, and the matching case's value is taken — the `_`
+case is the mandatory default. Both spellings are equivalent; case
+values may hold `{{ ... }}` references (rendered in the same scope) and
+even nested `choose`s. A `choose` anywhere else is a load-time error.
+
+```pravic
+var country_code = "FR"
+
+var label = {
+    choose "{{ country_code }}" {
+        "FR" = "France"
+        "IT" = "Italy"
+        _    = "Other"
+    }
+}
+
+var test = { choose "{{ country_code }}" { "FR" = "France", "IT" = "Italy", _ = "Other" } }
+```
+
+Evaluation happens where the variable is used: per host in bundled runs
+(the scope that renders it — a choose in an inventory variable travels
+to the host inside the generated one-host inventory). A choose whose
+value is a table or array cannot substitute into a string, like any
+other table or array.
+
 ---
 
 ### `apply` — composition

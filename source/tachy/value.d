@@ -20,7 +20,7 @@ import tachy.errors;
 
 struct Val
 {
-    enum Kind { string_, integer_, float_, boolean_, array_, table_ }
+    enum Kind { string_, integer_, float_, boolean_, array_, table_, choose_ }
 
     Kind kind;
 
@@ -31,6 +31,15 @@ struct Val
     bool boolean_;
     Val[] array_;
     Val[string] table_;
+
+    // choose_: a switch/case value (Pravic's `choose` form, only
+    // available inside a var assignation).  `str_` holds the selector —
+    // a quoted string, usually a `"{{ ... }}"` template.  Patterns are
+    // matched exactly against the rendered subject; the `_` pattern is
+    // the mandatory default (the parser enforces it) and never matches
+    // — it is only the fallback.
+    string[] choosePatterns_; // source order, `_` included
+    Val[] chooseValues_;      // the case values, same order
 
     this(string v) @safe pure nothrow { kind = Kind.string_; str_ = v; }
     this(long v) @safe pure nothrow { kind = Kind.integer_; integer_ = v; }
@@ -48,6 +57,7 @@ struct Val
             case Kind.boolean_: return boolean_ ? "true" : "false";
             case Kind.array_:
             case Kind.table_:
+            case Kind.choose_:
                 throw new TachyError("a " ~ typeName() ~ " value cannot be substituted into a string");
         }
     }
@@ -62,6 +72,7 @@ struct Val
             case Kind.boolean_: return "boolean";
             case Kind.array_: return "array";
             case Kind.table_: return "table";
+            case Kind.choose_: return "choose";
         }
     }
 
@@ -90,6 +101,14 @@ struct Val
                 foreach (string k, const ref e; table_)
                     parts ~= k ~ " = " ~ e.display();
                 return "{ " ~ join(parts, ", ") ~ " }";
+            }
+            case Kind.choose_:
+            {
+                string[] parts;
+                foreach (size_t i; 0 .. choosePatterns_.length)
+                    parts ~= choosePatterns_[i] ~ " = " ~ chooseValues_[i].display();
+                return "choose \"" ~ str_ ~ "\""
+                    ~ " { " ~ join(parts, ", ") ~ " }";
             }
         }
     }

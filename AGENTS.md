@@ -94,7 +94,10 @@ When the user requests a durable behavior change, record it here or in the relev
   language (implemented): directives as independent statements
   (`vars { ... }` block form, `var X = "v"` single form;
   `apply`/`ensure`/`compose`/`import` single form only), jobs run in
-  statement order — no fixed order, no sorting; hooks and the group
+  statement order — no fixed order, no sorting; a `choose`
+  switch/case value form exists inside var assignations only
+  (`var`/`vars` values and inventory `host` `vars` blocks); hooks and
+  the group
   forms of `apply`/`ensure` do not exist, `execute` was renamed
   `check` then `ensure`, `include` became `apply`, and TOML support
   is gone (no dual reader ever shipped)

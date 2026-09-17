@@ -138,6 +138,9 @@ BSep         ← WS ',' WS / LineEnd+ HS        -- comma and/or newline
 Array        ← '[' WS (Value (ASep Value)* (WS ',')?)? ']'
 ASep         ← WS ',' WS                      -- commas required between elements
 Value        ← String / Float / Integer / Boolean / Array / Block
+             / Choose                                         -- var assignations only
+Choose       ← 'choose' !KeyChar String Block                 -- bare form, after '='
+             / '{' WS 'choose' !KeyChar String Block WS '}'   -- wrapped form
 
 Key          ← Basic / Literal / BareKey
 BareKey      ← KeyChar+
@@ -190,6 +193,23 @@ entry with no attributes may simply end where it stands, so
 `directory /tmp/two`, `package apt:curl` and `import "../task2"` need
 no `{ }` — but `directory /tmp/two mode = "0755"` is a parse error,
 not two statements.
+
+`Choose` is a value form, not a statement: it is available only inside
+a var assignation — the `var`/`vars` statements of tasks and inventory
+files and the `vars` blocks of inventory `host` entries; a `choose`
+anywhere else (job parameters, apply bindings, host attributes, config
+entries) is a load-time error.  The block's entries are the cases:
+their keys the patterns, and the `_` key the mandatory default (a
+choose without `_` is a parse error, and `_` is reserved — a pattern
+cannot be spelled `_`).  The selector must be a quoted string, usually
+a `"{{ ... }}"` template.  Evaluation is lazy and scoped: at `{{ ... }}`
+render time the selector is rendered first (against the scope doing the
+rendering — per host in bundled runs), matched exactly against the
+patterns, and the matching case's value is taken (the default when
+nothing matches); the chosen value then renders in turn, so case
+values may hold `{{ ... }}` references and even nested `choose`s.  A
+choose stored in an inventory variable travels to hosts serialized
+back to this same spelling inside the generated one-host inventory.
 
 ## Directive inventory
 
@@ -302,6 +322,27 @@ import "../shared/install_gogs"
 file /opt/gogs/setup.sh {
     src = "install_gogs/setup.sh"
     mode = "0755"
+}
+```
+
+`choose` — a switch/case value, only inside a var assignation (both
+spellings; `_` is the mandatory default):
+
+```pravic
+var country_code = "FR"
+
+var label = {
+    choose "{{ country_code }}" {
+        "FR" = "France"
+        "IT" = "Italy"
+        _    = "Other"
+    }
+}
+
+var test = { choose "{{ country_code }}" { "FR" = "France", "IT" = "Italy", _ = "Other" } }
+
+file "/srv/www/welcome.txt" {
+    content = "welcome to {{ label }}",
 }
 ```
 

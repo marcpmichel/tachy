@@ -2291,3 +2291,54 @@
     verified: apply completes in 1.9s, all ok, idempotent second run;
     95s later `NRestarts=0`, `active (running)`, HTTP 200 on :3000, no
     new journal start attempts. tachy itself needed no change.
+
+71. add the `choose` statement: a switch/case value form, available
+    only inside var assignations, exactly per the TODO's two spellings
+    (multi-line group form and inline wrapped form; a bare
+    `var x = choose "sel" { ... }` works too).
+   - Grammar (LANGUAGE.md updated): `Choose ← 'choose' !KeyChar String
+     Block` (bare, after `=`) or the wrapped `{ choose String Block }`;
+     the block's entries are the cases (keys = patterns, comma and/or
+     newline separated), `_` is the mandatory default — a choose
+     without it is a parse error, duplicate patterns stay duplicate-key
+     errors, the selector must be a quoted string (usually a
+     `"{{ ... }}"` template).
+   - parser.d: `parseValue` recognizes the guarded `choose` keyword;
+     `parseAssignedValue` (both `=` positions) accepts the wrapped
+     form; `checkChoosePlacement` runs at statement construction and
+     rejects a choose anywhere but `var`/`vars` values and inventory
+     `host` `vars` blocks (job parameters, apply bindings, host
+     attributes, config entries are load-time errors); a block key
+     literally named `choose` (`{ choose = "x" }`) stays a plain table.
+   - value.d: new `choose_` kind — selector in `str_`, parallel
+     `choosePatterns_`/`chooseValues_` (source order, `_` included);
+     `typeName`/`display`/`scalarToString` updated.
+   - vars.d: `evalChoose` renders the subject against the active scope
+     and matches exactly; `resolveExpr` evaluates a choose at
+     `{{ name }}` render time (case values render lazily in the same
+     scope — `{{ }}` refs and nested chooses resolve; cycles through
+     choose subjects are detected via the existing active chain);
+     `renderVal` handles the kind defensively.
+   - project.d: `pravicValue` serializes a choose back to its exact
+     Pravic spelling, so a choose in an inventory variable round-trips
+     through the generated one-host inventory and is evaluated on the
+     host.
+   - Docs: LANGUAGE.md (grammar production, semantics paragraph,
+     example), DOCUMENTATION.md (`choose` subsection under
+     `var`/`vars`), README (features bullet + tasks-file table row),
+     man VARIABLES asset; help text unchanged (no new option/command;
+     README CLI reference still byte-identical to `tachy help`).
+     syntax/pravic.vim: `choose` added to the guarded keyword
+     alternation (LANGUAGE.md lockstep), `mise run syntax` reinstalled
+     it, and headless synID assertions in both vim and nvim show
+     `pravicKeyword` at both spellings.
+   - Tests: 8 new silly-named unittests (parser: both spellings, bare
+     form, nested chooses, key-named-choose non-confusion, display +
+     re-parse, placement restriction, strictness errors; vars:
+     match/default, lazy case rendering, nested chain, scalar
+     stringify + table refusal + cycle; project: inventory round-trip
+     through hostInventoryPravic). `dub test` 189 passed.
+   - End-to-end on testing.internal (bundled over ssh): tasks-file
+     choose + inventory host-var choose rendered into managed file
+     content (`size=large label=France`), idempotent second run,
+     check mode validates the renders; VM cleaned up afterwards.

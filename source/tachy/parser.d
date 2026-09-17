@@ -267,6 +267,7 @@ private struct Parser
             s.key = entry.key;
             s.value = entry.value;
             s.line = entry.line;
+            checkChoosePlacement(kw, s.value, s.line);
             out_ ~= s;
         }
         return out_;
@@ -286,7 +287,7 @@ private struct Parser
         {
             advance();
             ws();
-            value = parseValue();
+            value = parseAssignedValue();
         }
         else if (cur() == '\n' || atEnd())
             // No attributes: an instruction whose block would be empty
@@ -301,7 +302,59 @@ private struct Parser
         s.key = key;
         s.value = value;
         s.line = keyLine;
+        checkChoosePlacement(s.kind, s.value, s.line);
         return s;
+    }
+
+    /// `choose` values are only legal inside a var assignation: the
+    /// `var`/`vars` statements (either file) and, in an inventory, the
+    /// `vars` blocks of `host` entries.  Anything else carrying a
+    /// choose — job parameters, apply bindings, host attributes, config
+    /// entries — is a load-time error.
+    private void checkChoosePlacement(string kind, in Val v, size_t line)
+        @safe pure
+    {
+        if (kind == "vars")
+            return; // a var assignation: choose allowed anywhere in the value
+        if (kind == "hosts")
+        {
+            // A host entry may hold choose values inside its `vars`
+            // block only (inventory var assignations); its other
+            // attributes are plain values.
+            if (v.kind == Val.Kind.table_)
+            {
+                foreach (string k, const Val e; v.table_)
+                    if (k != "vars")
+                        checkChoosePlacement("hosts", e, line);
+                return;
+            }
+        }
+        if (hasChoose(v))
+            throw fail("'choose' is only available inside a var assignation");
+    }
+
+    private static bool hasChoose(in Val v) @safe pure
+    {
+        final switch (v.kind)
+        {
+            case Val.Kind.choose_:
+                return true;
+            case Val.Kind.array_:
+                foreach (const ref e; v.array_)
+                    if (hasChoose(e))
+                        return true;
+                return false;
+            case Val.Kind.table_:
+                foreach (string k, const Val e; v.table_)
+                    if (hasChoose(e))
+                        return true;
+                return false;
+            case Val.Kind.string_:
+            case Val.Kind.integer_:
+            case Val.Kind.float_:
+            case Val.Kind.boolean_:
+                return false;
+        }
     }
 
     // -- blocks and entries ----------------------------------------------------
@@ -339,7 +392,7 @@ private struct Parser
             {
                 advance();
                 ws();
-                e.value = parseValue();
+                e.value = parseAssignedValue();
             }
             else if (cur() == '}' || cur() == ',' || cur() == '\n' || atEnd())
                 // Same rule as statements: an entry with no attributes
@@ -428,8 +481,62 @@ private struct Parser
 
     // -- values --------------------------------------------------------------------
 
+    /// The right-hand side of an `=`: a plain value — or a choose
+    /// wrapped in a block, `= { choose "..." { ... } }` (the TODO's
+    /// spellings), which reads as a block whose only entry is the
+    /// anonymous `choose` production.
+    private Val parseAssignedValue() @safe pure
+    {
+        if (cur() == '{' && lookingAtWrappedChoose())
+            return parseWrappedChoose();
+        return parseValue();
+    }
+
+    /// Lookahead: a `{` whose first token is the `choose` keyword
+    /// followed by a quoted subject.  Restores the cursor either way.
+    private bool lookingAtWrappedChoose() @safe pure
+    {
+        const size_t saveI = i;
+        const size_t saveLine = line;
+        advance(); // '{'
+        ws();
+        const bool wrapped = lookingAt("choose") && !isKeyChar(charAfter(6))
+            && nextNonHsIsQuote(6);
+        i = saveI;
+        line = saveLine;
+        return wrapped;
+    }
+
+    /// Whether a quoted string follows the n-character keyword at the
+    /// cursor (horizontal skips allowed).
+    private bool nextNonHsIsQuote(size_t n) @safe pure
+    {
+        size_t p = i + n;
+        while (p < src.length && (src[p] == ' ' || src[p] == '\t' || src[p] == '\r'))
+            p++;
+        return p < src.length && (src[p] == '"' || src[p] == '\'');
+    }
+
+    /// `{ choose "<subject>" <cases> }` — the wrapper holds exactly the
+    /// choose, nothing else.
+    private Val parseWrappedChoose() @safe pure
+    {
+        expect('{', "to open the choose block");
+        ws();
+        advance(6); // the keyword, known present
+        auto r = parseChooseBody();
+        ws(); // the wrapper's '}' may sit on its own line
+        expect('}', "to close the choose block");
+        return r;
+    }
+
     private Val parseValue() @safe pure
     {
+        if (cur() == 'c' && lookingAt("choose") && !isKeyChar(charAfter(6)))
+        {
+            advance(6);
+            return parseChooseBody();
+        }
         switch (cur())
         {
             case '"':
@@ -454,6 +561,35 @@ private struct Parser
             default:
                 throw fail("expected a value");
         }
+    }
+
+    /// `choose "<subject>" { "pattern" = value, ..., _ = default }` — a
+    /// switch/case value (the keyword already consumed).  The subject is
+    /// a quoted string (usually a `"{{ ... }}"` template); the block's
+    /// entries are the cases, their keys the patterns, and the `_` key
+    /// the mandatory default.  Only legal inside a var assignation
+    /// (checked at statement level).
+    private Val parseChooseBody() @trusted pure
+    {
+        hs();
+        if (cur() != '"' && cur() != '\'')
+            throw fail("the choose selector must be a quoted string");
+        Val r;
+        r.kind = Val.Kind.choose_;
+        r.str_ = parseValue().str_;
+        hs();
+        auto entries = parseBlockEntries();
+        bool haveDefault;
+        foreach (const ref e; entries)
+        {
+            if (e.key == "_")
+                haveDefault = true;
+            r.choosePatterns_ ~= e.key;
+            r.chooseValues_ ~= cast(Val) e.value;
+        }
+        if (!haveDefault)
+            throw fail("a choose block needs a default '_' case");
+        return r;
     }
 
     private Val parseBoolean() @safe pure

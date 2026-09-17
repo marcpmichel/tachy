@@ -662,11 +662,54 @@ private string resolveExpr(string expr, in Val[string] vars, string[] active)
         case Val.Kind.float_:
         case Val.Kind.boolean_:
             return (*v).scalarToString();
+        case Val.Kind.choose_:
+        {
+            auto chosen = evalChoose(*v, vars, active ~ expr);
+            // a case value may itself be a choose
+            while (chosen.kind == Val.Kind.choose_)
+                chosen = evalChoose(chosen, vars, active ~ expr);
+            final switch (chosen.kind)
+            {
+                case Val.Kind.string_:
+                    return renderTemplate(chosen.str_, vars, active ~ expr);
+                case Val.Kind.integer_:
+                case Val.Kind.float_:
+                case Val.Kind.boolean_:
+                    return chosen.scalarToString();
+                case Val.Kind.array_:
+                case Val.Kind.table_:
+                    throw new TachyError("variable '" ~ expr
+                        ~ "' is an " ~ chosen.typeName()
+                        ~ " and cannot be substituted into a string");
+                case Val.Kind.choose_:
+                    assert(0, "unreachable: chooses resolved above");
+            }
+        }
         case Val.Kind.array_:
         case Val.Kind.table_:
             throw new TachyError("variable '" ~ expr ~ "' is an " ~ (*v).typeName()
                 ~ " and cannot be substituted into a string");
     }
+}
+
+/// Evaluate a `choose` value: render its subject (a quoted string,
+/// usually a `"{{ ... }}"` template) against `vars`, match it exactly
+/// against the case patterns, and return the matching case's value — or
+/// the `_` default, which the parser makes mandatory.  The chosen value
+/// is returned as-is; the caller renders it in its own context.
+private Val evalChoose(in Val v, in Val[string] vars, string[] active)
+    @trusted
+{
+    const string subject = renderTemplate(v.str_, vars, active);
+    size_t defaultIdx;
+    foreach (size_t i; 0 .. v.choosePatterns_.length)
+    {
+        if (v.choosePatterns_[i] == "_")
+            defaultIdx = i; // the mandatory fallback, never matched directly
+        else if (v.choosePatterns_[i] == subject)
+            return cast(Val) v.chooseValues_[i];
+    }
+    return cast(Val) v.chooseValues_[defaultIdx];
 }
 
 /// Deep-copy `params`, rendering every string against `vars`.
@@ -688,6 +731,8 @@ private Val renderVal(in Val v, in Val[string] vars) @trusted
         case Val.Kind.float_:
         case Val.Kind.boolean_:
             return cast(Val) v;
+        case Val.Kind.choose_:
+            return renderVal(evalChoose(v, vars, null), vars);
         case Val.Kind.array_:
         {
             Val r;
