@@ -84,7 +84,7 @@ void validateModuleParams(string moduleName, in Val[string] params, string conte
             break;
         case "ensure":
         {
-            checkKeys(params, ["name", "run", "exit_status", "output"],
+            checkKeys(params, ["name", "run", "exit_status", "output", "args"],
                 context ~ " (ensure)");
             if ("run" !in params)
                 throw new TachyError(context ~ " (ensure): 'run' is required");
@@ -92,6 +92,16 @@ void validateModuleParams(string moduleName, in Val[string] params, string conte
                 parseExitStatus(*p, context ~ " (ensure)");
             if (auto p = "output" in params)
                 parseOutput(*p, context ~ " (ensure)");
+            if (auto p = "args" in params)
+            {
+                if ((*p).kind != Val.Kind.array_)
+                    throw new TachyError(context ~ " (ensure): 'args' must be an array of"
+                        ~ " strings, not a " ~ (*p).typeName());
+                foreach (const ref e; (*p).array_)
+                    if (e.kind != Val.Kind.string_)
+                        throw new TachyError(context ~ " (ensure): 'args' entries must be"
+                            ~ " strings, not a " ~ e.typeName());
+            }
             break;
         }
         case "http":

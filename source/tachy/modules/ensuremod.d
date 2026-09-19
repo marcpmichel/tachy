@@ -5,6 +5,10 @@ module tachy.modules.ensuremod;
  * status and/or its output:
  *
  *     ensure.run         = "source /etc/os-release; echo $ID"  (required)
+ *     ensure.args        = [ "one", "two" ]      # literal arguments appended
+ *                                                # to the command (one element
+ *                                                # is one argument, even with
+ *                                                # spaces inside)
  *     ensure.exit_status = 0                     # expected status (default 0)
  *                           # or { not = 1 }       # anything but 1
  *                           # or { cond = "< 1" }  # an operator and a value
@@ -221,12 +225,30 @@ TaskResult runEnsureModule(Val[string] params, TaskContext ctx)
         checkOutput = true;
     }
 
+    // `args` appends literal arguments (space-separated) after the
+    // command: each element is shell-quoted, so one element stays one
+    // argument even when it contains spaces.
+    string argTail;
+    if (auto p = "args" in params)
+    {
+        if ((*p).kind != Val.Kind.array_)
+            throw new TachyError("ensure '" ~ name ~ "': 'args' must be an array of"
+                ~ " strings, not a " ~ (*p).typeName());
+        foreach (const ref e; (*p).array_)
+        {
+            if (e.kind != Val.Kind.string_)
+                throw new TachyError("ensure '" ~ name ~ "': 'args' entries must be"
+                    ~ " strings, not a " ~ e.typeName());
+            argTail ~= " " ~ shQuote(e.str_);
+        }
+    }
+
     // The command runs in the defining tasks file's directory, like
     // file.src: relative paths resolve next to the file that declares
     // the job, not against the process cwd (the project root).
     const string cmd = ctx.tasksFileDir.length
-        ? "cd " ~ shQuote(ctx.tasksFileDir) ~ " && " ~ runCmd
-        : runCmd;
+        ? "cd " ~ shQuote(ctx.tasksFileDir) ~ " && " ~ runCmd ~ argTail
+        : runCmd ~ argTail;
 
     string[] details;
     details ~= "cmd: " ~ cmd;

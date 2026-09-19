@@ -1,11 +1,24 @@
 
- - implement an 'upgrade' command that self-updates based on a hard-coded github link (choosing the latest release binary)
+## improve existing
 
-- tasks: when <condition> for tasks (i.e. when = {{ myvar }} (only truthy/falsy, no expression to keep it simple )
+- Add a --no-browser for the webui and webdoc commands : disable the spawning of a browser window
+
+- Display only relevant options in the commands-specific help screens.
+  for example: --colors or --events has no sense for the webui command
+  Said another way : do no display irrelevant options in the help screens.
+
+## conditions
+
+- Extract the string comparison of the "output" attribute of 'ensure' as it will be used by other statements, let's call it "condition expression".
+
+- Improve the "condition expression" by adding a "not" operator.
+
+- Add the assert statement i.e. `assert <condition expression>`
+
+- Tasks: add a `when <condition expression>` attribute for all tasks, conditioning their execution. Does this require a new 'skipped' status ?
+
+
+## asynchronicity ?
 
 - callbacks : run a task after a service changed its state
 
-- download ? 
-  1. use the existing http : `http { download: <path> }` 
-  2. or add a new 'download' `download <url> { path=<path> }`
-  or nothing as it's not an idempotent task or a check and can be achieved with an 'ensure'

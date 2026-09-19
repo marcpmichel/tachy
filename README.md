@@ -394,7 +394,7 @@ A tasks file is a sequence of statements, one per line (all optional):
 | `package "mgr:name" { ... }` | `"<manager>:<name>"` | `version` (default `latest`; an explicit version pins it exactly — epoch-qualified, as dpkg reports it), `present` (default `true`; `false` removes). Only `apt` keys are supported. |
 | `group NAME { ... }` | name | `state` (default `present`; `absent` removes). |
 | `user NAME { ... }` | name | `group` (primary; default: a group named after the user), `groups` (supplementary, additive only), `shell` (default `/bin/sh` at creation), `comment`, `create_home` (default `true`, creation only), `home` (default `/home/<name>` at creation), `state` (default `present`; `absent` removes), `remove_home` (default `false`, with `state = "absent"`). |
-| `ensure "name" { ... }` | name | `run` (required), `exit_status` (integer, `{ not = N }`, or `{ cond = "OP N" }`; default 0), `output` (string, `{ contains = "..." }`, or `{ matches = "..." }`) |
+| `ensure "name" { ... }` | name | `run` (required), `args` (array of strings appended to `run`, one element one argument), `exit_status` (integer, `{ not = N }`, or `{ cond = "OP N" }`; default 0), `output` (string, `{ contains = "..." }`, or `{ matches = "..." }`) |
 | `http URL { ... }` | url | `type` (any HTTP method, default `GET`), `headers` (array of `"Name=Value"`), `data` (body, sent verbatim), `code` (expected status, default `200`), `output` (body assertion, `ensure`'s shapes), `timeout` (seconds, default `10`). Plain `http://` only; queried by tachy itself (no curl) — on the host in bundled runs, from the controller with `--direct`; a check by nature: runs in check mode, never `changed`. |
 | `debug "message"` | message | No attributes: prints the (templated) message as a job line — never fails, never `changed`, runs in check mode too. |
 | `apply "path" { bindings }` | path | Composes another tasks file **at the statement's position**, carrying its own variables: the binding's entry keys, or the same grouped in a `vars { ... }` sub-block. Bindings resolve `{ env }`/`{ run }` markers at load like every other var. A path naming an existing directory uses its `main.pravic`, like a directory CLI argument. |
@@ -499,7 +499,10 @@ Idempotency semantics:
   accepts an integer, `{ not = N }` or `{ cond = "OP N" }` with `OP`
   one of `==`, `!=`, `<`, `<=`, `>`, `>=` (default `0`); `output`
   accepts a string (exact match on the trimmed output),
-  `{ contains = "..." }` or `{ matches = "regex" }`. A passing job
+  `{ contains = "..." }` or `{ matches = "regex" }`. `args` takes an
+  array of strings appended to the command, space-separated: each
+  element is shell-quoted, so one element stays one argument even with
+  spaces inside, and entries are templated like every string. A passing job
   reports `ok` (never `changed`); a failed assertion fails the host
   with the actual status/output. Ensure jobs are checks by nature:
   they run even in check mode, so keep mutating commands out of them.

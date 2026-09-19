@@ -65,6 +65,8 @@
   ensure "is debian" {                # run a shell command and check it
       run = "source /etc/os-release; echo $ID"
                                       # (runs in the defining file's dir)
+      args = ["one", "two"]           # literal arguments appended to run
+                                      # (one element is one argument)
       exit_status = 0                 # int | { not = N } | { cond = "< 1" }
       output = "debian"               # string | { contains = "deb" } | { matches = "^debian.*$" }
   }

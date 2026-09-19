@@ -6,7 +6,7 @@ import tachy.modules.ensuremod;
 
 import std.exception : assertThrown;
 import tachy.transport : LocalTransport;
-import tachy.modules : TaskContext;
+import tachy.modules : TaskContext, validateModuleParams;
 import tachy.value : Val;
 import tachy.errors : TachyError;
 
@@ -213,6 +213,119 @@ unittest
     }
     catch (TachyError e) msg = e.msg;
     assert(canFind(msg, "'output' must be"), msg);
+}
+
+@("args appends literal arguments to the command")
+unittest
+{
+    import std.algorithm.searching : canFind;
+    import std.array : join;
+
+    auto ctx = ctxLocal;
+
+    Val[string] p;
+    p["name"] = Val("three");
+    p["run"] = Val("count() { echo $#; }; count");
+    Val args;
+    args.kind = Val.Kind.array_;
+    args.array_ ~= Val("one");
+    args.array_ ~= Val("two");
+    args.array_ ~= Val("three");
+    p["args"] = args;
+    Val three;
+    three.kind = Val.Kind.string_;
+    three.str_ = "3";
+    p["output"] = three;
+    auto r = runEnsureModule(p, ctx);
+    assert(!r.changed && r.msg == "exit 0", r.msg);
+
+    // one element is one argument, even with spaces inside
+    Val[string] q;
+    q["name"] = Val("quoted");
+    q["run"] = Val("count() { echo $#; }; count");
+    Val qa;
+    qa.kind = Val.Kind.array_;
+    qa.array_ ~= Val("a b");
+    qa.array_ ~= Val("c");
+    q["args"] = qa;
+    Val two;
+    two.kind = Val.Kind.string_;
+    two.str_ = "2";
+    q["output"] = two;
+    assert(runEnsureModule(q, ctx).msg == "exit 0");
+
+    // the echoed values show the arguments arrived whole and in order
+    Val[string] e;
+    e["name"] = Val("echo");
+    e["run"] = Val("echo");
+    e["args"] = qa;
+    Val exact;
+    exact.kind = Val.Kind.string_;
+    exact.str_ = "a b c";
+    e["output"] = exact;
+    auto r3 = runEnsureModule(e, ctx);
+    assert(!r3.changed, r3.msg);
+    assert(canFind(r3.details.join("\n"), "echo 'a b' 'c'"), r3.details.join("\n"));
+}
+
+@("args: empty array, templated entries, shape errors")
+unittest
+{
+    import std.algorithm.searching : canFind;
+    import tachy.vars : renderParams;
+
+    auto ctx = ctxLocal;
+
+    // an empty args appends nothing
+    Val[string] p;
+    p["name"] = Val("empty");
+    p["run"] = Val("true");
+    Val none;
+    none.kind = Val.Kind.array_;
+    p["args"] = none;
+    assert(!runEnsureModule(p, ctx).changed);
+
+    // entries render like every string
+    Val[string] v;
+    v["greeting"] = Val("hello");
+    Val[string] p2;
+    p2["name"] = Val("tpl");
+    p2["run"] = Val("echo");
+    Val ta;
+    ta.kind = Val.Kind.array_;
+    ta.array_ ~= Val("{{ greeting }}");
+    p2["args"] = ta;
+    Val exact;
+    exact.kind = Val.Kind.string_;
+    exact.str_ = "hello";
+    p2["output"] = exact;
+    assert(!runEnsureModule(renderParams(p2, v), ctx).changed);
+
+    // load-time shape errors
+    Val[string] bad;
+    bad["name"] = Val("x");
+    bad["run"] = Val("true");
+    bad["args"] = Val("one");
+    string msg;
+    try
+    {
+        validateModuleParams("ensure", bad, "tasks.pravic: line 3");
+        assert(false);
+    }
+    catch (TachyError e) msg = e.msg;
+    assert(canFind(msg, "'args' must be an array of strings"), msg);
+
+    Val intArr;
+    intArr.kind = Val.Kind.array_;
+    intArr.array_ ~= Val(3L);
+    bad["args"] = intArr;
+    try
+    {
+        validateModuleParams("ensure", bad, "tasks.pravic: line 3");
+        assert(false);
+    }
+    catch (TachyError e) msg = e.msg;
+    assert(canFind(msg, "'args' entries must be strings"), msg);
 }
 
 @("ensure captures both streams as the verbose payload")

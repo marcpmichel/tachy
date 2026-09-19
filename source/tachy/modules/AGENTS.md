@@ -28,7 +28,9 @@ This doc owns module-level contracts.
   `fetch --prune` refresh — remote-tracking refs only, so it runs in
   check mode like a probe — `branch` checkout + ff-only fast-forward,
   `tag` detached checkout; diverged branches error, never rewritten), `ensuremod` (run +
-  exit_status/output assertions behind the `ensure` directive),
+  exit_status/output assertions behind the `ensure` directive, with
+  `args` — quoted literal arguments appended space-separated to
+  `run`, one element one argument),
   `accounts.d` (groups + users via
   shadow-utils), `composemod` (Docker Compose stacks keyed by project
   dir: read-only probes — container runtime/health via `docker ps`/

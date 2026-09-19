@@ -10,6 +10,7 @@ import std.exception : assertThrown;
 import std.algorithm.searching : canFind;
 import tachy.errors : TachyError;
 import tachy.runner : RunOptions;
+import tachy.tests.envsync : envM;
 
 @("latestFromEffectiveUrl: strips the tag prefix and the v")
 unittest
@@ -165,16 +166,19 @@ unittest
     };
     scope (exit) replaceHook = null;
 
-    assert(runUpgrade(RunOptions(), "26.09.17", []) == 0);
-    assert(canFind(url, "/releases/download/v99.99.99/tachy-99.99.99-linux-amd64"), url);
-    assert(gotExe == thisExePath());
-    // the temp file sits next to the binary (same filesystem, atomic
-    // rename) and carries the verified bytes
-    import std.path : dirName, baseName;
-    assert(dirName(gotTmp) == dirName(thisExePath()));
-    assert(canFind(baseName(gotTmp), ".tachy-upgrade-"), gotTmp);
-    assert(read(gotTmp) == fakeReleaseBytes());
-    assert(gotTmp == tmpPath);
+    synchronized (envM) // the pid-derived temp path is shared by all tests
+    {
+        assert(runUpgrade(RunOptions(), "26.09.17", []) == 0);
+        assert(canFind(url, "/releases/download/v99.99.99/tachy-99.99.99-linux-amd64"), url);
+        assert(gotExe == thisExePath());
+        // the temp file sits next to the binary (same filesystem, atomic
+        // rename) and carries the verified bytes
+        import std.path : dirName, baseName;
+        assert(dirName(gotTmp) == dirName(thisExePath()));
+        assert(canFind(baseName(gotTmp), ".tachy-upgrade-"), gotTmp);
+        assert(read(gotTmp) == fakeReleaseBytes());
+        assert(gotTmp == tmpPath);
+    }
 }
 
 @("runUpgrade: --yes downloads, verifies and replaces without asking")
@@ -198,9 +202,12 @@ unittest
 
     RunOptions opts;
     opts.yes = true;
-    assert(runUpgrade(opts, "26.09.17", []) == 0);
-    assert(gotExe == thisExePath());
-    assert(read(gotTmp) == fakeReleaseBytes());
+    synchronized (envM) // the pid-derived temp path is shared by all tests
+    {
+        assert(runUpgrade(opts, "26.09.17", []) == 0);
+        assert(gotExe == thisExePath());
+        assert(read(gotTmp) == fakeReleaseBytes());
+    }
 }
 
 @("runUpgrade: a broken download fails and leaves no temp file behind")
@@ -228,13 +235,16 @@ unittest
 
     RunOptions opts;
     opts.yes = true;
-    string msg;
-    try
-        runUpgrade(opts, "26.09.17", []);
-    catch (TachyError e)
-        msg = e.msg;
-    assert(canFind(msg, "99.99.99"), msg);
-    assert(!exists(leakedTmp), "the failed download must be cleaned up");
+    synchronized (envM) // the pid-derived temp path is shared by all tests
+    {
+        string msg;
+        try
+            runUpgrade(opts, "26.09.17", []);
+        catch (TachyError e)
+            msg = e.msg;
+        assert(canFind(msg, "99.99.99"), msg);
+        assert(!exists(leakedTmp), "the failed download must be cleaned up");
+    }
 }
 
 @("defaultReplace: renames the download over the target")

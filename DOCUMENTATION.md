@@ -994,6 +994,7 @@ ensure "version format" {
 | Attribute | Default | Description |
 |---|---|---|
 | `run` | required | The shell command; templated like every string. |
+| `args` | — | An array of strings appended to the command, space-separated; each element is shell-quoted, so one element stays one argument even with spaces inside. Entries are templated like every string. |
 | `exit_status` | `0` | An integer, `{ not = N }`, or `{ cond = "OP N" }` with OP one of `==`, `!=`, `<`, `<=`, `>`, `>=`. |
 | `output` | — | A string (exact match on the trimmed output), `{ contains = "..." }`, or `{ matches = "regex" }` (invalid patterns are load-time errors). |
 

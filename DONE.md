@@ -2633,3 +2633,38 @@
      help mirror, options), DOCUMENTATION (options table, hosts
      section, generate section) and AGENTS.md / source/AGENTS.md
      updated; the FUTURE.md idea line is implemented and removed.
+
+78. add the "args" attribute to ensure: append literal arguments to
+    the command.
+   - `args` takes an array of strings; each element is shell-quoted
+     and appended to `run` space-separated, so one element stays one
+     argument even with spaces inside. Entries are templated like
+     every string (`renderParams` walks arrays), an empty array
+     appends nothing, and the full command still shows under `-v` as
+     the `cmd:` detail.
+   - Load-time validation in `validateModuleParams` (package.d):
+     `args` must be an array of strings — a scalar or a non-string
+     element is an error with file context before any host is
+     contacted; unknown keys are rejected with the updated allowed
+     list. The module re-checks both shapes at run time.
+   - Unittests in tests/ensuremod.d: arg count via a shell function
+     (`$#` inside `run` is the shell's own positional params, not the
+     appended words — they are plain words of the command string),
+     one-element-per-argument quoting, echoed whole/in-order values,
+     the `cmd:` detail, empty array, templated entries through
+     `renderParams`, and both load-time shape errors. `dub test`
+     213 passed, 0 failed (run twice). This also fixed a pre-existing
+     flake the runs exposed: the upgrade tests share the pid-derived
+     `.tachy-upgrade-<pid>.tmp` while running in parallel threads, so
+     the download-touching `runUpgrade` spans now serialize on the
+     envsync lock (tests/envsync.d doc comment updated).
+   - Verified end-to-end with a bundled local apply: the TODO's exact
+     one-line spelling and a templated multi-line entry both ran ok
+     on a local host (idempotent second run); the three load-time
+     error paths print file-context errors
+     ("'args' must be an array of strings", "'args' entries must be
+     strings", unknown key with the allowed list). Man text
+     (assets/tasksBody.txt), README (directive table + ensure bullet)
+     and DOCUMENTATION.md (attribute table) updated. LANGUAGE.md left
+     unchanged: `args` is a module attribute in the existing array
+     value form — no grammar change.
