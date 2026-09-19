@@ -217,7 +217,7 @@ unittest
 
     Val[string] badOutput = baseParams("http://localhost/");
     badOutput["output"] = tableOf("starts", Val("ok"));
-    reject(badOutput, "'output' must be a string");
+    reject(badOutput, "'output' takes only 'contains', 'matches', 'not', 'any', 'all' and 'none', not 'starts'");
 
     // templated values defer to run time: validation passes at load
     Val[string] templated = baseParams("http://localhost/");

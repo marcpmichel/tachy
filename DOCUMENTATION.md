@@ -993,6 +993,26 @@ ensure "version format" {
     run = "app --version"
     output = { matches = "^1\\.\\d+\\.\\d+$" }   # regex
 }
+
+ensure "debian 12" {
+    run = "source /etc/os-release; echo $ID $VERSION_ID"
+    output = { contains = "debian", matches = "\\b12\\b" }  # several keys: all must hold
+}
+
+ensure "not testing" {
+    run = "source /etc/os-release; echo $VERSION_CODENAME"
+    output = { not = { contains = "testing" } }  # negates one pattern
+}
+
+ensure "debian or ubuntu" {
+    run = "source /etc/os-release; echo $ID"
+    output = { any = ["debian", "ubuntu"] }      # one listed pattern suffices
+}
+
+ensure "log is clean" {
+    run = "journalctl -u app --since -5min --no-pager"
+    output = { none = ["traceback", "panic"] }   # no listed pattern may hold
+}
 ```
 
 | Attribute | Default | Description |
@@ -1000,7 +1020,7 @@ ensure "version format" {
 | `run` | required | The shell command; templated like every string. |
 | `args` | — | An array of strings appended to the command, space-separated; each element is shell-quoted, so one element stays one argument even with spaces inside. Entries are templated like every string. |
 | `exit_status` | `0` | An integer, `{ not = N }`, or `{ cond = "OP N" }` with OP one of `==`, `!=`, `<`, `<=`, `>`, `>=`. |
-| `output` | — | A string (exact match on the trimmed output), `{ contains = "..." }`, or `{ matches = "regex" }` (invalid patterns are load-time errors). |
+| `output` | — | A string (exact match on the trimmed output), `{ contains = "..." }`, or `{ matches = "regex" }` (invalid patterns are load-time errors). Patterns **compose**: several keys in one table all must hold, `{ not = <pattern> }` negates one pattern, `{ any = [ ... ] }` holds when one listed pattern does, `{ all = [ ... ] }` when all do, `{ none = [ ... ] }` when none does. A pattern is a string or such a table, so these compose recursively. |
 
 ---
 
@@ -1039,7 +1059,7 @@ http "http://api.internal/v1/pets" {
 | `headers` | — | Array of `"Name=Value"` strings, sent as `Name: Value` request headers. |
 | `data` | — | Request body, sent verbatim with `Content-Length` (any method). Absent means no body; `data = ""` sends an empty one. |
 | `code` | `200` | The expected HTTP status (100–599). |
-| `output` | — | The response body, compared after trimming surrounding whitespace — the same shapes `ensure` accepts: a string (exact), `{ contains = "..." }` or `{ matches = "regex" }`. |
+| `output` | — | The response body, compared after trimming surrounding whitespace — the same shapes `ensure` accepts: a string (exact), `{ contains = "..." }` or `{ matches = "regex" }`, composed the same way (several keys AND together, `not`, `any`/`all`/`none` arrays). |
 | `timeout` | `10` | Seconds for the whole query (name resolution aside); zero or less is a load-time error, running past it fails the job. |
 
 A failed expectation fails the host with the actual status (and a body

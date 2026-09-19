@@ -356,3 +356,154 @@ unittest
     assert(canFind(msg, "exit status 3"), msg);
     assert(canFind(msg, "stderr: 'problems'"), msg);
 }
+
+private Val outTable(Val[string] entries)
+{
+    Val t;
+    t.kind = Val.Kind.table_;
+    t.table_ = entries;
+    return t;
+}
+
+private Val outAny(Val[] entries)
+{
+    Val a;
+    a.kind = Val.Kind.array_;
+    a.array_ = entries;
+    return a;
+}
+
+@("composed output expectations: and, not, any")
+unittest
+{
+    import std.algorithm.searching : canFind;
+
+    auto ctx = ctxLocal;
+
+    // Runs `cmd` with the given output expectation: null on success,
+    // the TachyError message on failure.
+    string run(Val output, string cmd = "echo debian")
+    {
+        Val[string] p;
+        p["name"] = Val("composed");
+        p["run"] = Val(cmd);
+        p["output"] = output;
+        try
+        {
+            runEnsureModule(p, ctx);
+            return null;
+        }
+        catch (TachyError e)
+            return e.msg;
+    }
+
+    // several keys: all must hold
+    assert(run(outTable(["contains": Val("deb"), "matches": Val("^deb.*$")])) is null);
+    auto msg = run(outTable(["contains": Val("deb"), "matches": Val("^ub.*$")]));
+    assert(canFind(msg, `does not satisfy a substring "deb" and a match of /^ub.*$/`), msg);
+
+    // not negates one pattern; a bare string is the exact shape
+    assert(run(outTable(["not": outTable(["contains": Val("ubuntu")])])) is null);
+    assert(run(outTable(["not": outTable(["contains": Val("debian")])]), "echo ubuntu") is null);
+    msg = run(outTable(["not": Val("debian")]));
+    assert(canFind(msg, `does not satisfy not (exactly "debian")`), msg);
+
+    // any: one listed pattern suffices
+    assert(run(outTable(["any": outAny([Val("debian"), outTable(["matches": Val("^ub")])])])) is null);
+    assert(run(outTable(["any": outAny([Val("debian"), outTable(["matches": Val("^ub")])])]),
+        "echo ubuntu") is null);
+    msg = run(outTable(["any": outAny([Val("debian"), outTable(["matches": Val("^ub")])])]),
+        "echo arch");
+    assert(canFind(msg, `does not satisfy any of [exactly "debian", a match of /^ub/]`), msg);
+
+    // nesting: any of a negation and an atom
+    assert(run(outTable(["any": outAny([outTable(["not": Val("debian")]), Val("x")])]),
+        "echo arch") is null);
+    msg = run(outTable(["any": outAny([outTable(["not": Val("debian")]), Val("x")])]));
+    assert(canFind(msg, `any of [not (exactly "debian"), exactly "x"]`), msg);
+
+    // mixed conjunction: a positive atom and a negation
+    assert(run(outTable(["contains": Val("deb"), "not": outTable(["contains": Val("sid")])]),
+        "echo debian bookworm") is null);
+    msg = run(outTable(["contains": Val("deb"), "not": outTable(["contains": Val("sid")])]),
+        "echo debian sid");
+    assert(canFind(msg, `does not satisfy a substring "deb" and not (a substring "sid")`), msg);
+
+    // all: AND over an array — the way to require two same-kind patterns
+    Val both = outTable(["all": outAny([outTable(["contains": Val("active")]),
+        outTable(["contains": Val("running")])])]);
+    assert(run(both, "echo 'ActiveState=active SubState=running'") is null);
+    msg = run(both, "echo 'ActiveState=active SubState=stopped'");
+    assert(canFind(msg, `does not satisfy a substring "active" and a substring "running"`), msg);
+
+    // none: no listed pattern may hold
+    Val clean = outTable(["none": outAny([Val("error"), outTable(["matches": Val("^fail")])])]);
+    assert(run(clean, "echo all good") is null);
+    msg = run(clean, "echo fail overheat");
+    assert(canFind(msg, `does not satisfy none of [exactly "error", a match of /^fail/]`), msg);
+}
+
+@("composed output: parse errors and deterministic describe")
+unittest
+{
+    import std.algorithm.searching : canFind;
+
+    string parseErr(Val v)
+    {
+        try
+        {
+            parseOutput(v, "ctx");
+            return null;
+        }
+        catch (TachyError e)
+            return e.msg;
+    }
+
+    // unknown keys stay strict
+    auto msg = parseErr(outTable(["nope": Val(1L)]));
+    assert(canFind(msg, "'output' takes only 'contains', 'matches', 'not', 'any', 'all' and 'none', not 'nope'"), msg);
+
+    // an empty table can never pass: load-time error, not a runtime surprise
+    Val[string] noneT;
+    assert(canFind(parseErr(outTable(noneT)), "'output' must not be an empty table"));
+
+    // not takes exactly one pattern
+    assert(canFind(parseErr(outTable(["not": Val(42L)])), "'not' takes one pattern"), msg);
+    msg = parseErr(outTable(["not": outTable(["matches": Val("[unclosed")])]));
+    assert(canFind(msg, "ctx, in 'not': invalid regular expression"), msg);
+
+    // any/all/none take non-empty pattern arrays
+    assert(canFind(parseErr(outTable(["any": Val("x")])), "'any' takes an array of patterns"));
+    Val[] none;
+    assert(canFind(parseErr(outTable(["any": outAny(none)])), "'any' needs at least one pattern"));
+    assert(canFind(parseErr(outTable(["all": Val("x")])), "'all' takes an array of patterns"));
+    assert(canFind(parseErr(outTable(["all": outAny(none)])), "'all' needs at least one pattern"));
+    assert(canFind(parseErr(outTable(["none": Val("x")])), "'none' takes an array of patterns"));
+    assert(canFind(parseErr(outTable(["none": outAny(none)])), "'none' needs at least one pattern"));
+    msg = parseErr(outTable(["none": outAny([Val(42L)])]));
+    assert(canFind(msg, "'none' entries must be strings or tables"), msg);
+    msg = parseErr(outTable(["any": outAny([Val(42L)])]));
+    assert(canFind(msg, "'any' entries must be strings or tables"), msg);
+    // a bad nested pattern names its path through the composition
+    msg = parseErr(outTable(["any": outAny([outTable(["nope": Val(1L)])])]));
+    assert(canFind(msg, "ctx, in 'any': 'output' takes only"), msg);
+
+    // nested regexes still compile at load time
+    assert(parseErr(outTable(["any": outAny([outTable(["matches": Val("^x$")])])])) is null);
+
+    // single-shape tables keep their exact describe wording
+    assert(parseOutput(outTable(["contains": Val("deb")]), "ctx").describe() == `a substring "deb"`);
+    assert(parseOutput(Val("debian"), "ctx").describe() == `exactly "debian"`);
+
+    // the describe order is the fixed shape order, never the table's hash order
+    Val all = outTable([
+        "none": outAny([Val("g")]),
+        "all": outAny([outTable(["contains": Val("f")])]),
+        "any": outAny([Val("d")]),
+        "not": outTable(["contains": Val("c")]),
+        "matches": Val("b"),
+        "contains": Val("a"),
+    ]);
+    assert(parseOutput(all, "ctx").describe()
+        == `a substring "a" and a match of /b/ and not (a substring "c") and any of [exactly "d"] and a substring "f" and none of [exactly "g"]`);
+}

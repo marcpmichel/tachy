@@ -20,7 +20,8 @@ file /tmp/tachy-demo/hello.txt {
 ensure "demo file exists" {        # an ensure: a command plus expectations
     run = "test -f /tmp/tachy-demo/hello.txt"
                                   # exit_status, output = "..." or
-                                  # { contains = "..." } / { matches = "..." }
+                                  # { contains = "..." } / { matches = "..." },
+                                  # composable: several keys AND, not, any/all/none
 }
 
 # Composition: an apply composes another tasks file at its position,

@@ -297,6 +297,19 @@ ensure "is debian" {
     output = "debian"
 }
 
+# output composes: several keys in one table all must hold,
+# `not` negates one pattern, `any`/`all`/`none` hold when
+# one/all/none of an array's patterns do
+ensure "stable release" {
+    run = "grep VERSION_CODENAME /etc/os-release"
+    output = { contains = "bookworm", not = { contains = "sid" } }
+}
+
+ensure "debian family" {
+    run = "source /etc/os-release; echo $ID"
+    output = { any = ["debian", "ubuntu"] }
+}
+
 ensure "not a crash" {
     run = "pgrep -x app"
     exit_status = { not = 1 }

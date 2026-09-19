@@ -11,6 +11,9 @@ module tachy.modules.httpmod;
  *     http.data     = "{\"x\": 1}"     # request body, sent verbatim
  *     http.code     = 200              # expected status (default 200)
  *     http.output   = "ok" / { contains = "ok" } / { matches = "^ok$" }
+ *                    # ensure's shapes, composed the same way: several
+ *                    # keys AND together, `not` negates, `any`/`all`/
+ *                    # `none` quantify over an array of patterns
  *     http.timeout  = 10               # seconds for the whole query
  *
  * The request is issued by the tachy process running the job — on the
@@ -19,8 +22,9 @@ module tachy.modules.httpmod;
  * these jobs are checks by nature: they run even in check mode, report
  * `ok` when the status and (optionally) the body satisfy the
  * expectations, and never report `changed`.  `output` is the response
- * body compared after trimming surrounding whitespace — the same shapes
- * `ensure` accepts.
+ * body compared after trimming surrounding whitespace — the same
+ * shapes `ensure` accepts, composed the same way (several keys AND
+ * together, `not`, `any`).
  */
 import std.algorithm.searching : canFind;
 import std.conv : text;

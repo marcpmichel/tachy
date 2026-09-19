@@ -2731,3 +2731,53 @@
      the flag in all three scripts. README (CLI mirror + webui/webdoc
      sections), DOCUMENTATION.md (options table, webui/webdoc
      sections) and source/AGENTS.md (web.d bullet) updated.
+81. ensure/http `output` becomes a composable condition expression
+   - `ensuremod.d`: `OutputExpectation` is now a recursive tree —
+     `and_` (several keys in one table all must hold), `not_` (negates
+     one pattern), `any_` (one listed pattern suffices) over the
+     existing exact/contains/matches atoms; patterns nest (a pattern
+     is a string or such a table). `parseOutput` validates
+     recursively at load time: unknown keys, empty tables, empty
+     `any` arrays and bad `not`/`any` shapes are load errors naming
+     the path (`ctx, in 'not':`), regexes still compile at load, and
+     error describe text follows a fixed shape order (contains,
+     matches, not, any), never the table's hash order. `httpmod.d`
+     inherits everything (shared `parseOutput`), messages unchanged
+     for the existing single shapes. `exit_status` untouched.
+   - Unittests: two new silly-named blocks in tests/ensuremod.d
+     (composed pass/fail through `runEnsureModule` incl. nesting and
+     mixed conjunction; parse errors + deterministic `describe`), and
+     tests/httpmod.d re-pins the sharper unknown-output-key message.
+     `dub test` 215 passed, 0 failed.
+   - E2E on testing.internal (local-connection host, --direct path
+     via check/apply): composed AND+not and any pass; a failing AND
+     reports `does not satisfy a substring "debian" and not (a
+     substring "sid")`; an unknown key fails at load with the allowed
+     vocabulary. VM and local scratch cleaned.
+   - Docs: LANGUAGE.md (composed examples in the checks block),
+     DOCUMENTATION.md (ensure examples + `output` rows for ensure and
+     http), README.md (ensure bullet + directive table row),
+     source/assets/tasksBody.txt and sampleTask.txt (man/generate
+     text). FUTURE.md's "condition expression" conditions this work
+     completes were already cleared, successors queued in TODO.md.
+82. `all` and `none` join the output condition expression
+   - `ensuremod.d`: `{ all = [ ... ] }` ANDs an array of patterns (the
+     way to require two patterns of the same kind, which multi-key
+     tables cannot spell — keys are unique); `{ none = [ ... ] }` is a
+     dedicated node (not `not(any)`) so failures render
+     `none of [ ... ]` instead of a double negation. Both take
+     non-empty arrays of nesting patterns, validated at load time with
+     the same path-carrying errors (`ctx, in 'all':`); the strict key
+     vocabulary and messages now list `contains matches not any all
+     none`. `http` inherits everything via the shared `parseOutput`.
+   - Unittests: all/none pass/fail through `runEnsureModule`, array
+     shape errors, and the fixed-order `describe` guard extended to
+     six keys; tests/httpmod.d re-pins the vocabulary message.
+     `dub test` 215 passed, 0 failed.
+   - E2E on testing.internal: `all` over two `contains` and `none`
+     over a clean journal line pass in check mode; a failing `none`
+     reports `does not satisfy none of [exactly "error", a match of
+     /^fail/]`, exit 1. VM and local scratch cleaned.
+   - Docs: LANGUAGE.md (composition comment), DOCUMENTATION.md
+     (`log is clean` example + `output` rows), README.md (bullet +
+     directive table), source/assets/tasksBody.txt and sampleTask.txt.
