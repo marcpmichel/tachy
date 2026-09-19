@@ -87,7 +87,7 @@ _tachy()
     if [[ "$cur" == -* ]]; then
         COMPREPLY=( $(compgen -W "-i --inventory -v --verbose --color --direct \
             --direct-report --events --keep-bundle --config --identity \
-            --address --port --completion -y --yes -h --help" -- "$cur") )
+            --address --port --no-browser --completion -y --yes -h --help" -- "$cur") )
         return 0
     fi
 

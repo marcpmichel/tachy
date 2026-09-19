@@ -139,7 +139,8 @@ When the user requests a durable behavior change, record it here or in the relev
  build date `YY.mm.dd`, kept in `source/assets/version` and refreshed
  by dub's preBuildCommands) or
 `help` (short form only: usage lines, commands, options; `help
-<command>` or `<command> -h` shows one command's screen — an
+<command>` or `<command> -h` shows one command's screen — listing
+only that command's relevant options; an
 incomplete invocation shows it too; help and man output carries a
 `**bold**`/`` `code` `` micro markup rendered as colors on a tty or
 with --color, stripped when piped), or `upgrade` (one step: compare

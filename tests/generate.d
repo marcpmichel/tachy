@@ -79,7 +79,7 @@ unittest
         foreach (o; ["--inventory", "--verbose", "--color", "--direct",
                      "--direct-report", "--events", "--keep-bundle",
                      "--config", "--identity", "--address", "--port",
-                     "--completion", "--yes", "--help"])
+                     "--no-browser", "--completion", "--yes", "--help"])
             assert(canFind(script, o),
                 shell ~ " completion lacks option " ~ o);
     }
@@ -95,8 +95,8 @@ unittest
     // fish spells long options with -l
     foreach (o; ["inventory", "verbose", "color", "direct",
                  "direct-report", "events", "keep-bundle", "config",
-                 "identity", "address", "port", "completion", "yes",
-                 "help"])
+                 "identity", "address", "port", "no-browser",
+                 "completion", "yes", "help"])
         assert(canFind(completionFish, "-l " ~ o), "fish completion lacks -l " ~ o);
 
     // the dynamic selection source is wired into every script

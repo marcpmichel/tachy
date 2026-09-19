@@ -76,7 +76,8 @@ int runWebUi(RunOptions optsIn) @trusted
             : "none configured (webui projects in config.pravic)");
     stdout.flush();
 
-    tryOpenBrowser(browserUrl(addr.toAddrString(), addr.port));
+    if (!opts.noBrowser)
+        tryOpenBrowser(browserUrl(addr.toAddrString(), addr.port));
 
     import tachy.signals : installSignalHandlers, signalExitCode;
     installSignalHandlers();

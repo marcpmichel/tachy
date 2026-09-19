@@ -53,7 +53,8 @@ int runWebDoc(const RunOptions opts) @trusted
         site.sections.length);
     stdout.flush();
 
-    tryOpenBrowser(browserUrl(addr.toAddrString(), addr.port));
+    if (!opts.noBrowser)
+        tryOpenBrowser(browserUrl(addr.toAddrString(), addr.port));
 
     import tachy.signals : installSignalHandlers, signalExitCode;
     installSignalHandlers();

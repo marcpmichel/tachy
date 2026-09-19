@@ -269,9 +269,10 @@ Options:
   --config PATH         Optional config file (the identity entry, imports search paths, webui projects, output format); default: TACHY_CONFIG, then config.pravic in the current directory, then ~/.config/tachy/config.pravic
   --identity PATH       Age identity for { age = ... } inventory vars and file sources marked age = true; supersedes the config file's identity entry. Default: that entry, then AGE_IDENTITY (path or key material), then ~/.ssh/id_ed25519 (age accepts ssh keys)
   --color               Force colored statuses even when stdout is not a tty (forwarded to the run on each host)
-  --address ADDR        Webui/webdoc only: address to bind (default 127.0.0.1; an IP — use 0.0.0.0 to listen on every interface)
-  --port PORT           Webui/webdoc only: port to listen on (default: a random port between 10000 and 65534; 0 does the same)
-  --completion          Hosts list only: print selection candidates (all, host names, @tags), one per line, for shell completions
+  --address ADDR        Address for webui/webdoc to bind (default 127.0.0.1; an IP — use 0.0.0.0 to listen on every interface)
+  --port PORT           Port for webui/webdoc to listen on (default: a random port between 10000 and 65534; 0 does the same)
+  --no-browser          Do not open the browser window; the bound URL is still printed
+  --completion          With hosts list: print selection candidates (all, host names, @tags), one per line, for shell completions
   -y, --yes             With upgrade: skip the y/N confirmation and upgrade unattended
   -h, --help            Show this help
 
@@ -322,9 +323,9 @@ and indents its job lines beneath it.
 
 `tachy webui` starts a local web server on a random port between
 10000 and 65534 (the bound URL is printed, and tachy tries to open it
-in the local browser — `gio open`, best-effort;
-`--address`/`--port` to change it) that is a graphical version of the
-CLI:
+in the local browser — `gio open`, best-effort; `--no-browser` keeps
+the browser closed; `--address`/`--port` to change it) that is a
+graphical version of the CLI:
 
 - the projects from the `webui` block's `projects` list in
   config.pravic are listed and clickable; missing paths are shown
@@ -353,8 +354,8 @@ only by default; anyone who can reach the port can run tachy.
 
 `tachy webdoc` serves this documentation as a small web site (a random
 port between 10000 and 65534 by default, like the webui — the URL is
-printed and the browser open is attempted; the same
-`--address`/`--port` options as the webui): one page per section — the
+printed and the browser open is attempted unless `--no-browser`; the
+same `--address`/`--port` options as the webui): one page per section — the
 `##` groups become menu groups carrying their intro, each `###` becomes
 a page — with a left menu to
 pick one. Internal links are rewritten to point at the page holding

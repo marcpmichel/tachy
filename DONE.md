@@ -2668,3 +2668,66 @@
      and DOCUMENTATION.md (attribute table) updated. LANGUAGE.md left
      unchanged: `args` is a module attribute in the existing array
      value form — no grammar change.
+
+79. command-specific help screens list only their relevant options
+    (e.g. --events/--colors make no sense for webui).
+   - `assets/optionEntries.txt` now tags every option entry with an
+     `@command` line (space-separated command words, `@*` = every
+     command) derived from what each entry point actually consumes:
+     apply/check get the full run set (-i -v --direct --direct-report
+     --events --keep-bundle --config --identity --color), hosts gets
+     -i/--config/--identity/--completion (runHosts loads the config
+     and the age identity for effective vars), webui gets
+     -i/--config/--identity plus --address/--port, webdoc only
+     --address/--port, upgrade --yes, generate nothing, man --color
+     (it colors its own output); -h is on every screen. The module
+     re-checks nothing — this is display-only; getopt registration is
+     unchanged, so no option stopped working anywhere.
+   - app.d parses the tagged asset once (OptionEntry list; entries
+     may span continuation lines), exposing optionEntriesText() (the
+     complete block — general help and man OPTIONS, unchanged bytes
+     apart from three reworded lines) and commandOptionsText(c) for
+     the filtered per-command block in commandHelpText. The three
+     entries that carried "X only:" prose (--address, --port,
+     --completion) are reworded context-neutral ("for webui/webdoc",
+     "With hosts list:") so they read right on their own screens.
+   - Unittests: the screens test now asserts the has/lacks matrix per
+     command (apply has all ten; webui has the five it honours and
+     lacks --events/--direct/--keep-bundle/--verbose/--completion/
+     --yes/--color; same for hosts/upgrade/man/generate/version), and
+     the man drift guard walks optionEntriesText(). `dub test`
+     213 passed, 0 failed.
+   - Verified live: `tachy webui -h` prints exactly -i, --config,
+     --identity, --address, --port, -h; hosts/upgrade/generate/man
+     screens match their tags; `tachy man` still documents all 14
+     options; README's "CLI reference" block byte-compared against
+     `tachy help` output (identical after the three reworded lines
+     were mirrored). DOCUMENTATION.md's help-screens bullet now says
+     screens list only the relevant options. AGENTS.md (CLI shape)
+     and source/AGENTS.md (asset tagging contract) updated.
+
+80. add a --no-browser option to webui and webdoc: disable the
+    spawning of a browser window.
+   - `RunOptions.noBrowser` (runner.d), registered in parseOptions
+     (app.d) as a webui/webdoc-only flag; runWebUi and runWebDoc skip
+     tryOpenBrowser when it is set — the bound URL is still printed,
+     everything else unchanged (display-only option, no effect on
+     apply/check/hosts/generate/upgrade).
+   - Help: the optionEntries.txt entry is tagged @webui @webdoc, so
+     the flag appears on exactly the webui/webdoc screens; the
+     commandScreens.txt bodies mention it ("--no-browser keeps it
+     closed" / "same --address, --port and --no-browser options as
+     the webui").
+   - Completions: --no-browser added to the bash flag list, the zsh
+     option table and the fish `complete -l no-browser` line; the
+     tests/generate.d drift guard lists it for all three shells (long
+     form and fish's `-l no-browser`).
+   - Unittests: the registration loop in tests/app.d covers
+     --no-browser, and the screens test asserts it on the webui and
+     webdoc screens. `dub test` 213 passed, 0 failed.
+   - Verified live: `tachy webdoc --no-browser --port N` and
+     `tachy webui --no-browser --port N` both serve http 200, print
+     the bound URL and spawn no browser; `generate completions` emits
+     the flag in all three scripts. README (CLI mirror + webui/webdoc
+     sections), DOCUMENTATION.md (options table, webui/webdoc
+     sections) and source/AGENTS.md (web.d bullet) updated.

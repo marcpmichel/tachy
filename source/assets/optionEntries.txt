@@ -1,14 +1,30 @@
+@apply @check @hosts @webui
   **-i, --inventory** `PATH`  Inventory file (default: inventory.pravic)
+@apply @check
   **-v, --verbose**         Show executed commands, change details and command output (stdout/stderr)
+@apply @check
   **--direct**              Apply tasks files directly in this process, without bundling a project (this is how the copied binary runs on each host)
+@apply @check
   **--direct-report** `P`     With --direct: write "ok changed failed" counters to P
+@apply @check
   **--events**              Print one JSON event per line on stdout instead of text (machine mode): with --direct, the local run's own events; otherwise the raw events streamed live from each host, wrapped in the controller's fileStart/fileDone events
+@apply @check
   **--keep-bundle**         Keep each host's temporary bundle directory after the run, for inspection (project copy, generated inventory, report)
+@apply @check @hosts @webui
   **--config** `PATH`         Optional config file (the identity entry, imports search paths, webui projects, output format); default: TACHY_CONFIG, then config.pravic in the current directory, then ~/.config/tachy/config.pravic
+@apply @check @hosts @webui
   **--identity** `PATH`       Age identity for { age = ... } inventory vars and file sources marked age = true; supersedes the config file's identity entry. Default: that entry, then AGE_IDENTITY (path or key material), then ~/.ssh/id_ed25519 (age accepts ssh keys)
+@apply @check @man
   **--color**               Force colored statuses even when stdout is not a tty (forwarded to the run on each host)
-  **--address** `ADDR`        Webui/webdoc only: address to bind (default 127.0.0.1; an IP — use 0.0.0.0 to listen on every interface)
-  **--port** `PORT`           Webui/webdoc only: port to listen on (default: a random port between 10000 and 65534; 0 does the same)
-  **--completion**           Hosts list only: print selection candidates (all, host names, @tags), one per line, for shell completions
+@webui @webdoc
+  **--address** `ADDR`        Address for webui/webdoc to bind (default 127.0.0.1; an IP — use 0.0.0.0 to listen on every interface)
+@webui @webdoc
+  **--port** `PORT`           Port for webui/webdoc to listen on (default: a random port between 10000 and 65534; 0 does the same)
+@webui @webdoc
+  **--no-browser**          Do not open the browser window; the bound URL is still printed
+@hosts
+  **--completion**          With hosts list: print selection candidates (all, host names, @tags), one per line, for shell completions
+@upgrade
   **-y, --yes**             With upgrade: skip the y/N confirmation and upgrade unattended
+@*
   **-h, --help**            Show this help

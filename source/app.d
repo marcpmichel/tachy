@@ -240,11 +240,78 @@ private void printVersion()
 
 private immutable string helpHead = import("assets/helpHead.txt");
 immutable string commandEntries = import("assets/commandEntries.txt");
-immutable string optionEntries = import("assets/optionEntries.txt");
+
+private immutable string optionEntriesSrc = import("assets/optionEntries.txt");
+
+/// One options entry: the command words it is relevant to (empty —
+/// tagged `@*` — means every command) and its help line verbatim.
+private struct OptionEntry
+{
+    string[] commands;
+    string line;
+}
+
+/// The options entries of optionEntries.txt, in order.  A `@`-line
+/// before an entry tags it with the command words the option is
+/// relevant to (`@*`: every command); the entry line itself follows,
+/// indented, and stays verbatim.  Long entries may continue with
+/// further indented (non-`@`, non-two-space) lines.
+private OptionEntry[] optionEntryList() @safe pure
+{
+    import std.algorithm.searching : startsWith;
+    import std.string : lineSplitter, split;
+    OptionEntry[] r;
+    string[] pending;
+    foreach (line; lineSplitter(optionEntriesSrc))
+    {
+        if (!line.length)
+            continue;
+        if (line.startsWith("@"))
+        {
+            foreach (token; split(line))
+                if (token != "@*")
+                    pending ~= token[1 .. $];
+            continue;
+        }
+        if (line.startsWith("  ") || !r.length)
+        {
+            r ~= OptionEntry(pending, line);
+            pending = null;
+        }
+        else
+            r[$ - 1].line ~= "\n" ~ line; // continuation of the previous entry
+    }
+    return r;
+}
+
+/// Every option entry in asset order: the Options block of the general
+/// help and of the man OPTIONS section (the complete reference).
+string optionEntriesText() @safe pure
+{
+    import std.algorithm.iteration : map;
+    import std.array : join;
+    return optionEntryList().map!(e => e.line).join("\n");
+}
+
+/// The Options block of one command's screen: only the entries tagged
+/// for that command (untagged entries are on every screen).
+private string commandOptionsText(Cmd c) @safe pure
+{
+    import std.algorithm.iteration : filter, map;
+    import std.array : join;
+    import std.algorithm.searching : canFind;
+    const string word = commandWord(c);
+    return optionEntryList()
+        .filter!(e => !e.commands.length || e.commands.canFind(word))
+        .map!(e => e.line).join("\n");
+}
 
 private enum commandsBlock = "__Commands:__\n" ~ commandEntries;
 
-private enum optionsBlock = "__Options:__\n" ~ optionEntries;
+private string optionsBlock() @safe pure
+{
+    return "__Options:__\n" ~ optionEntriesText();
+}
 
 private immutable string helpTail = import("assets/helpTail.txt");
 private immutable string manDescription = import("assets/manDescription.txt");
@@ -262,7 +329,7 @@ string helpText() @safe pure
 {
     import std.string : strip;
     return helpHead.strip ~ "\n\n" ~ commandsBlock.strip ~ "\n\n"
-        ~ optionsBlock.strip ~ "\n\n" ~ helpTail.strip;
+        ~ optionsBlock().strip ~ "\n\n" ~ helpTail.strip;
 }
 
 // ---------------------------------------------------------------------------
@@ -385,7 +452,7 @@ string commandHelpText(Cmd c) @safe pure
     s ~= "__Usage:__ " ~ commandSynopsis(c) ~ "\n\n";
     if (auto body = word in commandScreens())
         s ~= *body;
-    s ~= "\n__Options:__\n" ~ optionEntries ~ "\n\n";
+    s ~= "\n__Options:__\n" ~ commandOptionsText(c) ~ "\n\n";
     s ~= "Run \"tachy man\" for the full manual.";
     return s;
 }
@@ -533,7 +600,7 @@ string manText() @safe pure
             ~ "tachy webui [options]\ntachy webdoc [options]")
         ~ manSection("DESCRIPTION", manDescription)
         ~ manSection("COMMANDS", manCommands())
-        ~ manSection("OPTIONS", optionEntries)
+        ~ manSection("OPTIONS", optionEntriesText())
         ~ manSection("EXAMPLES", manExamples)
         ~ manSection("PROJECTS", projectsBody)
         ~ manSection("WEB UI", webuiBody)
@@ -566,6 +633,7 @@ void parseOptions(ref string[] args, ref RunOptions opts, ref bool wantHelp)
         "identity", "PATH  age identity for { age = ... } inventory vars; supersedes the config identity entry (default: AGE_IDENTITY, then ~/.ssh/id_ed25519)", &opts.identity,
         "address", "ADDR  webui/webdoc: address to bind (default 127.0.0.1)", &opts.webAddress,
         "port", "N  webui/webdoc: port to listen on (default: a random port between 10000 and 65534)", &opts.webPort,
+        "no-browser", "webui/webdoc: do not open the browser window (the bound URL is still printed)", &opts.noBrowser,
         "completion", "hosts list: print selection candidates (all, host names, @tags), one per line, for shell completions", &opts.completion,
         "y|yes", "with upgrade: skip the y/N confirmation and upgrade unattended", &opts.yes,
         "h|help", "show this help", &wantHelp,

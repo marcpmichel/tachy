@@ -117,9 +117,10 @@ tachy <command> [options] <selection> [<tasks.pravic>...]
 
 - **Per-command help screens**: `tachy help <command>` and
   `<command> -h` print the command's screen — description, `Usage:`
-  line, the shared options block. An incomplete invocation (e.g.
-  `tachy apply` with no selection) shows the screen too, with the
-  reason on stderr and exit code 1.
+  line, and only the options relevant to that command (`tachy webui
+  -h` lists `--address`/`--port`, not `--events`). An incomplete
+  invocation (e.g. `tachy apply` with no selection) shows the screen
+  too, with the reason on stderr and exit code 1.
 - **Colors**: help and manual output is colored on a terminal (bold
   labels, highlighted usage) and plain when piped; `--color` forces
   colors on.
@@ -153,6 +154,7 @@ Example: `tachy apply @web req/web`, `tachy check all`,
 | `--identity PATH` | Age identity for `{ age = ... }` inventory vars and `file` sources marked `age = true`; supersedes the config file's `identity` entry. Default: that entry, then `AGE_IDENTITY` (path or key material), then `~/.ssh/id_ed25519` (age accepts ssh keys). |
 | `--color` | Force colored statuses even when stdout is not a tty. |
 | `--address ADDR`, `--port PORT` | Webui/webdoc only: address (default 127.0.0.1) and port to listen on. The default port (and `0`) is a random port between 10000 and 65534 — both commands are localhost conveniences; the bound URL is printed, and tachy tries to open it in the local browser (`gio open`, best-effort). |
+| `--no-browser` | Webui/webdoc only: do not open the browser window — the bound URL is still printed. |
 | `--completion` | With `hosts list`: print the selection candidates — `all`, every host name, every `@tag` — one per line, the machine format the `generate completions` scripts call. |
 | `-y, --yes` | With `upgrade`: skip the y/N confirmation and upgrade unattended. |
 
@@ -358,10 +360,11 @@ summaries before it leaves.
 
 ### Web UI (tachy webui)
 
-`tachy webui [--address ADDR] [--port PORT]` starts a local web server
+`tachy webui [--address ADDR] [--port PORT] [--no-browser]` starts a local web server
 (a random port between 10000 and 65534 by default — the bound
 `http://127.0.0.1:<port>` URL is printed, and tachy tries to open it in
-the local browser, `gio open`, best-effort) that is a graphical version
+the local browser, `gio open`, best-effort; `--no-browser` keeps the
+browser closed) that is a graphical version
 of the CLI:
 
 - **Projects**: the `webui` `projects` list of config.pravic becomes
@@ -398,9 +401,10 @@ the port can run tachy.
 
 ### Web docs (tachy webdoc)
 
-`tachy webdoc [--address ADDR] [--port PORT]` serves this documentation
+`tachy webdoc [--address ADDR] [--port PORT] [--no-browser]` serves this documentation
 as a small web site (a random port between 10000 and 65534 by default,
-like the webui — the URL is printed and the browser open is attempted)
+like the webui — the URL is printed and the browser open is attempted
+unless `--no-browser`)
 — the same
 ad-hoc web server as the webui and its stylesheet (`webui/app.css`:
 one CSS for both sites, so the docs share the console's dark theme),

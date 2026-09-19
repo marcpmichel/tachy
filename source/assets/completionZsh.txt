@@ -55,6 +55,7 @@ _tachy() {
     '--identity=[age identity for { age = ... } inventory vars]:identity:_files'
     '--address=[webui/webdoc bind address (default 127.0.0.1)]:address:'
     '--port=[webui/webdoc port]:port:'
+    '--no-browser[do not open the browser window]'
     '--completion[hosts list: print selection candidates for completions]'
     '(-y --yes)'{-y,--yes}'[upgrade: skip the y/N confirmation]'
     '(-h --help)'{-h,--help}'[show help]'

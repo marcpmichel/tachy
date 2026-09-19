@@ -1,11 +1,6 @@
 
 ## improve existing
 
-- Add a --no-browser for the webui and webdoc commands : disable the spawning of a browser window
-
-- Display only relevant options in the commands-specific help screens.
-  for example: --colors or --events has no sense for the webui command
-  Said another way : do no display irrelevant options in the help screens.
 
 ## conditions
 

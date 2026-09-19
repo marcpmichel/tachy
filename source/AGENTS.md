@@ -27,7 +27,11 @@ This doc owns the source tree's structure and conventions;
       paragraph or table entry) — no hard wrap at 80 columns; the
       terminal wraps. Code examples and their aligned comment columns
       stay hand-formatted. README's "CLI reference" block is kept
-      byte-identical to `tachy help`.
+      byte-identical to `tachy help`. Option entries in
+      `assets/optionEntries.txt` carry an `@command` tag line (space-
+      separated command words, `@*` = every command) before each
+      entry: `help <command>` screens list only their command's
+      tagged options, while the general help and man list every entry.
   - `runner.d` — per-host orchestration and the read-only `hosts`
     command (`runHosts`: `hosts list [<selection>]` prints the former
     --list-hosts output — `all` when the selection is omitted,
@@ -144,7 +148,7 @@ This doc owns the source tree's structure and conventions;
     their summaries reach the registry, lets SSE threads flush, and
     exits `128 + signal` (webdoc leaves immediately). Both web commands try
     to open the bound URL in the local browser (`tryOpenBrowser`,
-    `gio open`, best-effort). The browser application in `webui/`
+    `gio open`, best-effort) unless `--no-browser`. The browser application in `webui/`
     (plain index.html/app.js/app.css) is embedded at compile time with
     `import("...")` — no framework, no asset pipeline, one binary
   - `webdoc.d` — the `webdoc` command: serves the compiled-in

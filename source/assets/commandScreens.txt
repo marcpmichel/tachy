@@ -49,14 +49,14 @@ the browser and stream their job lines live as Server-Sent Events.
 
 Binds to `--address` (default 127.0.0.1) and `--port` (default: a random
 port between 10000 and 65534); the bound URL is printed and tachy tries
-to open it in the local browser. Anyone who can reach the port can run
-tachy.
+to open it in the local browser (--no-browser keeps it closed). Anyone
+who can reach the port can run tachy.
 
 === webdoc ===
 Serve the documentation compiled into this binary as a small multi-page
 web site — the same `DOCUMENTATION.md` reference, always in sync with
-the binary that serves it. Read-only; same `--address` and `--port`
-options as the webui.
+the binary that serves it. Read-only; same `--address`, `--port` and
+`--no-browser` options as the webui.
 
 === man ===
 Print the full manual on stdout, formatted like a unix man page: NAME,

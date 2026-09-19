@@ -11,7 +11,7 @@ import std.algorithm.comparison : among;
 import std.algorithm.searching : canFind, startsWith;
 import std.exception : assertNotThrown, assertThrown;
 import app : commandEntries;
-import app : optionEntries;
+import app : optionEntriesText;
 import std.getopt : GetOptException;
 import tachy.errors : TachyError;
 import tachy.runner : RunOptions;
@@ -82,7 +82,7 @@ foreach (w; ["h", "w", "m", "x"])
     // the options entries appear in man verbatim, and every command's
     // one-line description appears in the composed COMMANDS section
     import std.string : lineSplitter, strip;
-    foreach (l; optionEntries.lineSplitter)
+    foreach (l; optionEntriesText().lineSplitter)
         if (l.strip.length)
             assert(canFind(m, renderMarkup(l, false).strip()),
                 "man must document: " ~ l);
@@ -94,7 +94,7 @@ foreach (w; ["h", "w", "m", "x"])
 
 foreach (o; ["--keep-bundle", "--color", "--events", "--yes",
     "--verbose", "--direct", "--config", "--identity", "--address",
-    "--port", "--direct-report", "--completion"])
+    "--port", "--no-browser", "--direct-report", "--completion"])
 {
     RunOptions opts;
     bool wantHelp;
@@ -192,12 +192,60 @@ foreach (w; ["apply", "check", "hosts", "generate", "webui", "webdoc",
     const s = commandHelpText(c);
     assert(canFind(s, commandOneLinerText(w)), s); // the one-liner header
     assert(canFind(s, "__Usage:__ **tachy " ~ w) || canFind(s, "__Usage:__ **tachy**"), s);
-    assert(canFind(s, "__Options:__"), s);         // the shared options block
-    assert(canFind(s, "--inventory"), s);
+    assert(canFind(s, "__Options:__"), s);         // the command's options block
+    assert(canFind(s, "-h, --help"), s);           // every command takes -h
     assert(canFind(s, "tachy man\" for the full manual"), s);
     // the body exists and is more than the one-liner
-    assert(s.length > 600, w ~ " screen too short");
+    assert(s.length > 150, w ~ " screen too short");
 }
+
+// each screen lists only its command's options: apply/check run
+// everything; the checks-by-nature commands list nothing they ignore
+const applyScreen = commandHelpText(Cmd.apply);
+foreach (o; ["--inventory", "--verbose", "--direct", "--direct-report",
+    "--events", "--keep-bundle", "--config", "--identity", "--color"])
+    assert(canFind(applyScreen, o), "apply screen lacks " ~ o);
+
+const versionScreen = commandHelpText(Cmd.showVersion);
+foreach (o; ["--inventory", "--verbose", "--direct", "--events", "--yes",
+    "--address", "--color"])
+    assert(!canFind(versionScreen, o), "version screen must not list " ~ o);
+
+const webuiScreen = commandHelpText(Cmd.webui);
+foreach (o; ["--inventory", "--config", "--identity", "--address", "--port",
+    "--no-browser"])
+    assert(canFind(webuiScreen, o), "webui screen lacks " ~ o);
+foreach (o; ["--verbose", "--direct", "--direct-report", "--events",
+    "--keep-bundle", "--completion", "--yes", "--color"])
+    assert(!canFind(webuiScreen, o), "webui screen must not list " ~ o);
+
+const webdocScreen = commandHelpText(Cmd.webdoc);
+foreach (o; ["--address", "--port", "--no-browser"])
+    assert(canFind(webdocScreen, o), "webdoc screen lacks " ~ o);
+foreach (o; ["--inventory", "--events", "--direct", "--yes", "--color"])
+    assert(!canFind(webdocScreen, o), "webdoc screen must not list " ~ o);
+
+const hostsScreen = commandHelpText(Cmd.hosts);
+foreach (o; ["--inventory", "--config", "--identity", "--completion"])
+    assert(canFind(hostsScreen, o), "hosts screen lacks " ~ o);
+foreach (o; ["--verbose", "--direct", "--events", "--yes", "--address",
+    "--color"])
+    assert(!canFind(hostsScreen, o), "hosts screen must not list " ~ o);
+
+const upgradeScreen = commandHelpText(Cmd.upgrade);
+assert(canFind(upgradeScreen, "--yes"), upgradeScreen);
+foreach (o; ["--inventory", "--events", "--direct", "--address", "--color"])
+    assert(!canFind(upgradeScreen, o), "upgrade screen must not list " ~ o);
+
+const manScreen = commandHelpText(Cmd.man);
+assert(canFind(manScreen, "--color"), manScreen);
+foreach (o; ["--inventory", "--events", "--yes", "--address"])
+    assert(!canFind(manScreen, o), "man screen must not list " ~ o);
+
+const genScreen = commandHelpText(Cmd.generate);
+foreach (o; ["--inventory", "--events", "--direct", "--yes", "--address",
+    "--color"])
+    assert(!canFind(genScreen, o), "generate screen must not list " ~ o);
 
 // screens carry their body from commandScreens.txt
 const hosts = commandHelpText(Cmd.hosts);
