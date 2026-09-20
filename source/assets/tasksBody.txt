@@ -97,7 +97,11 @@
       code = 200                      # code (default 200) tests the status
       output = { contains = "ok" }    # output the body (ensure's shapes)
       timeout = 10                    # timeout bounds the whole query (default 10s).
-                                      # Plain http only, queried by tachy itself (no curl needed)
+                                      # http or https (system OpenSSL);
+                                      # queried by tachy itself
+      redirects = "no"                # redirects are followed by default (up
+                                      # to 10); "no" or { max = N } changes it
+      insecure = true                 # accept invalid certificates (default false)
 
   repo /srv/app {                     # ensure a git repository exists and is
       url = "git@example.com/me/app.git"  # synchronized: cloned when the path

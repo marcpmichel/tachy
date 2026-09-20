@@ -7,6 +7,9 @@
 	"license": "proprietary",
 	"name": "tachy",
 	"version": "0.1.0",
+	"dependencies": {
+		"requests": "~>2.2.1"
+	},
 	"preBuildCommands": [
 		"date +%y.%m.%d | cmp -s - '$PACKAGE_DIR/source/assets/version' || date +%y.%m.%d > '$PACKAGE_DIR/source/assets/version'"
 	],

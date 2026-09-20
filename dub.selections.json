@@ -1,6 +1,11 @@
 {
 	"fileVersion": 1,
 	"versions": {
-		"silly": "1.2.0-dev.2"
+		"automem": "0.6.11",
+		"cachetools": "0.4.2",
+		"requests": "2.2.1",
+		"silly": "1.2.0-dev.2",
+		"test_allocator": "0.3.4",
+		"unit-threaded": "2.2.5"
 	}
 }

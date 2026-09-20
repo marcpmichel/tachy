@@ -252,23 +252,23 @@ unittest
     assert(t["ensure"].integer_ == 1 && t["vars"].integer_ == 2);
 }
 
-@("http directive keyword: quoted and bare URL keys, guarded boundary")
+@("probe directive keyword: quoted and bare URL keys, guarded boundary")
 unittest
 {
     import std.algorithm.searching : canFind, startsWith;
 
-    auto stmts = parseStmts("http \"http://localhost/h\" { code = 200 }\n");
+    auto stmts = parseStmts("probe \"http://localhost/h\" { code = 200 }\n");
     assert(stmts.length == 1);
-    assert(stmts[0].kind == "http");
+    assert(stmts[0].kind == "probe");
     assert(stmts[0].key == "http://localhost/h");
     assert(stmts[0].value.table_["code"].integer_ == 200);
 
     // ':' '/' '.' '.' are key characters: URLs need no quotes
-    stmts = parseStmts("http http://127.0.0.1:8080/healthz { }\n");
-    assert(stmts[0].kind == "http" && stmts[0].key == "http://127.0.0.1:8080/healthz");
+    stmts = parseStmts("probe https://127.0.0.1:8080/healthz { }\n");
+    assert(stmts[0].kind == "probe" && stmts[0].key == "https://127.0.0.1:8080/healthz");
 
-    // the keyword guard: `https://...` is one unknown directive, not
-    // `http` followed by a key
+    // the keyword guard: a bare scheme is one unknown directive, not
+    // some keyword followed by a key
     string msg;
     try
     {
@@ -281,8 +281,8 @@ unittest
     assert(canFind(msg, "https"), msg);
 
     // braceless when there are no attributes at all
-    stmts = parseStmts("http http://localhost/ping\n");
-    assert(stmts[0].kind == "http" && stmts[0].key == "http://localhost/ping");
+    stmts = parseStmts("probe http://localhost/ping\n");
+    assert(stmts[0].kind == "probe" && stmts[0].key == "http://localhost/ping");
 }
 
 @("repo directive: both forms, canonical kind, keyword guard")

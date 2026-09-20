@@ -41,7 +41,7 @@ This doc owns module-level contracts.
   `docker inspect` labels, config drift via `docker compose config
   --hash` vs the container's config-hash label — then `up --detach`/
   `stop`/`down` with the pull/build/recreate/wait policy flags),
-  `httpmod` (the `http` directive: one request through the in-process
+  `probemod` (the `probe` directive: one request through the in-process
   client in `tachy.http` — no transport, no curl — asserting on the
   status and body; a check by nature, so it runs even in check mode
   and never reports `changed`), `debugmod` (the `debug` directive: the
@@ -56,7 +56,7 @@ This doc owns module-level contracts.
   (stat/getent/dpkg-query/systemctl), act only on drift, report
   `changed` truthfully; `ok` when already conformant
 - Check mode: probes run, mutations go through `mustRun` (suppressed in
-  check mode, i.e. the `check` command); `ensure`-, `assert`-, `http`-
+  check mode, i.e. the `check` command); `ensure`-, `assert`-, `probe`-
   and `debug`-directive jobs are checks by nature and run even in check
   mode, never reporting `changed`
 - Command output: `mustRun`/`mustRunWithInput` and `ensuremod` capture
@@ -72,7 +72,7 @@ This doc owns module-level contracts.
 
 - Relative paths (`src`, `template`, execute `run`) resolve against the
   defining tasks file's directory (`TaskContext.tasksFileDir`)
-- `httpmod` never touches the transport: it queries through
+- `probemod` never touches the transport: it queries through
   `tachy.http` from the process running the job (the managed host in
   bundled runs, the controller for `--direct`), so its unittests run
   against the in-process listener in `tests/http.d` (`OneShotServer`)
@@ -86,7 +86,7 @@ This doc owns module-level contracts.
 
 - Every module carries unittests covering creation, drift repair,
   removal, idempotence and every error path — against the scripted
-  fake transport, or against the in-process listener for `httpmod`
+  fake transport, or against the in-process listener for `probemod`
 - End-to-end on the `testing.internal` VM over ssh for anything
   touching real system state; leave the VM as found
 - `dub build` compiles; `dub test` runs all module unittests (must pass)

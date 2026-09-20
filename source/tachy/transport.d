@@ -161,13 +161,23 @@ private CommandResult runCommand(string[] argv, string input = null,
 
 /// One unbuffered read on a descriptor: returns the bytes available
 /// now (0 at end of stream), unlike File.rawRead's fill-the-buffer
-/// semantics which would batch a streamed run until EOF.
+/// semantics which would batch a streamed run until EOF.  Interrupted
+/// reads retry: -1/EINTR must not masquerade as end of stream, or a
+/// signal arriving mid-command silently truncates the output.
 private ptrdiff_t posixRead(int fd, ubyte[] buf) @system
 {
     version (Posix)
     {
         import core.sys.posix.unistd : read;
-        return read(fd, buf.ptr, buf.length);
+        import core.stdc.errno : errno, EINTR;
+        for (;;)
+        {
+            const auto n = read(fd, buf.ptr, buf.length);
+            if (n >= 0)
+                return n;
+            if (errno != EINTR)
+                return n;
+        }
     }
     else
         static assert(false, "tachy requires a POSIX system");

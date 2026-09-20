@@ -13,7 +13,7 @@ public import tachy.modules.composemod : runComposeModule;
 public import tachy.modules.debugmod : runDebugModule;
 public import tachy.modules.ensuremod : runEnsureModule;
 public import tachy.modules.filemod : runFileModule;
-public import tachy.modules.httpmod : runHttpModule;
+public import tachy.modules.probemod : runProbeModule;
 public import tachy.modules.packagemod : runPackageModule;
 public import tachy.modules.repomod : runRepoModule;
 public import tachy.modules.servicemod : runServiceModule;
@@ -21,7 +21,7 @@ public import tachy.modules.servicemod : runServiceModule;
 import tachy.modules.assertmod : assertionExpectation;
 import tachy.modules.composemod : validateComposeParams;
 import tachy.modules.ensuremod : excerpt, parseExitStatus, parseOutput;
-import tachy.modules.httpmod : validateHttpParams;
+import tachy.modules.probemod : validateProbeParams;
 import tachy.modules.packagemod : validatePackageKey;
 
 import tachy.errors;
@@ -46,7 +46,7 @@ struct TaskResult
     string[] details;  // commands executed + change details (shown with -v)
 }
 
-private immutable string[] allModules = ["file", "service", "ensure", "assert", "group", "user", "package", "compose", "http", "repo", "debug"];
+private immutable string[] allModules = ["file", "service", "ensure", "assert", "group", "user", "package", "compose", "probe", "repo", "debug"];
 
 /// Registered module names.
 string[] moduleNames() @safe pure nothrow
@@ -125,13 +125,14 @@ void validateModuleParams(string moduleName, in Val[string] params, string conte
                 context ~ " (assert)");
             break;
         }
-        case "http":
+        case "probe":
         {
             checkKeys(params, ["url", "type", "headers", "data", "code",
-                "output", "timeout"], context ~ " (http)");
+                "output", "timeout", "redirects", "insecure"],
+                context ~ " (probe)");
             if ("url" !in params)
-                throw new TachyError(context ~ " (http): 'url' is required");
-            validateHttpParams(params, context ~ " (http)");
+                throw new TachyError(context ~ " (probe): 'url' is required");
+            validateProbeParams(params, context ~ " (probe)");
             break;
         }
         case "group":
@@ -257,7 +258,7 @@ TaskResult runModule(string moduleName, Val[string] params, TaskContext ctx)
         case "package": return runPackageModule(params, ctx);
         case "repo": return runRepoModule(params, ctx);
         case "compose": return runComposeModule(params, ctx);
-        case "http": return runHttpModule(params, ctx);
+        case "probe": return runProbeModule(params, ctx);
         case "debug": return runDebugModule(params, ctx);
         default:
             throw new TachyError("unknown module '" ~ moduleName ~ "'");

@@ -5,26 +5,33 @@ module tachy.upgrade;
  * GitHub releases of this repository (the slug is hard-coded).
  *
  * One step, no sub-commands: `tachy upgrade` resolves the latest
- * release through GitHub's "releases/latest" redirect — one curl call,
- * no API, no rate limit, no JSON — and compares it with the running
- * build (versions are dates, YY.mm.dd).  Same version: it says so and
- * exits.  An update available: it asks "upgrade tachy now? [y/N]" on a
- * terminal (`--yes` skips the question; without a terminal, `--yes` is
- * required so scripts never hang on a prompt), downloads the release
- * asset `tachy-<version>-linux-amd64` next to the running binary,
- * verifies it answers `version` with the expected version and renames
- * it over the running binary — an atomic same-filesystem rename; the
- * running process keeps its old image until it exits.  Every step
- * before the rename can fail without touching the installed tachy.
+ * release through GitHub's "releases/latest" redirect — one HEAD
+ * request, no API, no rate limit, no JSON — and compares it with the
+ * running build (versions are dates, YY.mm.dd).  Same version: it says
+ * so and exits.  An update available: it asks "upgrade tachy now?
+ * [y/N]" on a terminal (`--yes` skips the question; without a
+ * terminal, `--yes` is required so scripts never hang on a prompt),
+ * downloads the release asset `tachy-<version>-linux-amd64` next to
+ * the running binary, verifies it answers `version` with the expected
+ * version and renames it over the running binary — an atomic
+ * same-filesystem rename; the running process keeps its old image
+ * until it exits.  Every step before the rename can fail without
+ * touching the installed tachy.
  *
- * curl is required: GitHub is HTTPS-only and `tachy.http` is
- * deliberately plain HTTP (curl joins age, git and docker in the set
- * of external tools tachy shells out to).
+ * No external tools: the redirect check and the download both run
+ * through `tachy.http` — the `requests` dub package with the system
+ * OpenSSL, redirects followed.  `httpDownload` rides them to the
+ * release CDN; the `probe` directive follows by default too (its
+ * `redirects` attribute tunes or disables).
  */
+import core.time : seconds;
 import std.algorithm.searching : canFind, startsWith;
 import std.string : strip;
 
+import requests : Request;
+
 import tachy.errors;
+import tachy.http : httpDownload;
 import tachy.runner : RunOptions;
 import tachy.transport : CommandResult, LocalTransport, shQuote;
 
@@ -169,16 +176,14 @@ private string assetUrl(in string v) @safe pure
         ~ v ~ "/tachy-" ~ v ~ "-linux-amd64";
 }
 
-/// Download the release asset with curl: silent, redirects followed,
-/// HTTP errors fail (curl -f) — a "not found" page must not become the
-/// new binary.
+/// Download the release asset through the built-in https client
+/// (`httpDownload`): redirects followed, TLS verified against the
+/// system store, non-200 fails — a "not found" page must not become
+/// the new binary.  The one-minute timeout bounds each stalled IO
+/// operation, not the whole transfer.
 private void downloadRelease(in string url, in string tmpPath) @trusted
 {
-    auto r = (new LocalTransport).run("curl -fsSL -o " ~ shQuote(tmpPath)
-        ~ " " ~ shQuote(url));
-    if (!r.ok)
-        throw new TachyError("upgrade: cannot download '" ~ url ~ "': "
-            ~ failText(r));
+    httpDownload(url, tmpPath, [], 60.seconds, "upgrade");
 }
 
 /// Prove the downloaded file is the release we asked for before it
@@ -229,16 +234,31 @@ private string failText(in CommandResult r) @safe pure
 
 /// Resolve the latest release's version: the "releases/latest" URL
 /// answers a HEAD request with a 302 whose Location points at the
-/// newest release tag — one tiny curl call, no API.
+/// newest release tag — one tiny request, no API.  Redirects stay
+/// unfollowed: the redirect is the answer.
 private string defaultLatestRelease() @trusted
 {
-    auto r = (new LocalTransport).run(
-        "curl -fsSI -o /dev/null -w '%{redirect_url}' https://github.com/"
-        ~ repoSlug ~ "/releases/latest");
-    if (!r.ok)
+    auto rq = Request();
+    rq.maxRedirects = 0;
+    rq.timeout = 30.seconds;
+    string location;
+    ushort code;
+    try
+    {
+        auto rs = rq.exec!"HEAD"("https://github.com/" ~ repoSlug
+            ~ "/releases/latest");
+        code = rs.code;
+        if (auto loc = "location" in rs.responseHeaders)
+            location = (*loc).strip;
+    }
+    catch (Exception e)
         throw new TachyError("upgrade: cannot reach the releases of " ~ repoSlug
-            ~ ": " ~ failText(r) ~ " (is curl installed?)");
-    return latestFromEffectiveUrl(r.outText.strip);
+            ~ ": " ~ e.msg);
+    if (!location.length)
+        throw new TachyError("upgrade: cannot determine the latest release of "
+            ~ repoSlug ~ ": status " ~ intText(code)
+            ~ " without a Location header");
+    return latestFromEffectiveUrl(location);
 }
 
 /// Extract the release version from the effective URL of the

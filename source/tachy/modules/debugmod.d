@@ -10,7 +10,7 @@ module tachy.modules.debugmod;
  * parameters, so `{{ ... }}` references resolve against the host's
  * scope.  The job never fails and never reports `changed` — it only
  * prints, as `debug <message>`, when the host's job line is produced.
- * Like `ensure` and `http` jobs it runs in check mode too (it is pure
+ * Like `ensure` and `probe` jobs it runs in check mode too (it is pure
  * display, nothing is applied), and it touches no transport.
  */
 import tachy.modules : TaskContext, TaskResult;

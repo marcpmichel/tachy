@@ -127,7 +127,7 @@ GroupKeyword ← ( 'vars' / 'files' / 'directories' / 'packages'
 SingleKeyword ← ( 'var' / 'file' / 'directory' / 'package'
                 / 'group' / 'user' / 'service' / 'host'
                 / 'apply' / 'assert' / 'ensure' / 'compose' / 'import'
-                / 'identity' / 'http' / 'repo' / 'debug' ) !KeyChar
+                / 'identity' / 'probe' / 'repo' / 'debug' ) !KeyChar
 Block        ← '{' WS Entries? WS '}'
 Entries      ← Entry (BSep Entry)* BSep?
 Entry        ← Key HS (Block / Eq / EndOfEntry)   -- or nothing: no attributes
@@ -238,7 +238,7 @@ Tasks files:
 | command checks | — | `ensure "task name" { run = "..." }` — asserts on exit status/output; runs even in dry-run mode |
 | assertions | `asserts { "name" = { ... } }` | `assert "name" { value = "...", ... }` — tests the rendered `value` against `ensure`'s `output` patterns (`equals`/`contains`/`matches`, composed with `not`/`any`/`all`/`none`); variables only, no host contact; runs even in dry-run mode |
 | messages | — | `debug "message"` — prints the (templated) message as a job line, never fails and never changes anything; no attributes; runs even in dry-run mode |
-| HTTP checks | — | `http "url" { ... }` — submits a request (`type`, `headers`, `data`) and asserts on status (`code`) and body (`output`, `ensure`'s shapes); plain http only |
+| HTTP checks | — | `http "url" { ... }` — submits a request (`type`, `headers`, `data`) and asserts on status (`code`) and body (`output`, `ensure`'s shapes); `http://`/`https://`; redirects followed by default (up to 10), `redirects` = `"no"` or `{ max = N }`; `insecure` = true accepts invalid certificates |
 | composition | — | `apply "path" { bindings }` — composes at its position; bindings as entry keys or grouped in a `vars` sub-block; a path under an `import` destination composes on the host |
 | bundle imports | — | `import "path"` — no parameters (the braces are optional) |
 

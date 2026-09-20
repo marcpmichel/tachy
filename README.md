@@ -28,7 +28,7 @@ tachy apply '@web'     # applies main.pravic; its directory is the project
 
 - **Inventory**: hosts with connection details, tags and variables.
 - **Tasks files**: `file`, `directory`, `service`, `compose` (plus
-  `package`, `group`, `user`, `ensure`, `http`, `repo`, `debug`)
+  `package`, `group`, `user`, `ensure`, `probe`, `repo`, `debug`)
   statements keyed by path,
   unit name, URL or stack dir — the target *is* the statement key. Two
   equivalent forms, group and single.
@@ -396,7 +396,7 @@ A tasks file is a sequence of statements, one per line (all optional):
 | `group NAME { ... }` | name | `state` (default `present`; `absent` removes). |
 | `user NAME { ... }` | name | `group` (primary; default: a group named after the user), `groups` (supplementary, additive only), `shell` (default `/bin/sh` at creation), `comment`, `create_home` (default `true`, creation only), `home` (default `/home/<name>` at creation), `state` (default `present`; `absent` removes), `remove_home` (default `false`, with `state = "absent"`). |
 | `ensure "name" { ... }` | name | `run` (required), `args` (array of strings appended to `run`, one element one argument), `exit_status` (integer, `{ not = N }`, or `{ cond = "OP N" }`; default 0), `output` (string, `{ equals = "..." }`/`{ contains = "..." }`/`{ matches = "..." }`, composed: several keys AND together, `{ not = <pattern> }`, `{ any }`/`{ all }`/`{ none }` arrays) |
-| `http URL { ... }` | url | `type` (any HTTP method, default `GET`), `headers` (array of `"Name=Value"`), `data` (body, sent verbatim), `code` (expected status, default `200`), `output` (body assertion, `ensure`'s shapes), `timeout` (seconds, default `10`). Plain `http://` only; queried by tachy itself (no curl) — on the host in bundled runs, from the controller with `--direct`; a check by nature: runs in check mode, never `changed`. |
+| `probe URL { ... }` | url | `type` (any HTTP method, default `GET`), `headers` (array of `"Name=Value"`), `data` (body, sent verbatim), `code` (expected status, default `200`), `output` (body assertion, `ensure`'s shapes), `timeout` (seconds, default `10`), `redirects` (`"no"`, or `{ max = N }`; default: follow up to 10), `insecure` (boolean, default `false`: accept invalid certificates). `http://` or `https://` (TLS from the system OpenSSL); queried by tachy itself (no curl) — on the host in bundled runs, from the controller with `--direct`; a check by nature: runs in check mode, never `changed`. |
 | `assert "name" { ... }` | name | `value` (required, templated) plus the expectation keys — `ensure`'s `output` shapes: `equals`/`contains`/`matches`, composed with `not`/`any`/`all`/`none`; several keys AND together, at least one required. Tests rendered variables on the controller — no command runs, no host contact; a check by nature (runs in check mode, never `changed`). |
 | `debug "message"` | message | No attributes: prints the (templated) message as a job line — never fails, never `changed`, runs in check mode too. |
 | `apply "path" { bindings }` | path | Composes another tasks file **at the statement's position**, carrying its own variables: the binding's entry keys, or the same grouped in a `vars { ... }` sub-block. Bindings resolve `{ env }`/`{ run }` markers at load like every other var. A path naming an existing directory uses its `main.pravic`, like a directory CLI argument. |
@@ -516,12 +516,18 @@ Idempotency semantics:
   The command runs with the defining tasks file's directory as its
   working directory, so relative paths (scripts, data files) resolve
   next to the file that declares the job.
-- `http`: submits one HTTP request and checks the answer — `type` is any
+- `probe`: submits one HTTP request and checks the answer — `type` is any
   HTTP method (default `GET`), `headers` an array of `"Name=Value"`
   strings, `data` the body sent verbatim, `code` the expected status
   (default `200`), `output` the body assertion (the same shapes
   `ensure`'s `output` accepts) and `timeout` the whole-query budget in
-  seconds (default `10`). Plain `http://` only; the query is issued by
+  seconds (default `10`). `http://` or `https://` (TLS from the system
+  OpenSSL). Redirects are followed by default, up to ten; `redirects =
+  "no"` shows the job the redirect answer itself (pair it with the
+  expected `code`), and `redirects = { max = N }` sets another cap.
+  `insecure = true` accepts invalid certificates (self-signed and the
+  like); TLS itself stays on.
+  The query is issued by
   tachy itself (no curl on the host) — on the managed host in bundled
   runs, from the controller with `--direct`. Like `ensure` these jobs
   are checks by nature: they run even in check mode and never report
@@ -790,7 +796,7 @@ source/tachy/
   transport.d                Transport interface, local/ssh, shell helpers
   signals.d                  SIGINT/SIGTERM: cooperative stop, child registry
   runner.d                   orchestration: bundled and direct modes
-  http.d                     minimal HTTP/1.1 client (the http directive)
+  http.d                     minimal HTTP/1.1 client (behind the probe directive)
   generate.d                 the generate command: age keys, sample files
   config.d                   optional config.pravic: identity, imports
                              search paths, webui projects
@@ -802,7 +808,7 @@ source/tachy/
     packagemod.d             package installs/removals (apt via dpkg-query)
     ensuremod.d               shell command ensures (exit status / output)
     assertmod.d              variable assertions (ensure's output shapes)
-    httpmod.d                http checks (status / body assertions)
+    probemod.d                probe checks (status / body assertions)
     composemod.d             Docker Compose stacks (config-hash probes)
     repomod.d                git repositories (clone, origin, fetch/checkout sync)
     fake.d                   scripted transport (unit tests only)

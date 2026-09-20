@@ -425,7 +425,7 @@ TaskResult runEnsureModule(Val[string] params, TaskContext ctx)
 }
 
 /// Cap an output excerpt so error messages stay readable (shared with
-/// the `http` module's body assertions).
+/// the `probe` module's body assertions).
 string excerpt(string s) @safe pure
 {
     import std.algorithm.searching : canFind;

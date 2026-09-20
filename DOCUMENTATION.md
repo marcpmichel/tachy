@@ -102,7 +102,7 @@ tachy <command> [options] <selection> [<tasks.pravic>...]
   | Command | Description |
   |---|---|
   | `apply` (`a`) | Apply the tasks files to the selected hosts. |
-  | `check` (`c`) | Check mode: report the changes that would be made, apply nothing. `ensure` and `http` jobs still run — they are checks by nature — and `debug` messages still print. |
+  | `check` (`c`) | Check mode: report the changes that would be made, apply nothing. `ensure` and `probe` jobs still run — they are checks by nature — and `debug` messages still print. |
   | `hosts` | Inspect hosts without running anything — see [hosts](#hosts). |
   | `generate` (`g`) | Create something new — see [generate](#generate). |
   | `webui` | Start a local web server, a graphical version of the CLI — see [Web UI](#web-ui-tachy-webui). |
@@ -244,9 +244,12 @@ up the new date automatically.
 `tachy upgrade` keeps an installed tachy current with the latest
 release of `marcpmichel/tachy` on GitHub, in one step. The latest
 version comes from GitHub's `releases/latest` redirect — one HEAD
-request, no API and no rate limit — so **curl must be installed** on
-the controller (GitHub is HTTPS-only; tachy's own HTTP client is
-plain HTTP by design).
+request, no API and no rate limit. The check and the download both
+run through tachy's built-in https client (`httpDownload` in
+`tachy.http`: the `requests` package, whose TLS dlopens the system
+OpenSSL at first https use), so **no external tools are needed** on
+the controller (GitHub is HTTPS-only; the `probe` directive's own
+client is plain HTTP by design).
 
 Same version: tachy reports and exits. An update available: tachy
 asks `upgrade tachy now? [y/N]` on a terminal. `--yes` (or `-y`)
@@ -1065,25 +1068,26 @@ exactly "8080"`.
 
 ---
 
-### `http` — HTTP checks
+### `probe` — HTTP checks
 
 Keyed by URL. Submits one HTTP request **from the tachy process running
 the job** — on the managed host in bundled runs (the default), on the
 controller for `--direct` runs — and asserts on the answer. The query
-comes from tachy itself (a small client on plain TCP sockets: no curl,
-nothing installed on the host); it is plain `http://` only — no TLS, no
-redirects — and one `timeout` bounds the whole query (connect, send,
-receive). Like `ensure`, these jobs are checks by nature: they run even
+comes from tachy itself (the `requests` client, TLS from the system
+OpenSSL: no curl, nothing installed on the host); it speaks `http://`
+and `https://`, follows redirects by default (up to ten — the
+`redirects` attribute tunes or disables that), and `timeout` bounds
+each of connect, send and receive. Like `ensure`, these jobs are checks by nature: they run even
 in check mode, report `ok` when the expectations hold and never report
 `changed`.
 
 ```pravic
-http http://localhost:8080/health {   # bare URLs need no quotes
+probe http://localhost:8080/health {   # bare URLs need no quotes
     code = 200
     output = { contains = "ok" }
 }
 
-http "http://api.internal/v1/pets" {
+probe "http://api.internal/v1/pets" {
     type = "POST",                    # any HTTP method (default "GET")
     headers = ["Content-Type=application/json"],
     data = "{\"name\": \"bo\"}",
@@ -1102,9 +1106,11 @@ http "http://api.internal/v1/pets" {
 | `code` | `200` | The expected HTTP status (100–599). |
 | `output` | — | The response body, compared after trimming surrounding whitespace — the same shapes `ensure` accepts: a string (exact, or spelled `{ equals = "..." }`), `{ contains = "..." }` or `{ matches = "regex" }`, composed the same way (several keys AND together, `not`, `any`/`all`/`none` arrays). |
 | `timeout` | `10` | Seconds for the whole query (name resolution aside); zero or less is a load-time error, running past it fails the job. |
+| `redirects` | follow, up to 10 | `"no"` disables redirect following — the job then sees the redirect answer itself (pair with `code = 301`/`302`); `{ max = N }` follows with another cap (0 ≡ `"no"`). |
+| `insecure` | `false` | Accept invalid certificates (self-signed and the like) by disabling certificate verification — TLS itself stays on. |
 
 A failed expectation fails the host with the actual status (and a body
-excerpt): `http '…/health': status 503, expected 200; output: '…'`.
+excerpt): `probe '…/health': status 503, expected 200; output: '…'`.
 
 ## Secrets (age)
 

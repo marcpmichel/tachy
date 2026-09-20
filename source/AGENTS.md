@@ -96,12 +96,22 @@ This doc owns the source tree's structure and conventions;
     arrays (`_` is the mandatory default, parser-enforced)
   - `transport.d` — `local` and `ssh` transports (abstract class; `runStreaming` delivers output lines live — POSIX `read`, not buffered `rawRead`, so streams are not batched), `shQuote`, stat helpers; every spawned child pid is registered with `tachy.signals` so a SIGINT/SIGTERM can reach it
   - `signals.d` — the SIGINT/SIGTERM cooperative stop: handler (no SA_RESTART) sets a flag and terminates tracked children; run loops check between jobs and finish with a summary + exit `128 + signal` (second signal kills hard, old die-now behavior); the web loops leave their accept on the same flag
-  - `http.d` — the minimal HTTP/1.1 client behind the `http` directive:
-    plain TCP via std.socket (no libcurl, no external processes), plain
-    `http://` only, one deadline bounding connect/send/receive
-    (select(2)), bodies by Content-Length/chunked/close, capped size;
-    methods and header entries are validated here at run time (the
-    module pre-checks literal values at load time)
+  - `http.d` — the HTTP client behind the `http` directive and
+    `upgrade.d`'s downloads: the `requests` dub package driving plain
+    `http://` and `https://` alike (TLS dlopened from the system OpenSSL
+    at first https use, peer verification on, no external processes).
+    `httpQuery` follows redirects by default, up to
+    `defaultMaxRedirects` (10) — the `redirects` attribute (`"no"` or
+    `{ max = N }`) tunes or disables that — and buffers the body under
+    `maxBodyBytes`; request bodies
+    travel with Content-Length (never chunked) and a User-Agent of
+    "tachy"; one connection per query (`Connection: close`, so
+    unframed responses end at EOF); failures map onto TachyError with
+    context, and methods / "Name=Value" header entries are validated
+    here (the `probe` module pre-checks literal values at load time).
+    `insecure` turns certificate verification off per query;
+    `httpDownload` follows redirects (release CDN), caps at
+    `maxDownloadBytes` and writes the file only after a complete 200
   - `project.d` — project bundles (project copy plus `import` sources
     under their base name, controller-decrypted `age = true` sources
     written over their ciphertext copies, generated one-host
@@ -119,14 +129,16 @@ This doc owns the source tree's structure and conventions;
     `hosts list --completion`, with `-i` passed through)
   - `upgrade.d` — the `upgrade` command: compares the running build
     with the latest GitHub release through the `releases/latest`
-    redirect (curl on the local transport; the repo slug is
-    hard-coded), then asks y/N on a tty (`--yes` skips; no tty
-    requires `--yes`), downloads the `tachy-<version>-linux-amd64`
-    release asset next to the running binary, verifies it answers
-    `version` with the expected version and renames it over the
-    running binary. One delegate hook per step (latest release,
-    download, confirm, replace) stands in for the network, the
-    prompt and the swap in tests
+    redirect (one redirect-unfollowing HEAD through the `requests`
+    package; the repo slug is hard-coded), then asks y/N on a tty
+    (`--yes` skips; no tty requires `--yes`), downloads the
+    `tachy-<version>-linux-amd64` release asset next to the running
+    binary via `httpDownload` (TLS from the system OpenSSL, redirects
+    followed to the CDN), verifies it answers `version` with the
+    expected version and renames it over the running binary. One
+    delegate hook per step (latest release, download, confirm,
+    replace) stands in for the network, the prompt and the swap in
+    tests
   - `config.d` — the optional config.pravic (discovery: `--config`,
     `TACHY_CONFIG`, ./config.pravic, XDG; the `identity` age entry
     — both spellings, `effectiveIdentity` makes the `--identity` flag

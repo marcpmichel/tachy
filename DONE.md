@@ -2828,3 +2828,193 @@
      syntax/pravic.vim (`asserts|assert` keywords; synID-verified in
      vim and nvim: both highlight as pravicKeyword, `assertx` stays a
      plain key).
+
+84. abandoned — http.d download helper + curl-free `upgrade` download
+   (operator decision: give up if SSL is needed).
+   - Evaluated both TODO entries ("add download code to http.d, not
+     exposed to the http command" and "use it in upgrade instead of
+     curl"): GitHub is HTTPS-only end to end — `http://github.com/...`
+     answers `301 Moved Permanently` to the https URL, `releases/latest`
+     redirects to `https://github.com/marcpmichel/tachy/releases/tag/...`
+     and the asset itself is served by `objects.githubusercontent.com`
+     over HTTPS. A curl-free download therefore requires TLS.
+   - `tachy.http` is deliberately a plain-TCP std.socket client (no
+     libcurl, no external processes, plain http only). Adding TLS would
+     mean linking OpenSSL/GnuTLS (breaking the zero-runtime-dependency
+     design) or shelling out to an external tool — which is precisely
+     what the current `upgrade.d` does with `curl -fsSL`. http.d also
+     has no redirect support by design, which the upgrade flow needs
+     twice (http→https, then releases/latest → the CDN URL).
+   - Decision (operator, 2026-09-20): no implementation without a
+     no-SSL path; keep `upgrade` on curl. No source, doc or test
+     changes; TODO.md emptied.
+
+85. http.d download helper + curl-free `upgrade` — implemented after
+   the operator reopened entry 84 with the dub `requests` route.
+   - `dub.json` gains `requests ~2.2.1` (transitively `cachetools`).
+     Its TLS backend dlopens the system OpenSSL at first https use —
+     requests 2.2.1 uses no separate dub `openssl` package (its
+     dub.json declares only cachetools; the adapter binds
+     libssl/libcrypto through dlsym), and `ldd tachy` shows no
+     link-time TLS dependency.
+   - New `httpDownload` in `source/tachy/http.d`: the one https-capable
+     download in tachy (plain http too), redirects followed,
+     "Name=Value" headers validated like `httpQuery`, per-op timeout,
+     `maxDownloadBytes` (64 MiB) cap via requests' `maxContentLength`;
+     a non-200 status, timeout, oversized body or transport failure
+     throws with context and writes nothing. Used by `upgrade.d` only —
+     the `http` directive keeps `httpQuery` (plain http, unchanged).
+   - `upgrade.d` cut over: `defaultLatestRelease` is one HEAD with
+     `maxRedirects = 0` (the 302's Location is the answer; requests
+     lowercases response header keys), `downloadRelease` calls
+     `httpDownload` (60s stall bound); curl is gone from upgrade
+     entirely (no longer listed among the external tools).
+   - Unittests in tests/http.d (6): body lands in the file with custom
+     headers, redirect followed to the final body, non-200 fails
+     writing nothing, oversized body rejected, stalled server times
+     out, header validation before any request (OneShotServer over
+     plain http; the TLS leg is covered by the real-network run).
+   - Verified end-to-end against real GitHub with a scratch driver
+     running `runUpgrade` with only the final rename hooked out: real
+     `releases/latest` HEAD resolved 26.09.17, real https download
+     through objects.githubusercontent.com, `verifyDownloaded` ran the
+     asset and matched "tachy 26.09.17"; the downloaded binary then
+     executed and reported the right version. `tachy upgrade` on the
+     26.09.20 build correctly reports newer-than-latest. `dub test`:
+     230 passed, 0 failed.
+   - Docs: DOCUMENTATION.md (upgrade section: built-in https client,
+     no external tools), source/assets/commandScreens.txt (upgrade
+     screen), AGENTS.md (dub.json parenthetical — `requests` is the
+     one runtime dependency — and the upgrade bullet),
+     source/AGENTS.md (http.d and upgrade.d bullets). README left
+     unchanged: its CLI table row makes no curl claim and its
+     "no curl on the host" http-directive lines stay true. Scratch
+     driver and fetched library sources removed.
+
+86. `http` directive over https — http.d fully reimplemented on the
+   `requests` package (operator: do not keep the old hand-rolled
+   client).
+   - `source/tachy/http.d` rewritten: the std.socket client (URL
+     parser, non-blocking dial, hand-rolled framing/chunked decoding)
+     is gone; `httpQuery` now maps onto `requests` with the same
+     signature and semantics — redirects NOT followed (a check sees
+     the exact URL's answer; `maxRedirects = 0`), body capped by
+     `maxBodyBytes` (16 MiB), every failure wrapped as TachyError with
+     context.  https just works (system OpenSSL, peer verification).
+     Wire shape preserved from the old client: bodies with
+     Content-Length (never chunked — flat-array content, since string
+     content makes requests chunk-encode), `Content-Length: 0` for
+     empty `data`, no Content-Type unless the caller sends one,
+     `Connection: close` (keepAlive off, so unframed responses end at
+     EOF), default `User-Agent: tachy`.  `httpDownload` shares the
+     perform path (redirects followed, `maxDownloadBytes`).
+   - Fixes found while porting: `reasonOf` took `indexOf`'s -1 into a
+     `size_t` (always "found", wraparound sliced the reason) — now
+     `ptrdiff_t`; the body assignment itself was initially missing.
+   - Unittests re-pinned to behavior: request line/method/headers/data
+     travel, no Content-Type when none given, chunked and
+     close-delimited responses decode, HEAD has no body, httpQuery
+     does not follow redirects (contrast: httpDownload does), timeout/
+     DNS/garbage/ftp errors are TachyError; the parseHttpTarget URL
+     unit tests died with the parser.  The pre-existing tests/httpmod.d
+     wire assertions pass unchanged (Content-Length framing incl. the
+     empty-data case).  `dub test`: 231 passed, 0 failed.
+   - Verified live over real TLS (bundled apply and check mode, local
+     host): `http "https://github.com/marcpmichel/tachy" code=200` →
+     ok 200 OK, and `http "http://github.com/marcpmichel/tachy"
+     code=301` → ok 301 Moved Permanently (no silent redirect
+     following).  `tachy upgrade` path untouched by this round.
+   - Docs: DOCUMENTATION.md and README.md http-directive sections,
+     LANGUAGE.md directive table, source/assets/tasksBody.txt example,
+     httpmod.d and upgrade.d module comments, source/AGENTS.md http.d
+     bullet (requests-based client, wire and error contracts), and the
+     root AGENTS.md dub.json parenthetical already updated in entry
+     85.  Scratch drivers removed.
+
+87. `http` directive: `redirects` attribute — follow by default.
+   - Default behavior changed: queries now follow redirects, up to
+     `defaultMaxRedirects` = 10 (`httpQuery`'s new trailing parameter;
+     `httpDownload` uses the same cap).  The previous no-follow
+     semantics stay reachable through the new attribute.
+   - New `redirects` attribute on `http` (added to the allowed-keys
+     registry in modules/package.d): the string `"no"` disables
+     following (`maxRedirects = 0`, the check sees the redirect answer
+     itself — pair with `code = 301`/`302`), or `{ max = N }` follows
+     with that cap (N ≥ 0; 0 ≡ `"no"`).  `redirectsLimit` in
+     httpmod.d is the single authority, used at load time (literal
+     pre-check; templated strings re-checked after rendering) and at
+     run time: unknown table keys, non-"no" strings, non-integer or
+     negative max are load/run-time errors.  An explicitly configured
+     job shows "redirects: no" / "redirects: max N" in its `-v`
+     details.
+   - Tests: httpQuery default-follow vs max-0 raw answer (tests/http.d);
+     httpmod behavior (followed by default, `"no"` with `code = 302`,
+     `{ max = 5 }`, exhausted cap fails with "maxRedirects") and
+     load-time shape validation including the two legal spellings.
+     OneShotServer grew an optional connection count (redirect targets
+     are hit more than once).  `dub test`: 234 passed, 0 failed.
+   - Verified live over real GitHub (bundled, local host, -v): default
+     follows http→https to `200 OK`; `redirects = "no"` stops at
+     `301 Moved Permanently`; `{ max = 5 }` follows to `200 OK`;
+     `{ max = 0 }` stops at `301`.  Scratch removed.
+   - Docs: DOCUMENTATION.md (prose + `redirects` attribute row),
+     README.md (table row + section), LANGUAGE.md (directive table),
+     source/assets/tasksBody.txt (example comment), httpmod.d and
+     upgrade.d module comments, source/AGENTS.md http.d bullet.
+
+88. `http` directive: `insecure` attribute — accept invalid
+   certificates.
+   - New boolean `insecure` (default false; load-time type check, in
+     the allowed-keys registry).  At run time it reaches
+     `requests.Request.sslSetVerifyPeer(false)` — TLS stays on,
+     certificate verification is skipped (self-signed and the like).
+     `httpDownload`/`upgrade` always verify.  A configured job shows
+     "tls: insecure" in its `-v` details.
+   - Tests (tests/httpmod.d): boolean-only validation ("yes"/1
+     rejected, false fine) and the flag plumbed over plain http with
+     the "tls: insecure" detail line.  `dub test`: 235 passed,
+     0 failed.
+   - Verified live against a self-signed `openssl s_server -www`
+     (cert CN=localhost): the `insecure = true` job returned
+     `200 OK`, and the default job failed with exactly
+     "ssl connect failed: certificate verify failed" — the reported
+     error, now bypassable.  Server and scratch removed.
+   - Docs: README.md (row + prose), DOCUMENTATION.md (attribute row),
+     LANGUAGE.md (directive row), source/assets/tasksBody.txt,
+     httpmod.d module comment, source/AGENTS.md http.d bullet.
+
+89. Directive `http` renamed to `probe` (operator decision after the
+   naming brainstorm); clean cutover, no alias.
+   - Statement keyword: parser.d singleKeywords, models.d whitelist/
+     moduleName/url-key/canonical maps, runner.d's injected-key pick,
+     modules/package.d registry (allowed keys, `case "probe"`,
+     allModules) — error contexts now read "probe '…'" / "(probe)".
+   - Files renamed: `source/tachy/modules/httpmod.d` → `probemod.d`
+     (module `tachy.modules.probemod`; `runProbeModule`/
+     `validateProbeParams`), `tests/httpmod.d` → `tests/probemod.d`.
+     `tachy.http` (the client) and `http.d` keep their names — the
+     directive is the thing that was protocol-named.
+   - Tests: parser keyword test now exercises quoted/bare/braceless
+     `probe` statements plus the bare-scheme guard; composition tests
+     (url injection, unknown key, implied url, duplicate targets) and
+     all module behavior tests re-pinned to "probe".  `tachy probe`
+     verified live over real GitHub (https 200; `redirects = "no"`
+     stops at the raw 301; `insecure = true` accepted).
+   - Docs: LANGUAGE.md grammar keyword list + directive table,
+     DOCUMENTATION.md (`### probe — HTTP checks`, examples, check-mode
+     section), README.md (directive table, prose bullet, file listing,
+     module table), commandScreens.txt and tasksBody.txt assets,
+     syntax/pravic.vim (probe highlights as pravicKeyword, http no
+     longer does — synID-checked), source/AGENTS.md and
+     modules/AGENTS.md bullets.
+   - Drive-by bug fix found while chasing a flaky test:
+     `transport.d`'s `posixRead` conflated EINTR (-1) with EOF (0), so
+     an interrupted read silently truncated captured command output.
+     It now retries on EINTR.  The "ensure captures both streams"
+     test had been failing intermittently under parallel load; seven
+     consecutive full `dub test` runs after the fix: 235 passed,
+     0 failed each (clean rebuild included).
+   - Rename-tooling note: the first `sed \b…\b` pass silently no-oped
+     (backslash stripping), leaving module declarations stale while
+     everything still compiled — caught by a final audit grep and
+     fixed with explicit-path patterns before closeout.

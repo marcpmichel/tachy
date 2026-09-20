@@ -32,7 +32,7 @@ module tachy.models;
  *                        matches, composed with not/any/all/none —
  *                        tested against the rendered value (variables
  *                        only, no host contact)
- *     http URL           type (default "GET"), headers, data, code
+ *     probe URL           type (default "GET"), headers, data, code
  *                        (default 200), output, timeout
  *     repo PATH          url (required), type (only "git"), branch, tag
  *                        (checkout + fast-forward; branch/tag mutually
@@ -129,7 +129,7 @@ private Val[string] loadInto(string path, Val[string] outerVars,
         else if (s.kind != "files" && s.kind != "directories" && s.kind != "packages"
                 && s.kind != "groups" && s.kind != "users" && s.kind != "services"
                 && s.kind != "repos" && s.kind != "compose" && s.kind != "ensure"
-                && s.kind != "asserts" && s.kind != "apply" && s.kind != "http"
+                && s.kind != "asserts" && s.kind != "apply" && s.kind != "probe"
                 && s.kind != "debug")
             throw new TachyError(path ~ ": line " ~ text(s.line) ~ ": '"
                 ~ s.kind ~ "' is not valid in a tasks file");
@@ -306,20 +306,20 @@ private void addJob(ref LoadedTasks loaded, ref string[][string] seen,
         case "compose": moduleName = "compose"; break;
         case "ensure": moduleName = "ensure"; break;
         case "asserts": moduleName = "assert"; break;
-        case "http": moduleName = "http"; break;
+        case "probe": moduleName = "probe"; break;
         case "debug": moduleName = "debug"; break;
         default: assert(0, "not a job statement: " ~ s.kind);
     }
 
     // The statement key injects the target: "path" for files, "dir" for
-    // compose stacks, "url" for http checks, "name" for everything else.
+    // compose stacks, "url" for probe checks, "name" for everything else.
     string key, noun;
     switch (moduleName)
     {
         case "file": key = "path"; noun = "path"; break;
         case "repo": key = "path"; noun = "repository"; break;
         case "compose": key = "dir"; noun = "directory"; break;
-        case "http": key = "url"; noun = "url"; break;
+        case "probe": key = "url"; noun = "url"; break;
         case "debug": key = "name"; noun = "message"; break;
         case "assert": key = "name"; noun = "assertion"; break;
         default: key = noun = "name"; break;
@@ -393,7 +393,7 @@ private string kindFor(string kind) @safe pure nothrow
         case "compose": return "compose";
         case "ensure": return "ensure";
         case "asserts": return "assert";
-        case "http": return "http";
+        case "probe": return "probe";
         case "debug": return "debug";
         default: assert(0, "unknown kind " ~ kind);
     }

@@ -998,12 +998,12 @@ file /tmp/x { age = false }
 }
 }
 
-@("http: url injection, wiring, load-time errors")
+@("probe: url injection, wiring, load-time errors")
 unittest
 {
 import tachy.value : Val;
-auto p = writeTemp("http.pravic", `
-http "http://localhost:9/h" {
+auto p = writeTemp("probe.pravic", `
+probe "http://localhost:9/h" {
     type = "POST"
     headers = ["X-T=1"]
     data = "{}"
@@ -1016,7 +1016,7 @@ ensure "after" { run = "true" }
 `);
 auto loaded = loadTasksFile(p);
 assert(loaded.jobs.length == 2);
-assert(loaded.jobs[0].kind == "http" && loaded.jobs[0].moduleName == "http");
+assert(loaded.jobs[0].kind == "probe" && loaded.jobs[0].moduleName == "probe");
 assert(loaded.jobs[0].target == "http://localhost:9/h");
 assert(loaded.jobs[0].params["url"].str_ == "http://localhost:9/h");
 assert(loaded.jobs[0].params["type"].str_ == "POST");
@@ -1027,8 +1027,8 @@ assert(loaded.jobs[1].kind == "ensure"); // source order
 
 // unknown key is a load-time error
 {
-    auto q = writeTemp("http_bad.pravic", `
-http "http://x/" { verb = "GET" }
+    auto q = writeTemp("probe_bad.pravic", `
+probe "http://x/" { verb = "GET" }
 `);
     string msg;
     try
@@ -1042,8 +1042,8 @@ http "http://x/" { verb = "GET" }
 }
 // the statement key is the url: setting it by hand is an error
 {
-    auto q = writeTemp("http_url.pravic", `
-http "http://x/" { url = "http://y/" }
+    auto q = writeTemp("probe_url.pravic", `
+probe "http://x/" { url = "http://y/" }
 `);
     string msg;
     try
@@ -1058,12 +1058,12 @@ http "http://x/" { url = "http://y/" }
 // duplicate targets across a composition (the same file twice over is a
 // parser duplicate error, like every directive)
 {
-    writeTemp("http_inner.pravic", `
-http "http://x/a" { }
+    writeTemp("probe_inner.pravic", `
+probe "http://x/a" { }
 `);
-    auto q = writeTemp("http_dup.pravic", `
-apply "http_inner.pravic" { }
-http "http://x/a" { }
+    auto q = writeTemp("probe_dup.pravic", `
+apply "probe_inner.pravic" { }
+probe "http://x/a" { }
 `);
     string msg;
     try

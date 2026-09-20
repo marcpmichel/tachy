@@ -1,24 +1,32 @@
-module tachy.modules.httpmod;
+module tachy.modules.probemod;
 
 /**
- * `http` module — submit one HTTP request and assert on the answer.
- * tachy.http does the querying (a client written on std.socket: no curl,
+ * `probe` module — submit one HTTP request and assert on the answer.
+ * tachy.http does the querying (the `requests` package: no curl,
  * no transport commands):
  *
- *     http.url      = "http://localhost:8080/health"  (the statement key)
- *     http.type     = "GET"            # any HTTP method token
- *     http.headers  = ["Content-Type=application/json"]
- *     http.data     = "{\"x\": 1}"     # request body, sent verbatim
- *     http.code     = 200              # expected status (default 200)
- *     http.output   = "ok" / { contains = "ok" } / { matches = "^ok$" }
+  *     probe.url      = "http://localhost:8080/health"  (the statement key)
+  *     probe.type     = "GET"            # any HTTP method token
+  *     probe.headers  = ["Content-Type=application/json"]
+  *     probe.data     = "{\"x\": 1}"     # request body, sent verbatim
+  *     probe.code     = 200              # expected status (default 200)
+  *     probe.output   = "ok" / { contains = "ok" } / { matches = "^ok$" }
  *                    # ensure's shapes, composed the same way: several
  *                    # keys AND together, `not` negates, `any`/`all`/
  *                    # `none` quantify over an array of patterns
- *     http.timeout  = 10               # seconds for the whole query
+  *     probe.timeout  = 10               # seconds for the whole query
+  *     probe.redirects = "no"            # redirects are followed by default
+ *                    = { max = 3 }     # (up to 10); "no" disables, or cap
+ *                                      # them at N
+  *     probe.insecure = true             # accept invalid certificates
+ *                                      # (self-signed and the like)
  *
  * The request is issued by the tachy process running the job — on the
  * managed host in bundled runs (the default), on the controller for
- * --direct runs; plain http only (no TLS), no redirects.  Like `ensure`,
+ * --direct runs; `http://` or `https://` (TLS from the system OpenSSL).
+ * Redirects are followed by default, up to `defaultMaxRedirects` (10);
+ * `redirects = "no"` shows the check the redirect answer itself, and
+ * `redirects = { max = N }` sets another cap.  Like `ensure`,
  * these jobs are checks by nature: they run even in check mode, report
  * `ok` when the status and (optionally) the body satisfy the
  * expectations, and never report `changed`.  `output` is the response
@@ -31,7 +39,8 @@ import std.conv : text;
 import std.string : strip;
 
 import tachy.errors;
-import tachy.http : httpQuery, validateHeader, validateMethod;
+import tachy.http : defaultMaxRedirects, httpQuery, validateHeader,
+    validateMethod;
 import tachy.modules : TaskContext, TaskResult, requireStr;
 import tachy.modules.ensuremod : excerpt, OutputExpectation, parseOutput;
 import tachy.value : Val;
@@ -40,7 +49,7 @@ private enum defaultTimeoutSecs = 10;
 
 /// Load-time key/type checks (values may still contain templates; the
 /// run re-checks everything rendered).
-void validateHttpParams(in Val[string] params, string context)
+void validateProbeParams(in Val[string] params, string context)
 {
     if (auto p = "type" in params)
     {
@@ -81,6 +90,24 @@ void validateHttpParams(in Val[string] params, string context)
     }
     if (auto p = "output" in params)
         parseOutput(*p, context);
+    if (auto p = "insecure" in params)
+        if ((*p).kind != Val.Kind.boolean_)
+            throw new TachyError(context ~ ": 'insecure' must be a boolean,"
+                ~ " not a " ~ (*p).typeName());
+    if (auto p = "redirects" in params)
+    {
+        if ((*p).kind == Val.Kind.string_)
+        {
+            // templated strings are re-checked after rendering
+            if (!canFind((*p).str_, "{{"))
+                redirectsLimit(*p, context);
+        }
+        else if ((*p).kind == Val.Kind.table_)
+            redirectsLimit(*p, context);
+        else
+            throw new TachyError(context ~ ": 'redirects' must be \"no\" or"
+                ~ " a { max = N } table, not a " ~ (*p).typeName());
+    }
 }
 
 private void checkStatusCode(in Val[string] params, string key, string context)
@@ -97,10 +124,10 @@ private void checkStatusCode(in Val[string] params, string key, string context)
             ~ " between 100 and 599, not " ~ text(code));
 }
 
-TaskResult runHttpModule(Val[string] params, TaskContext ctx)
+TaskResult runProbeModule(Val[string] params, TaskContext ctx)
 {
-    const string url = requireStr(params, "url", "http");
-    const string what = "http '" ~ url ~ "'";
+    const string url = requireStr(params, "url", "probe");
+    const string what = "probe '" ~ url ~ "'";
 
     const string method = optMethod(params);
     validateMethod(method, what); // catches templated values after rendering
@@ -147,6 +174,14 @@ TaskResult runHttpModule(Val[string] params, TaskContext ctx)
         timeoutSecs = cast(int) (*p).integer_;
     }
 
+    uint maxRedirects = defaultMaxRedirects;
+    if (auto p = "redirects" in params)
+        maxRedirects = redirectsLimit(*p, what);
+
+    bool insecure;
+    if (auto p = "insecure" in params)
+        insecure = (*p).boolean_;
+
     bool checkOutput;
     OutputExpectation outputExp;
     if (auto p = "output" in params)
@@ -157,11 +192,17 @@ TaskResult runHttpModule(Val[string] params, TaskContext ctx)
 
     string[] details;
     details ~= method ~ " " ~ url;
+    if ("redirects" in params)
+        details ~= maxRedirects == 0 ? "redirects: no"
+            : "redirects: max " ~ text(maxRedirects);
+    if (insecure)
+        details ~= "tls: insecure";
 
     // Checks by nature: the query runs even in check mode.
     import core.time : dur;
     auto resp = httpQuery(method, url, headers,
-        ("data" in params) ? data : null, dur!"seconds"(timeoutSecs), what);
+        ("data" in params) ? data : null, dur!"seconds"(timeoutSecs), what,
+        maxRedirects, insecure);
 
     const string body = resp.body.strip;
     if (body.length)
@@ -188,7 +229,36 @@ private string optMethod(in Val[string] params)
     if (p is null)
         return "GET";
     if ((*p).kind != Val.Kind.string_)
-        throw new TachyError("http: 'type' must be a string (an HTTP method),"
+        throw new TachyError("probe: 'type' must be a string (an HTTP method),"
             ~ " not a " ~ (*p).typeName());
     return (*p).str_;
+}
+
+/// The redirect cap a `redirects` value stands for: the string "no"
+/// means none; a table holds exactly `{ max = N }` with a non-negative
+/// integer.  Validated again at run time (values may be templated).
+private uint redirectsLimit(in Val v, string what)
+{
+    if (v.kind == Val.Kind.string_)
+    {
+        if (v.str_ == "no")
+            return 0;
+        throw new TachyError(what ~ ": 'redirects' must be \"no\", not \""
+            ~ v.str_ ~ "\"");
+    }
+
+    foreach (immutable k, const ref e; v.table_)
+        if (k != "max")
+            throw new TachyError(what ~ ": 'redirects' accepts only"
+                ~ " { max = N }, not the key \"" ~ k ~ "\"");
+    auto m = "max" in v.table_;
+    if (m is null)
+        throw new TachyError(what ~ ": 'redirects' table needs a 'max' key");
+    if ((*m).kind != Val.Kind.integer_)
+        throw new TachyError(what ~ ": 'redirects.max' must be an integer"
+            ~ " redirect cap, not a " ~ (*m).typeName());
+    if ((*m).integer_ < 0)
+        throw new TachyError(what ~ ": 'redirects.max' must be non-negative,"
+            ~ " not " ~ text((*m).integer_));
+    return cast(uint) (*m).integer_;
 }

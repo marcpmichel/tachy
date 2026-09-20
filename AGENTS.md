@@ -85,8 +85,10 @@ When the user requests a durable behavior change, record it here or in the relev
 - tachy: Pravic-driven configuration management (Ansible-like) in D —
   see `README.md` (tour), `DOCUMENTATION.md` (full reference) and
   `LANGUAGE.md` (the Pravic spec); `dub.json` is the build manifest
-  (DMD + dub, zero runtime dependencies; `silly` is the test-only
-  dependency of its `unittest` configuration, which compiles `tests/`
+  (DMD + dub; `requests` is the one runtime dependency — its TLS
+  backend dlopens the system OpenSSL, used only by the upgrade
+  download; `silly` is the test-only dependency of its `unittest`
+  configuration, which compiles `tests/`
   alongside `source/` — `stringImportPaths` embeds the app.d help/man
   text assets in `source/assets/`, the webui assets (`app.css` is
   shared with the webdoc pages) and the root `DOCUMENTATION.md`)
@@ -145,9 +147,12 @@ incomplete invocation shows it too; help and man output carries a
 `**bold**`/`` `code` `` micro markup rendered as colors on a tty or
 with --color, stripped when piped), or `upgrade` (one step: compare
 the running build with the latest GitHub release via the
-`releases/latest` redirect and curl; ask y/N on a tty — `--yes`
-upgrades unattended — then download the `tachy-<version>-linux-amd64`
-asset, verify it and rename it over the running binary); the common
+`releases/latest` redirect and download the
+`tachy-<version>-linux-amd64` asset, both through tachy.http's
+https-capable downloader — the `requests` dub package with the
+system OpenSSL, no curl; ask y/N on a tty — `--yes` upgrades
+unattended — verify the asset and rename it over the running binary);
+the common
  commands `apply`, `check`, `generate` and `version` also answer to
  their one-letter short forms `a`, `c`, `g` and `v` (the others take
  none); selection mixes host names, `@tag` and `all`; default
