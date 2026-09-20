@@ -461,7 +461,7 @@ unittest
 
     // unknown keys stay strict
     auto msg = parseErr(outTable(["nope": Val(1L)]));
-    assert(canFind(msg, "'output' takes only 'contains', 'matches', 'not', 'any', 'all' and 'none', not 'nope'"), msg);
+    assert(canFind(msg, "'output' takes only 'equals', 'contains', 'matches', 'not', 'any', 'all' and 'none', not 'nope'"), msg);
 
     // an empty table can never pass: load-time error, not a runtime surprise
     Val[string] noneT;
@@ -506,4 +506,36 @@ unittest
     ]);
     assert(parseOutput(all, "ctx").describe()
         == `a substring "a" and a match of /b/ and not (a substring "c") and any of [exactly "d"] and a substring "f" and none of [exactly "g"]`);
+}
+
+@("output accepts { equals = ... } as the spelled exact match")
+unittest
+{
+    import std.algorithm.searching : canFind;
+
+    auto ctx = ctxLocal;
+
+    Val eq;
+    eq.kind = Val.Kind.table_;
+    eq.table_["equals"] = Val("debian");
+    Val[string] p;
+    p["name"] = Val("e");
+    p["run"] = Val("echo debian");
+    p["output"] = eq;
+    assert(!runEnsureModule(p, ctx).changed);
+
+    // a miss fails with the exact wording
+    eq.table_["equals"] = Val("ubuntu");
+    string msg;
+    try
+        runEnsureModule(p, ctx);
+    catch (TachyError e)
+        msg = e.msg;
+    assert(canFind(msg, `does not satisfy exactly "ubuntu"`), msg);
+
+    // non-string equals is a load-time error
+    Val bad;
+    bad.kind = Val.Kind.table_;
+    bad.table_["equals"] = Val(1L);
+    assertThrown!(TachyError)(parseOutput(bad, "ctx"));
 }

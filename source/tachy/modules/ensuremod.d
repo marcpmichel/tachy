@@ -13,6 +13,7 @@ module tachy.modules.ensuremod;
  *                           # or { not = 1 }       # anything but 1
  *                           # or { cond = "< 1" }  # an operator and a value
  *     ensure.output      = "debian"              # exact (trimmed) output
+ *                           # or { equals = "debian" }    # the same, spelled out
  *                           # or { contains = "deb" }      # substring
  *                           # or { matches = "^debian.*$" } # regular expression
  *                           # composed — shapes nest and combine: several
@@ -202,7 +203,8 @@ private ExitExpectation parseCond(string s, string context)
 }
 
 /// `output` accepts a string (exact match) or a pattern: a table of
-/// `{ contains = "..." }` / `{ matches = "..." }` shapes, composed —
+/// `{ equals = "..." }` / `{ contains = "..." }` / `{ matches = "..." }`
+/// shapes, composed —
 /// several keys in one table all must hold, `{ not = <pattern> }`
 /// negates one pattern, `{ any = [ ... ] }` holds when one listed
 /// pattern does, `{ all = [ ... ] }` when all do and
@@ -221,20 +223,32 @@ OutputExpectation parseOutput(in Val v, string context)
     }
     if (v.kind != Val.Kind.table_)
         throw new TachyError(context ~ ": 'output' must be a string or a"
-            ~ " { contains matches not any all none } pattern, not " ~ v.display());
+            ~ " { equals contains matches not any all none } pattern, not "
+            ~ v.display());
     if (v.table_.length == 0)
         throw new TachyError(context ~ ": 'output' must not be an empty table");
 
     foreach (string k, const Val _; v.table_)
-        if (k != "contains" && k != "matches" && k != "not" && k != "any"
-            && k != "all" && k != "none")
-            throw new TachyError(context ~ ": 'output' takes only 'contains',"
-                ~ " 'matches', 'not', 'any', 'all' and 'none', not '" ~ k ~ "'");
+        if (k != "equals" && k != "contains" && k != "matches" && k != "not"
+            && k != "any" && k != "all" && k != "none")
+            throw new TachyError(context ~ ": 'output' takes only 'equals',"
+                ~ " 'contains', 'matches', 'not', 'any', 'all' and 'none',"
+                ~ " not '" ~ k ~ "'");
 
     // Fixed shape order (not the table's hash order), so error
     // messages stay deterministic across runs.
     OutputExpectation[] parts;
 
+    if (auto e = "equals" in v.table_)
+    {
+        if ((*e).kind != Val.Kind.string_)
+            throw new TachyError(context ~ ": 'equals' must be a string, not a "
+                ~ (*e).typeName());
+        OutputExpectation o;
+        o.kind = OutputExpectation.Kind.exact;
+        o.text_ = (*e).str_;
+        parts ~= o;
+    }
     if (auto c = "contains" in v.table_)
     {
         if ((*c).kind != Val.Kind.string_)

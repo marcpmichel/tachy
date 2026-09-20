@@ -450,3 +450,47 @@ unittest
     fails(`var x = { choose "{{e}}" { "a" = "1"`,
         "unterminated block");
 }
+
+@("assert directive: both forms, canonical kind, keyword guard")
+unittest
+{
+    import std.algorithm.searching : canFind;
+
+    void fails(string src, string needle)
+    {
+        string msg;
+        try
+        {
+            parseStmts(src);
+            assert(false, "expected TachyError for: " ~ src);
+        }
+        catch (TachyError e)
+            msg = e.msg;
+        assert(canFind(msg, needle), msg ~ " does not contain: " ~ needle);
+    }
+
+    // single form; the canonical kind is the plural
+    auto stmts = parseStmts(`assert "one" { value = "{{ v }}", equals = "x" }` ~ "\n");
+    assert(stmts.length == 1);
+    assert(stmts[0].kind == "asserts");
+    assert(stmts[0].key == "one");
+    assert(stmts[0].value.table_["equals"].str_ == "x");
+
+    // group form: one statement per entry, in source order
+    stmts = parseStmts("asserts {\n"
+        ~ "    \"one\" = { value = \"a\", contains = \"a\" }\n"
+        ~ "    \"two\" = { value = \"b\" }\n"
+        ~ "}\n");
+    assert(stmts.length == 2);
+    assert(stmts[0].kind == "asserts" && stmts[0].key == "one");
+    assert(stmts[1].kind == "asserts" && stmts[1].key == "two");
+
+    // keyword guards: `assertx`/`assertment` are unknown directives,
+    // never `assert` with a glued key
+    fails("assertx { }", "unknown directive");
+    fails("assertment \"x\" { }", "unknown directive");
+
+    // the same assertion key through both spellings is a duplicate
+    fails(`assert "x" { value = "a", equals = "a" }` ~ "\n"
+        ~ `asserts { "x" = { value = "b", equals = "b" } }`, "duplicate");
+}

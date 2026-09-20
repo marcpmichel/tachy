@@ -68,10 +68,26 @@
       args = ["one", "two"]           # literal arguments appended to run
                                       # (one element is one argument)
       exit_status = 0                 # int | { not = N } | { cond = "< 1" }
-      output = "debian"               # string | { contains = "deb" } | { matches = "^debian.*$" }
+      output = "debian"               # string | { equals = "deb" } | { contains = "deb" } | { matches = "^debian.*$" }
                                       # composable: several keys AND together,
                                       # { not = <pattern> } negates,
                                       # { any/all/none = [...] } over arrays
+  }
+
+  assert "port is default" {          # test a rendered value against ensure's
+      value = "{{ http_port }}"       # output patterns — on the controller,
+      equals = "8080"                 # variables only: no command runs and
+  }                                   # no host is contacted (probe the host
+                                      # with ensure). equals/contains/matches,
+                                      # composed with not/any/all/none —
+                                      # several keys AND together, at least
+                                      # one is required. A check by nature:
+                                      # runs in check mode, never changes
+
+  asserts {                           # the group form: one entry per
+      "sane env" = { value = "{{ env }}",     # assertion
+                     contains = "prod",
+                     not = { contains = "test" } }
   }
 
   http http://localhost:8080/health { # submit a query and test the answer (a check, like ensure, runs even in check mode, never changes)

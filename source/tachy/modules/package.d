@@ -8,6 +8,7 @@ module tachy.modules;
  * mutating anything.
  */
 public import tachy.modules.accounts : runGroupModule, runUserModule;
+public import tachy.modules.assertmod : runAssertModule;
 public import tachy.modules.composemod : runComposeModule;
 public import tachy.modules.debugmod : runDebugModule;
 public import tachy.modules.ensuremod : runEnsureModule;
@@ -17,6 +18,7 @@ public import tachy.modules.packagemod : runPackageModule;
 public import tachy.modules.repomod : runRepoModule;
 public import tachy.modules.servicemod : runServiceModule;
 
+import tachy.modules.assertmod : assertionExpectation;
 import tachy.modules.composemod : validateComposeParams;
 import tachy.modules.ensuremod : excerpt, parseExitStatus, parseOutput;
 import tachy.modules.httpmod : validateHttpParams;
@@ -44,7 +46,7 @@ struct TaskResult
     string[] details;  // commands executed + change details (shown with -v)
 }
 
-private immutable string[] allModules = ["file", "service", "ensure", "group", "user", "package", "compose", "http", "repo", "debug"];
+private immutable string[] allModules = ["file", "service", "ensure", "assert", "group", "user", "package", "compose", "http", "repo", "debug"];
 
 /// Registered module names.
 string[] moduleNames() @safe pure nothrow
@@ -102,6 +104,25 @@ void validateModuleParams(string moduleName, in Val[string] params, string conte
                         throw new TachyError(context ~ " (ensure): 'args' entries must be"
                             ~ " strings, not a " ~ e.typeName());
             }
+            break;
+        }
+        case "assert":
+        {
+            checkKeys(params, ["name", "value", "equals", "contains", "matches",
+                "not", "any", "all", "none"], context ~ " (assert)");
+            if (auto v = "value" in params)
+            {
+                if ((*v).kind != Val.Kind.string_)
+                    throw new TachyError(context ~ " (assert): 'value' must be"
+                        ~ " a string, not a " ~ (*v).typeName());
+            }
+            else
+                throw new TachyError(context ~ " (assert): 'value' is required");
+            // Validate the expectation shapes now (the regexes compile
+            // here); the same parse evaluates the rendered patterns at
+            // run time.
+            parseOutput(assertionExpectation(params, context ~ " (assert)"),
+                context ~ " (assert)");
             break;
         }
         case "http":
@@ -230,6 +251,7 @@ TaskResult runModule(string moduleName, Val[string] params, TaskContext ctx)
         case "file": return runFileModule(params, ctx);
         case "service": return runServiceModule(params, ctx);
         case "ensure": return runEnsureModule(params, ctx);
+        case "assert": return runAssertModule(params, ctx);
         case "group": return runGroupModule(params, ctx);
         case "user": return runUserModule(params, ctx);
         case "package": return runPackageModule(params, ctx);

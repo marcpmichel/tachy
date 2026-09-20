@@ -31,6 +31,10 @@ This doc owns module-level contracts.
   exit_status/output assertions behind the `ensure` directive, with
   `args` — quoted literal arguments appended space-separated to
   `run`, one element one argument),
+  `assertmod` (the `assert` directive: the rendered `value` tested
+  against ensure's `output` shapes as expectation keys —
+  `equals`/`contains`/`matches`, composed with `not`/`any`/`all`/`none`;
+  controller-side over variables, no transport, a check by nature),
   `accounts.d` (groups + users via
   shadow-utils), `composemod` (Docker Compose stacks keyed by project
   dir: read-only probes — container runtime/health via `docker ps`/
@@ -52,8 +56,8 @@ This doc owns module-level contracts.
   (stat/getent/dpkg-query/systemctl), act only on drift, report
   `changed` truthfully; `ok` when already conformant
 - Check mode: probes run, mutations go through `mustRun` (suppressed in
-  check mode, i.e. the `check` command); `ensure`-, `http`- and
-  `debug`-directive jobs are checks by nature and run even in check
+  check mode, i.e. the `check` command); `ensure`-, `assert`-, `http`-
+  and `debug`-directive jobs are checks by nature and run even in check
   mode, never reporting `changed`
 - Command output: `mustRun`/`mustRunWithInput` and `ensuremod` capture
   a command's stdout and stderr into the job's `details` (the event

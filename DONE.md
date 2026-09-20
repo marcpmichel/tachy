@@ -2781,3 +2781,50 @@
    - Docs: LANGUAGE.md (composition comment), DOCUMENTATION.md
      (`log is clean` example + `output` rows), README.md (bullet +
      directive table), source/assets/tasksBody.txt and sampleTask.txt.
+
+83. add the "assert" statement: a named variable assertion reusing
+    ensure's output expectation machinery
+   - New directive `assert "name" { value = "...", <expectations> }`
+     with the group form `asserts { "name" = { ... } }` (canonical kind
+     "asserts", module "assert"): `value` is templated against the
+     host's effective scope; the expectation keys are the shapes of
+     `ensure`'s `output` — a new `equals` (the spelled exact match, now
+     also accepted by `ensure`/`http`) plus contains/matches/not/any/
+     all/none, several keys AND together, at least one required.
+     parseOutput runs twice by design: at load (regexes compile, typos
+     fail before any host is contacted) and at run time against the
+     rendered value. No transport, a check by nature (runs in check
+     mode, never `changed`); validateRenders catches undefined
+     variables in `value` pre-flight.
+   - Wiring: parser.d (assert/asserts keywords with the !KeyChar guard,
+     canonical mapping), models.d (job kind "assert", name injection,
+     noun "assertion", duplicates detected composition-wide),
+     modules/package.d (registry, load-time validation), new
+     modules/assertmod.d (`runAssertModule` + shared
+     `assertionExpectation`). Failures read like ensure's: `assert
+     'wrong port': value '8080' does not satisfy exactly "80"`.
+   - Tests: new tests/assertmod.d (pass/fail across all shapes and
+     compositions, no-expectation error at run and load time, value
+     type/unknown-key/regex validation, check mode, no transport
+     commands); tests/parser.d (both forms, canonical kind, keyword
+     guards, cross-form duplicate); tests/models.d (name injection,
+     both forms, load-time validation errors); tests/ensuremod.d
+     (`equals` shape) and wording needles in tests/ensuremod.d +
+     tests/httpmod.d updated for the widened allowed-key message.
+     `dub test`: 224 passed, 0 failed.
+   - Verified end-to-end: local `connection = "local"` scratch —
+     bundled apply ok=3 changed=0, failing assert exit 1 with the
+     rendered value in the message, check mode runs the assertions,
+     undefined variable fails before contacting the host, `--direct`
+     byte-identical; bundled runs over ssh to root@testing.internal
+     (apply + check green, templated composed value `prod-8080` under
+     equals + matches). VM untouched and local scratch removed.
+   - Docs: LANGUAGE.md (grammar keyword lists, directive inventory row,
+     example; also restored `repos`, which the PEG's GroupKeyword list
+     had silently dropped), DOCUMENTATION.md (new `assert` section,
+     `equals` in ensure/http `output` rows), README.md (directive table
+     row, prose bullet, module listing), source/assets/tasksBody.txt
+     (assert/asserts blocks, equals in the ensure comment),
+     syntax/pravic.vim (`asserts|assert` keywords; synID-verified in
+     vim and nvim: both highlight as pravicKeyword, `assertx` stays a
+     plain key).

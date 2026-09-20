@@ -395,8 +395,9 @@ A tasks file is a sequence of statements, one per line (all optional):
 | `package "mgr:name" { ... }` | `"<manager>:<name>"` | `version` (default `latest`; an explicit version pins it exactly — epoch-qualified, as dpkg reports it), `present` (default `true`; `false` removes). Only `apt` keys are supported. |
 | `group NAME { ... }` | name | `state` (default `present`; `absent` removes). |
 | `user NAME { ... }` | name | `group` (primary; default: a group named after the user), `groups` (supplementary, additive only), `shell` (default `/bin/sh` at creation), `comment`, `create_home` (default `true`, creation only), `home` (default `/home/<name>` at creation), `state` (default `present`; `absent` removes), `remove_home` (default `false`, with `state = "absent"`). |
-| `ensure "name" { ... }` | name | `run` (required), `args` (array of strings appended to `run`, one element one argument), `exit_status` (integer, `{ not = N }`, or `{ cond = "OP N" }`; default 0), `output` (string, `{ contains = "..." }`/`{ matches = "..." }`, composed: several keys AND together, `{ not = <pattern> }`, `{ any }`/`{ all }`/`{ none }` arrays) |
+| `ensure "name" { ... }` | name | `run` (required), `args` (array of strings appended to `run`, one element one argument), `exit_status` (integer, `{ not = N }`, or `{ cond = "OP N" }`; default 0), `output` (string, `{ equals = "..." }`/`{ contains = "..." }`/`{ matches = "..." }`, composed: several keys AND together, `{ not = <pattern> }`, `{ any }`/`{ all }`/`{ none }` arrays) |
 | `http URL { ... }` | url | `type` (any HTTP method, default `GET`), `headers` (array of `"Name=Value"`), `data` (body, sent verbatim), `code` (expected status, default `200`), `output` (body assertion, `ensure`'s shapes), `timeout` (seconds, default `10`). Plain `http://` only; queried by tachy itself (no curl) — on the host in bundled runs, from the controller with `--direct`; a check by nature: runs in check mode, never `changed`. |
+| `assert "name" { ... }` | name | `value` (required, templated) plus the expectation keys — `ensure`'s `output` shapes: `equals`/`contains`/`matches`, composed with `not`/`any`/`all`/`none`; several keys AND together, at least one required. Tests rendered variables on the controller — no command runs, no host contact; a check by nature (runs in check mode, never `changed`). |
 | `debug "message"` | message | No attributes: prints the (templated) message as a job line — never fails, never `changed`, runs in check mode too. |
 | `apply "path" { bindings }` | path | Composes another tasks file **at the statement's position**, carrying its own variables: the binding's entry keys, or the same grouped in a `vars { ... }` sub-block. Bindings resolve `{ env }`/`{ run }` markers at load like every other var. A path naming an existing directory uses its `main.pravic`, like a directory CLI argument. |
 | `import "path"` | path | Bundled mode only: an external file or directory (absolute, or relative to the defining tasks file) copied into the bundle next to the project copy under its base name — `import "tasks/install_gogs"` → `project/install_gogs` — so `src`/`template`/`run` can use it on the host. No parameters — the braces are optional; destinations colliding with project content or another import are load-time errors; a path that does not resolve relative to its defining file is searched in the `config.pravic` `imports` paths. An apply naming the import destination itself works too (`apply "neovim" { }` → its `main.pravic`); entries under a destination that are missing locally defer to the host (the inner run composes them, bindings included; a directory entry resolves to its `main.pravic`, as everywhere). |
@@ -500,7 +501,8 @@ Idempotency semantics:
   accepts an integer, `{ not = N }` or `{ cond = "OP N" }` with `OP`
   one of `==`, `!=`, `<`, `<=`, `>`, `>=` (default `0`); `output`
   accepts a string (exact match on the trimmed output),
-  `{ contains = "..." }` or `{ matches = "regex" }` — patterns compose:
+  `{ equals = "..." }`, `{ contains = "..." }` or `{ matches = "regex" }`
+  — patterns compose:
   several keys in one table all must hold, `{ not = <pattern> }`
   negates one pattern, `{ any = [ ... ] }` holds when one listed
   pattern does, `{ all = [ ... ] }` when all do and `{ none = [ ... ] }`
@@ -524,6 +526,13 @@ Idempotency semantics:
   runs, from the controller with `--direct`. Like `ensure` these jobs
   are checks by nature: they run even in check mode and never report
   `changed`.
+- `assert`: tests a rendered value against `ensure`'s `output` patterns
+  on the controller — `value` is templated against the host's effective
+  variables, the expectation keys are the same shapes (`equals`/
+  `contains`/`matches`, composed with `not`/`any`/`all`/`none`), and no
+  command runs and no host is contacted. Variables only: probe host
+  state with `ensure`. A check by nature: runs in check mode, never
+  reports `changed`.
 
 Execution order is the source order: there is no fixed directive order
 and no sorting — jobs execute in the order their statements appear, and
@@ -792,6 +801,7 @@ source/tachy/
     accounts.d               groups / users (shadow-utils, getent probes)
     packagemod.d             package installs/removals (apt via dpkg-query)
     ensuremod.d               shell command ensures (exit status / output)
+    assertmod.d              variable assertions (ensure's output shapes)
     httpmod.d                http checks (status / body assertions)
     composemod.d             Docker Compose stacks (config-hash probes)
     repomod.d                git repositories (clone, origin, fetch/checkout sync)

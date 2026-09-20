@@ -122,11 +122,11 @@ PravicFile   ← WS StmtList? WS EOF
 StmtList     ← Stmt (LineEnd+ Stmt)*
 
 GroupKeyword ← ( 'vars' / 'files' / 'directories' / 'packages'
-               / 'groups' / 'users' / 'services' / 'hosts'
-               / 'imports' / 'webui' / 'identity' / 'output'  ) !KeyChar
+               / 'groups' / 'users' / 'services' / 'repos' / 'asserts'
+               / 'hosts' / 'imports' / 'webui' / 'identity' / 'output' ) !KeyChar
 SingleKeyword ← ( 'var' / 'file' / 'directory' / 'package'
                 / 'group' / 'user' / 'service' / 'host'
-                / 'apply' / 'ensure' / 'compose' / 'import'
+                / 'apply' / 'assert' / 'ensure' / 'compose' / 'import'
                 / 'identity' / 'http' / 'repo' / 'debug' ) !KeyChar
 Block        ← '{' WS Entries? WS '}'
 Entries      ← Entry (BSep Entry)* BSep?
@@ -236,6 +236,7 @@ Tasks files:
 | repositories | `repos { ... }` | `repo target { ... }` |
 | compose stacks | — | `compose /srv/stack { ... }` |
 | command checks | — | `ensure "task name" { run = "..." }` — asserts on exit status/output; runs even in dry-run mode |
+| assertions | `asserts { "name" = { ... } }` | `assert "name" { value = "...", ... }` — tests the rendered `value` against `ensure`'s `output` patterns (`equals`/`contains`/`matches`, composed with `not`/`any`/`all`/`none`); variables only, no host contact; runs even in dry-run mode |
 | messages | — | `debug "message"` — prints the (templated) message as a job line, never fails and never changes anything; no attributes; runs even in dry-run mode |
 | HTTP checks | — | `http "url" { ... }` — submits a request (`type`, `headers`, `data`) and asserts on status (`code`) and body (`output`, `ensure`'s shapes); plain http only |
 | composition | — | `apply "path" { bindings }` — composes at its position; bindings as entry keys or grouped in a `vars` sub-block; a path under an `import` destination composes on the host |
@@ -313,6 +314,12 @@ ensure "debian family" {
 ensure "not a crash" {
     run = "pgrep -x app"
     exit_status = { not = 1 }
+}
+
+asserts {
+    "port is the default" = { value = "{{ http_port }}", equals = "8080" }
+    "sane environment"    = { value = "{{ deploy_env }}",
+                              contains = "prod", not = { contains = "test" } }
 }
 
 service nginx {

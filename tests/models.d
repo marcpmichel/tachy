@@ -1191,3 +1191,42 @@ repo /srv/app { url = "u" }
     assert(msg.indexOf("repository '/srv/app' is already managed") >= 0, msg);
 }
 }
+
+@("assert: name injection, both forms, load-time validation")
+unittest
+{
+auto p = writeTemp("assert.pravic", `
+assert "one" {
+    value = "{{ v }}"
+    equals = "x"
+}
+asserts {
+    "two" = { value = "b", contains = "b" }
+}
+`);
+auto loaded = loadTasksFile(p);
+assert(loaded.jobs.length == 2);
+assert(loaded.jobs[0].kind == "assert" && loaded.jobs[0].moduleName == "assert");
+assert(loaded.jobs[0].target == "one");
+assert(loaded.jobs[0].params["name"].str_ == "one");        // injected
+assert(loaded.jobs[0].params["value"].str_ == "{{ v }}");   // rendered per host later
+assert(loaded.jobs[1].target == "two");
+assert(loaded.jobs[1].params["contains"].str_ == "b");
+
+// the same assertion name through both spellings is a load-time error
+assertThrown!(TachyError)(loadTasksFile(writeTemp("assert_dup.pravic",
+    `assert "same" { value = "a", equals = "a" }` ~ "\n"
+    ~ `asserts { "same" = { value = "b", equals = "b" } }` ~ "\n")));
+// missing value
+assertThrown!(TachyError)(loadTasksFile(writeTemp("assert_novalue.pravic",
+    `assert "x" { equals = "y" }` ~ "\n")));
+// no expectation at all
+assertThrown!(TachyError)(loadTasksFile(writeTemp("assert_noexp.pravic",
+    `assert "x" { value = "y" }` ~ "\n")));
+// unknown attribute
+assertThrown!(TachyError)(loadTasksFile(writeTemp("assert_unk.pravic",
+    `assert "x" { value = "y", bogus = 1 }` ~ "\n")));
+// a bad regex compiles at load
+assertThrown!(TachyError)(loadTasksFile(writeTemp("assert_regex.pravic",
+    `assert "x" { value = "y", matches = "(" }` ~ "\n")));
+}

@@ -1020,7 +1020,48 @@ ensure "log is clean" {
 | `run` | required | The shell command; templated like every string. |
 | `args` | — | An array of strings appended to the command, space-separated; each element is shell-quoted, so one element stays one argument even with spaces inside. Entries are templated like every string. |
 | `exit_status` | `0` | An integer, `{ not = N }`, or `{ cond = "OP N" }` with OP one of `==`, `!=`, `<`, `<=`, `>`, `>=`. |
-| `output` | — | A string (exact match on the trimmed output), `{ contains = "..." }`, or `{ matches = "regex" }` (invalid patterns are load-time errors). Patterns **compose**: several keys in one table all must hold, `{ not = <pattern> }` negates one pattern, `{ any = [ ... ] }` holds when one listed pattern does, `{ all = [ ... ] }` when all do, `{ none = [ ... ] }` when none does. A pattern is a string or such a table, so these compose recursively. |
+| `output` | — | A string (exact match on the trimmed output; the same spelled `{ equals = "..." }`), `{ contains = "..." }`, or `{ matches = "regex" }` (invalid patterns are load-time errors). Patterns **compose**: several keys in one table all must hold, `{ not = <pattern> }` negates one pattern, `{ any = [ ... ] }` holds when one listed pattern does, `{ all = [ ... ] }` when all do, `{ none = [ ... ] }` when none does. A pattern is a string or such a table, so these compose recursively. |
+
+---
+
+### `assert` — variable assertions
+
+Keyed by a unique assertion name. Tests a rendered value against the
+same patterns `ensure`'s `output` accepts — but on the controller, over
+variables: no command runs and the host is not contacted. `value` is
+templated like every string, so `{{ ... }}` references resolve against
+the host's effective variables (an undefined variable fails the
+pre-run render validation, before anything is deployed). Variables
+only: host state is out of reach here (probe it with `ensure`). A check
+by nature: assert jobs run even in check mode, report `ok` and never
+`changed`.
+
+```pravic
+assert "port is the default" {
+    value = "{{ http_port }}"
+    equals = "8080"
+}
+
+assert "sane environment" {
+    value = "{{ deploy_env }}"
+    contains = "prod"
+    not = { contains = "test" }
+}
+
+asserts {                                    # the group form
+    "log format" = { value = "{{ log_format }}", matches = "^json" }
+    "replicas"   = { value = "{{ replicas }}", any = ["2", "4"] }
+}
+```
+
+| Attribute | Default | Description |
+|---|---|---|
+| `value` | required | The string under test, templated like every string. |
+| expectations | — | The shapes `ensure`'s `output` accepts, as keys of this block: `equals` (exact), `contains` (substring), `matches` (regular expression), composed with `not`, `any`/`all`/`none` arrays. Several keys in one block all must hold; at least one is required. The shapes are validated and their regexes compiled at load time, then evaluated against the rendered value. |
+
+A failed assertion fails the host with the rendered value and the
+expectation: `assert 'port is the default': value '80' does not satisfy
+exactly "8080"`.
 
 ---
 
@@ -1059,7 +1100,7 @@ http "http://api.internal/v1/pets" {
 | `headers` | — | Array of `"Name=Value"` strings, sent as `Name: Value` request headers. |
 | `data` | — | Request body, sent verbatim with `Content-Length` (any method). Absent means no body; `data = ""` sends an empty one. |
 | `code` | `200` | The expected HTTP status (100–599). |
-| `output` | — | The response body, compared after trimming surrounding whitespace — the same shapes `ensure` accepts: a string (exact), `{ contains = "..." }` or `{ matches = "regex" }`, composed the same way (several keys AND together, `not`, `any`/`all`/`none` arrays). |
+| `output` | — | The response body, compared after trimming surrounding whitespace — the same shapes `ensure` accepts: a string (exact, or spelled `{ equals = "..." }`), `{ contains = "..." }` or `{ matches = "regex" }`, composed the same way (several keys AND together, `not`, `any`/`all`/`none` arrays). |
 | `timeout` | `10` | Seconds for the whole query (name resolution aside); zero or less is a load-time error, running past it fails the job. |
 
 A failed expectation fails the host with the actual status (and a body
