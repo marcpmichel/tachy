@@ -88,8 +88,7 @@ struct LoadedTasks {
 /// used as spelled (error origins read like the command line); composed
 /// files are recorded normalized in `sourceFiles`.  `config` supplies
 /// the import search paths (config.pravic).
-LoadedTasks loadTasksFile(string path, in Config config = Config.init)
-{
+LoadedTasks loadTasksFile(string path, in Config config = Config.init) {
     LoadedTasks loaded;
     string[][string] seen; // (module \0 target) -> origins
     string[] active; // apply chain, for cycle detection
@@ -105,8 +104,7 @@ LoadedTasks loadTasksFile(string path, in Config config = Config.init)
 /// can use variables defined by the files it composes.
 private Val[string] loadInto(string path, Val[string] outerVars,
         string projectDir, ref string[] importLandings, in Config config,
-        ref string[] active, ref LoadedTasks loaded, ref string[][string] seen)
-{
+        ref string[] active, ref LoadedTasks loaded, ref string[][string] seen) {
     if(canFind(active, path))
         throw new TachyError("composition cycle: " ~ active.join(" -> ") ~ " -> " ~ path);
     loaded.sourceFiles ~= buildNormalizedPath(absolutePath(path));
@@ -151,8 +149,7 @@ private Val[string] loadInto(string path, Val[string] outerVars,
 /// existing candidate wins).  Unresolved keys keep the defining-relative
 /// path, so the deploy-time existence check names it.
 private string resolveImportPath(string src, string definingFile,
-        in Config config)
-{
+        in Config config) {
     import std.file : exists;
 
     if(isAbsolute(src))
@@ -176,8 +173,7 @@ private string resolveImportPath(string src, string definingFile,
 /// inner run, where the copies already sit inside the project) parse and
 /// ignore them, so no existence check happens here.
 private void addImport(ref LoadedTasks loaded, string path, string projectDir,
-        ref string[] importLandings, in Config config, in PracticStmt s)
-{
+        ref string[] importLandings, in Config config, in PracticStmt s) {
     const string ctx = path ~ ": line " ~ text(s.line) ~ ": import \""
         ~ s.key ~ "\"";
     if(s.value.kind != Val.Kind.table_)
@@ -198,8 +194,7 @@ private void addImport(ref LoadedTasks loaded, string path, string projectDir,
 
 /// True when `resolved` falls under a directory a declared import will
 /// land in (project root / base name of the import source).
-private bool underImportLanding(string resolved, in string[] importLandings)
-{
+private bool underImportLanding(string resolved, in string[] importLandings) {
     import std.algorithm.searching : startsWith;
 
     foreach(landing; importLandings)
@@ -215,8 +210,7 @@ private bool underImportLanding(string resolved, in string[] importLandings)
 private void processApply(in PracticStmt s, string path,
         string projectDir, ref string[] importLandings, in Config config,
         ref Val[string] scopeVars, ref string[] active, ref LoadedTasks loaded,
-        ref string[][string] seen)
-{
+        ref string[][string] seen) {
     const string ctx = path ~ ": line " ~ text(s.line) ~ ": apply \""
         ~ s.key ~ "\"";
     if(s.value.kind != Val.Kind.table_)
@@ -278,50 +272,25 @@ private void processApply(in PracticStmt s, string path,
 /// target, the module validates its parameters, duplicates anywhere in
 /// the composition are load-time errors.
 private void addJob(ref LoadedTasks loaded, ref string[][string] seen,
-        string path, in PracticStmt s, Val[string] overlay)
-{
+        string path, in PracticStmt s, Val[string] overlay) {
     const string ctx = path ~ ": line " ~ text(s.line) ~ ": " ~ s.kind
         ~ " \"" ~ s.key ~ "\"";
     const string target = s.key;
 
     string moduleName;
     switch(s.kind) {
-        case "files":
-            moduleName = "file";
-            break;
-        case "directories":
-            moduleName = "file";
-            break;
-        case "packages":
-            moduleName = "package";
-            break;
-        case "groups":
-            moduleName = "group";
-            break;
-        case "users":
-            moduleName = "user";
-            break;
-        case "services":
-            moduleName = "service";
-            break;
-        case "repos":
-            moduleName = "repo";
-            break;
-        case "compose":
-            moduleName = "compose";
-            break;
-        case "ensure":
-            moduleName = "ensure";
-            break;
-        case "asserts":
-            moduleName = "assert";
-            break;
-        case "probe":
-            moduleName = "probe";
-            break;
-        case "debug":
-            moduleName = "debug";
-            break;
+        case "files": moduleName = "file"; break;
+        case "directories": moduleName = "file"; break;
+        case "packages": moduleName = "package"; break;
+        case "groups": moduleName = "group"; break;
+        case "users": moduleName = "user"; break;
+        case "services": moduleName = "service"; break;
+        case "repos": moduleName = "repo"; break;
+        case "compose": moduleName = "compose"; break;
+        case "ensure": moduleName = "ensure"; break;
+        case "asserts": moduleName = "assert"; break;
+        case "probe": moduleName = "probe"; break;
+        case "debug": moduleName = "debug"; break;
         default:
             assert(0, "not a job statement: " ~ s.kind);
     }
@@ -330,33 +299,13 @@ private void addJob(ref LoadedTasks loaded, ref string[][string] seen,
     // compose stacks, "url" for probe checks, "name" for everything else.
     string key, noun;
     switch(moduleName) {
-        case "file":
-            key = "path";
-            noun = "path";
-            break;
-        case "repo":
-            key = "path";
-            noun = "repository";
-            break;
-        case "compose":
-            key = "dir";
-            noun = "directory";
-            break;
-        case "probe":
-            key = "url";
-            noun = "url";
-            break;
-        case "debug":
-            key = "name";
-            noun = "message";
-            break;
-        case "assert":
-            key = "name";
-            noun = "assertion";
-            break;
-        default:
-            key = noun = "name";
-            break;
+        case "file": key = "path"; noun = "path"; break;
+        case "repo": key = "path"; noun = "repository"; break;
+        case "compose": key = "dir"; noun = "directory"; break;
+        case "probe": key = "url"; noun = "url"; break;
+        case "debug": key = "name"; noun = "message"; break;
+        case "assert": key = "name"; noun = "assertion"; break;
+        default: key = noun = "name"; break;
     }
     if(!target.length)
         throw new TachyError(ctx ~ ": empty " ~ noun);
@@ -411,40 +360,25 @@ private void addJob(ref LoadedTasks loaded, ref string[][string] seen,
 }
 
 /// Display kind for a job statement.
-private string kindFor(string kind) @safe pure nothrow
-{
+private string kindFor(string kind) @safe pure nothrow {
     switch(kind) {
-        case "files":
-            return "file";
-        case "directories":
-            return "directory";
-        case "packages":
-            return "package";
-        case "groups":
-            return "group";
-        case "users":
-            return "user";
-        case "services":
-            return "service";
-        case "repos":
-            return "repo";
-        case "compose":
-            return "compose";
-        case "ensure":
-            return "ensure";
-        case "asserts":
-            return "assert";
-        case "probe":
-            return "probe";
-        case "debug":
-            return "debug";
-        default:
-            assert(0, "unknown kind " ~ kind);
+        case "files": return "file";
+        case "directories": return "directory";
+        case "packages": return "package";
+        case "groups": return "group";
+        case "users": return "user";
+        case "services": return "service";
+        case "repos": return "repo";
+        case "compose": return "compose";
+        case "ensure": return "ensure";
+        case "asserts": return "assert";
+        case "probe": return "probe";
+        case "debug": return "debug";
+        default: assert(0, "unknown kind " ~ kind);
     }
 }
 
-private string text(T)(T v) @safe pure
-{
+private string text(T)(T v) @safe pure {
     import std.conv : text;
 
     return text(v);

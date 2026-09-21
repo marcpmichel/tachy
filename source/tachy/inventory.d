@@ -42,8 +42,7 @@ class Inventory {
     private HostConfig[string] hosts_;
     private Val[string] globalVars_;
 
-    static Inventory load(string path, string ageIdentity = null)
-    {
+    static Inventory load(string path, string ageIdentity = null) {
         auto doc = loadPractic(path);
         auto inv = new Inventory;
         Val[string] globalVars;
@@ -85,8 +84,7 @@ class Inventory {
 
     /// Select hosts by a comma-separated list of host names and `@tag`
     /// selectors; `all` selects everything. Result is sorted by name.
-    HostConfig[] select(string selection)
-    {
+    HostConfig[] select(string selection) {
         import std.string : split;
         import std.algorithm.iteration : map, splitter;
         import std.array : array;
@@ -127,8 +125,7 @@ class Inventory {
 
     /// One host by exact name; an unknown name is an error listing the
     /// known hosts (tags and `all` are selection syntax, not names).
-    HostConfig host(string name)
-    {
+    HostConfig host(string name) {
         if(auto h = name in hosts_)
             return *h;
         throw new TachyError("unknown host '" ~ name ~ "' (known: "
@@ -137,8 +134,7 @@ class Inventory {
 
     /// Effective variables for a host: global < host.
     /// `inventory_hostname` is injected as a builtin.
-    Val[string] varsFor(string hostName) const
-    {
+    Val[string] varsFor(string hostName) const {
         Val[string] result = dupTable(globalVars_);
         if(auto h = hostName in hosts_)
             result = deepMerge(result, (*h).vars);
@@ -146,15 +142,13 @@ class Inventory {
         return result;
     }
 
-    private string[] knownNames() const
-    {
+    private string[] knownNames() const {
         auto names = hosts_.byKey.array;
         names.sort();
         return names;
     }
 
-    private string[] knownTags() const
-    {
+    private string[] knownTags() const {
         bool[string] seen;
         foreach(const ref h; cast() hosts_)
             foreach(tg; h.tags)

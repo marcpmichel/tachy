@@ -48,43 +48,35 @@ struct Val {
     string[] choosePatterns_; // source order, `_` included
     Val[] chooseValues_; // the case values, same order
 
-    this(string v) @safe pure nothrow
-    {
+    this(string v) @safe pure nothrow {
         kind = Kind.string_;
         str_ = v;
     }
 
-    this(long v) @safe pure nothrow
-    {
+    this(long v) @safe pure nothrow {
         kind = Kind.integer_;
         integer_ = v;
     }
 
-    this(double v) @safe pure nothrow
-    {
+    this(double v) @safe pure nothrow {
         kind = Kind.float_;
         float_ = v;
     }
 
-    this(bool v) @safe pure nothrow
-    {
+    this(bool v) @safe pure nothrow {
         kind = Kind.boolean_;
         boolean_ = v;
     }
 
     /// How this value substitutes into a `{{ ... }}` template.
-    string scalarToString() const
-    {
+    string scalarToString() const {
         final switch(kind) {
-            case Kind.string_:
-                return str_;
+            case Kind.string_: return str_;
             case Kind.integer_:
                 import std.conv : text;
-
                 return text(integer_);
             case Kind.float_:
                 import std.format : format;
-
                 return format!"%s"(float_);
             case Kind.boolean_:
                 return boolean_ ? "true" : "false";
@@ -95,29 +87,20 @@ struct Val {
         }
     }
 
-    string typeName() const @safe pure nothrow
-    {
+    string typeName() const @safe pure nothrow {
         final switch(kind) {
-            case Kind.string_:
-                return "string";
-            case Kind.integer_:
-                return "integer";
-            case Kind.float_:
-                return "float";
-            case Kind.boolean_:
-                return "boolean";
-            case Kind.array_:
-                return "array";
-            case Kind.table_:
-                return "table";
-            case Kind.choose_:
-                return "choose";
+            case Kind.string_: return "string";
+            case Kind.integer_: return "integer";
+            case Kind.float_: return "float";
+            case Kind.boolean_: return "boolean";
+            case Kind.array_: return "array";
+            case Kind.table_: return "table";
+            case Kind.choose_: return "choose";
         }
     }
 
     /// Human-readable form for error messages (strings quoted).
-    string display() const
-    {
+    string display() const {
         import std.array : appender;
         import std.string : join;
 
@@ -170,8 +153,7 @@ struct PracticDoc {
 // ---------------------------------------------------------------------------
 
 /// Reject keys not in `allowed` (typo detection).
-void checkKeys(in Val[string] t, string[] allowed, string context)
-{
+void checkKeys(in Val[string] t, string[] allowed, string context) {
     import std.algorithm.searching : canFind;
     import std.string : join;
 
@@ -183,52 +165,44 @@ void checkKeys(in Val[string] t, string[] allowed, string context)
 
 /// Fresh copy of a table.  `Val` trees are treated as immutable after
 /// construction; this only rebuilds the top-level associative array.
-Val[string] dupTable(in Val[string] t) @trusted pure
-{
+Val[string] dupTable(in Val[string] t) @trusted pure {
     Val[string] r;
-    foreach(string k, const Val v; t)
+    foreach(string k, const Val v; t) {
         r[k] = cast(Val) v;
+    }
     return r;
 }
 
 /// Sub-table `t[key]` or an empty table when absent (must be a table if present).
-Val[string] optTable(in Val[string] t, string key, string context)
-{
+Val[string] optTable(in Val[string] t, string key, string context) {
     auto pv = key in t;
-    if(pv is null)
-        return null;
+    if(pv is null) return null;
     if((*pv).kind != Val.Kind.table_)
         throw new TachyError(context ~ ": '" ~ key ~ "' must be a table, not a " ~ (*pv).typeName());
     return dupTable((*pv).table_);
 }
 
-string optString(in Val[string] t, string key, string context, string def = null)
-{
+string optString(in Val[string] t, string key, string context, string def = null) {
     auto pv = key in t;
-    if(pv is null)
-        return def;
+    if(pv is null) return def;
     if((*pv).kind != Val.Kind.string_)
         throw new TachyError(context ~ ": '" ~ key ~ "' must be a string, not a " ~ (*pv).typeName());
     return (*pv).str_;
 }
 
-long optInt(in Val[string] t, string key, string context, long def = 0)
-{
+long optInt(in Val[string] t, string key, string context, long def = 0) {
     auto pv = key in t;
-    if(pv is null)
-        return def;
+    if(pv is null) return def;
     if((*pv).kind != Val.Kind.integer_)
         throw new TachyError(context ~ ": '" ~ key ~ "' must be an integer, not a " ~ (*pv).typeName());
     return (*pv).integer_;
 }
 
-string[] optStringArray(in Val[string] t, string key, string context)
-{
+string[] optStringArray(in Val[string] t, string key, string context) {
     import std.string : join;
 
     auto pv = key in t;
-    if(pv is null)
-        return null;
+    if(pv is null) return null;
     if((*pv).kind != Val.Kind.array_)
         throw new TachyError(context ~ ": '" ~ key ~ "' must be an array of strings, not a " ~ (*pv).typeName());
     string[] r;

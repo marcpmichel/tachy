@@ -22,8 +22,7 @@ import std.format : format;
 import tachy.errors;
 import tachy.signals : signalName;
 
-private bool startsWithChanged(string status) @safe pure
-{
+private bool startsWithChanged(string status) @safe pure {
     return status.length >= 7 && status[0 .. 7] == "changed";
 }
 /// One observable step of a run.
@@ -51,8 +50,7 @@ struct JobEvent {
 }
 
 /// Builds the three event shapes.
-JobEvent evFileStart(string file, string[] hosts)
-{
+JobEvent evFileStart(string file, string[] hosts) {
     JobEvent ev;
     ev.kind = JobEvent.Kind.fileStart;
     ev.file = file;
@@ -61,8 +59,7 @@ JobEvent evFileStart(string file, string[] hosts)
 }
 
 JobEvent evJob(string host, string file, string label, string status, string msg,
-        string[] details = null, ulong ms = 0)
-{
+        string[] details = null, ulong ms = 0) {
     JobEvent ev;
     ev.kind = JobEvent.Kind.job;
     ev.host = host;
@@ -75,9 +72,7 @@ JobEvent evJob(string host, string file, string label, string status, string msg
     return ev;
 }
 
-JobEvent evFileDone(string file, ulong ok, ulong changed, ulong failed, bool check,
-        int sig = 0)
-{
+JobEvent evFileDone(string file, ulong ok, ulong changed, ulong failed, bool check, int sig = 0) {
     JobEvent ev;
     ev.kind = JobEvent.Kind.fileDone;
     ev.file = file;
@@ -90,8 +85,7 @@ JobEvent evFileDone(string file, ulong ok, ulong changed, ulong failed, bool che
 }
 
 /// Counts a job event into ok/changed/failed counters (an aggregator).
-void foldCounters(ref const JobEvent ev, ref ulong ok, ref ulong changed, ref ulong failed)
-{
+void foldCounters(ref const JobEvent ev, ref ulong ok, ref ulong changed, ref ulong failed) {
     if(ev.kind != JobEvent.Kind.job)
         return;
     if(ev.status == "failed")
@@ -128,17 +122,14 @@ struct TextRenderer {
     private size_t nameWidth_;
     private string treeHost_; // tree mode: host whose group is open
 
-    this(void delegate(string line) sink, bool tty, bool verbose,
-            bool tree = false)
-    {
+    this(void delegate(string line) sink, bool tty, bool verbose, bool tree = false) {
         emit = sink;
         tty_ = tty;
         verbose_ = verbose;
         tree_ = tree;
     }
 
-    void handle(JobEvent ev)
-    {
+    void handle(JobEvent ev) {
         final switch(ev.kind) {
             case JobEvent.Kind.fileStart:
                 nameWidth_ = 0;
@@ -167,13 +158,11 @@ struct TextRenderer {
         }
     }
 
-    private void put(string line)
-    {
+    private void put(string line) {
         emit(line ~ "\n");
     }
 
-    private void jobLine(string host, string label, string status, string msg)
-    {
+    private void jobLine(string host, string label, string status, string msg) {
         string color;
         if(tty_) {
             if(status == "failed")
@@ -202,8 +191,7 @@ struct TextRenderer {
 // ---------------------------------------------------------------------------
 
 /// Serialize an event as one JSON object on a single line.
-string eventLine(ref const JobEvent ev) @safe pure
-{
+string eventLine(ref const JobEvent ev) @safe pure {
     auto app = appender!string;
     app.put("{\"t\":\"");
     app.put(kindName(ev.kind));
@@ -256,15 +244,13 @@ string eventLine(ref const JobEvent ev) @safe pure
     return app.data;
 }
 
-private string ulongText(ulong v) @safe pure
-{
+private string ulongText(ulong v) @safe pure {
     import std.conv : text;
 
     return text(v);
 }
 
-private string kindName(JobEvent.Kind k) @safe pure nothrow
-{
+private string kindName(JobEvent.Kind k) @safe pure nothrow {
     final switch(k) {
         case JobEvent.Kind.fileStart:
             return "fileStart";
@@ -275,16 +261,14 @@ private string kindName(JobEvent.Kind k) @safe pure nothrow
     }
 }
 
-private void jsonStr(ref Appender!string app, string key, string value) @safe pure
-{
+private void jsonStr(ref Appender!string app, string key, string value) @safe pure {
     app.put(",\"");
     app.put(key);
     app.put("\":");
     jsonString(app, value);
 }
 
-private void jsonBool(ref Appender!string app, string key, bool value) @safe pure
-{
+private void jsonBool(ref Appender!string app, string key, bool value) @safe pure {
     app.put(",\"");
     app.put(key);
     app.put("\":");
@@ -292,15 +276,13 @@ private void jsonBool(ref Appender!string app, string key, bool value) @safe pur
 }
 
 /// Key prefix for a value emitted by the caller (arrays).
-private void jsonKey(ref Appender!string app, string key) @safe pure
-{
+private void jsonKey(ref Appender!string app, string key) @safe pure {
     app.put(",\"");
     app.put(key);
     app.put("\":");
 }
 
-private void jsonString(App)(ref App app, string s) @safe pure
-{
+private void jsonString(App)(ref App app, string s) @safe pure {
     app.put('"');
     foreach(char c; s) {
         switch(c) {
@@ -338,13 +320,11 @@ private void jsonString(App)(ref App app, string s) @safe pure
 /// Parse one event line produced by `eventLine`.  Returns false when the
 /// line is not an event (remote noise on the stream); a malformed event
 /// line is a hard error naming the problem.
-bool parseEventLine(string line, ref JobEvent ev)
-{
+bool parseEventLine(string line, ref JobEvent ev) {
     import std.string : stripLeft;
 
     string s = line.stripLeft();
-    if(!s.length || s[0] != '{')
-        return false;
+    if(!s.length || s[0] != '{') return false;
     ev = JobEvent.init;
 
     JsonParser p = JsonParser(s);
@@ -354,48 +334,20 @@ bool parseEventLine(string line, ref JobEvent ev)
         const string key = p.parseString();
         p.expect(':');
         switch(key) {
-            case "t":
-                kind = p.parseString();
-                break;
-            case "file":
-                ev.file = p.parseString();
-                break;
-            case "hosts":
-                ev.hosts = p.parseStringArray();
-                break;
-            case "host":
-                ev.host = p.parseString();
-                break;
-            case "label":
-                ev.label = p.parseString();
-                break;
-            case "status":
-                ev.status = p.parseString();
-                break;
-            case "msg":
-                ev.msg = p.parseString();
-                break;
-            case "details":
-                ev.details = p.parseStringArray();
-                break;
-            case "ms":
-                ev.ms = p.parseUlong();
-                break;
-            case "ok":
-                ev.ok = p.parseUlong();
-                break;
-            case "changed":
-                ev.changed = p.parseUlong();
-                break;
-            case "failed":
-                ev.failed = p.parseUlong();
-                break;
-            case "check":
-                ev.check = p.parseBool();
-                break;
-            case "sig":
-                ev.sig = cast(int) p.parseUlong();
-                break;
+            case "t":       kind = p.parseString(); break;
+            case "file":    ev.file = p.parseString(); break;
+            case "hosts":   ev.hosts = p.parseStringArray(); break;
+            case "host":    ev.host = p.parseString(); break;
+            case "label":   ev.label = p.parseString(); break;
+            case "status":  ev.status = p.parseString(); break;
+            case "msg":     ev.msg = p.parseString(); break;
+            case "details": ev.details = p.parseStringArray(); break;
+            case "ms":      ev.ms = p.parseUlong(); break;
+            case "ok":      ev.ok = p.parseUlong(); break;
+            case "changed": ev.changed = p.parseUlong(); break;
+            case "failed":  ev.failed = p.parseUlong(); break;
+            case "check":   ev.check = p.parseBool(); break;
+            case "sig":     ev.sig = cast(int) p.parseUlong(); break;
             default:
                 throw new TachyError("event line: unknown key '" ~ key ~ "'");
         }
@@ -403,15 +355,9 @@ bool parseEventLine(string line, ref JobEvent ev)
             p.next();
     }
     switch(kind) {
-        case "fileStart":
-            ev.kind = JobEvent.Kind.fileStart;
-            break;
-        case "job":
-            ev.kind = JobEvent.Kind.job;
-            break;
-        case "fileDone":
-            ev.kind = JobEvent.Kind.fileDone;
-            break;
+        case "fileStart": ev.kind = JobEvent.Kind.fileStart; break;
+        case "job": ev.kind = JobEvent.Kind.job; break;
+        case "fileDone": ev.kind = JobEvent.Kind.fileDone; break;
         case null:
             throw new TachyError("event line: missing \"t\" key");
         default:
@@ -426,72 +372,47 @@ private struct JsonParser {
     string s;
     size_t pos;
 
-    void next()
-    {
+    void next() {
         pos++;
     }
 
-    char peek()
-    {
+    char peek() {
         skipWs();
         if(pos >= s.length)
             throw new TachyError("event line: truncated");
         return s[pos];
     }
 
-    void skipWs()
-    {
+    void skipWs() {
         while(pos < s.length && (s[pos] == ' ' || s[pos] == '\t'))
             pos++;
     }
 
-    void expect(char c)
-    {
+    void expect(char c) {
         if(peek() != c)
             throw new TachyError("event line: expected '" ~ c ~ "'");
         pos++;
     }
 
-    string parseString()
-    {
+    string parseString() {
         expect('"');
         auto app = appender!string;
         while(pos < s.length) {
             char c = s[pos++];
-            if(c == '"')
-                return app.data;
-            if(c != '\\') {
-                app.put(c);
-                continue;
-            }
-            if(pos >= s.length)
-                break;
+            if(c == '"') return app.data;
+            if(c != '\\') { app.put(c); continue; }
+            if(pos >= s.length) break;
+
             char e = s[pos++];
             final switch(e) {
-                case '"':
-                    app.put('"');
-                    break;
-                case '\\':
-                    app.put('\\');
-                    break;
-                case '/':
-                    app.put('/');
-                    break;
-                case 'n':
-                    app.put('\n');
-                    break;
-                case 'r':
-                    app.put('\r');
-                    break;
-                case 't':
-                    app.put('\t');
-                    break;
-                case 'b':
-                    app.put('\b');
-                    break;
-                case 'f':
-                    app.put('\f');
-                    break;
+                case '"': app.put('"'); break;
+                case '\\': app.put('\\'); break;
+                case '/': app.put('/'); break;
+                case 'n': app.put('\n'); break;
+                case 'r': app.put('\r'); break;
+                case 't': app.put('\t'); break;
+                case 'b': app.put('\b'); break;
+                case 'f': app.put('\f'); break;
                 case 'u':
                     if(pos + 4 > s.length)
                         throw new TachyError("event line: truncated \\u escape");
@@ -503,8 +424,7 @@ private struct JsonParser {
         throw new TachyError("event line: unterminated string");
     }
 
-    string[] parseStringArray()
-    {
+    string[] parseStringArray() {
         expect('[');
         string[] r;
         while(peek() != ']') {
@@ -516,8 +436,7 @@ private struct JsonParser {
         return r;
     }
 
-    ulong parseUlong()
-    {
+    ulong parseUlong() {
         skipWs();
         size_t start = pos;
         while(pos < s.length && s[pos] >= '0' && s[pos] <= '9')
@@ -532,8 +451,7 @@ private struct JsonParser {
             throw new TachyError("event line: bad number: " ~ e.msg);
     }
 
-    bool parseBool()
-    {
+    bool parseBool() {
         skipWs();
         if(s.length - pos >= 4 && s[pos .. pos + 4] == "true") {
             pos += 4;
@@ -546,8 +464,7 @@ private struct JsonParser {
         throw new TachyError("event line: expected true or false");
     }
 
-    private dchar parseHex4(string hex)
-    {
+    private dchar parseHex4(string hex) {
         import std.conv : to, ConvException;
 
         try

@@ -32,8 +32,7 @@ import std.stdio : stdout;
 import tachy.errors;
 
 /// Dispatch `tachy generate <what> <path>`; returns the exit code.
-int runGenerate(in string[] args)
-{
+int runGenerate(in string[] args) {
     if(args.length != 2)
         throw new TachyError(
                 "generate: expected 'key <path>', 'task <path>',"
@@ -42,14 +41,10 @@ int runGenerate(in string[] args)
                 ~ " task main.pravic, tachy generate config config.pravic,"
                 ~ " tachy generate project demo, tachy generate completions bash");
     switch(args[0]) {
-        case "key":
-            return generateKey(args[1]);
-        case "task":
-            return generateTask(args[1]);
-        case "config":
-            return generateConfig(args[1]);
-        case "project":
-            return generateProject(args[1]);
+        case "key": return generateKey(args[1]);
+        case "task": return generateTask(args[1]);
+        case "config": return generateConfig(args[1]);
+        case "project": return generateProject(args[1]);
         case "completions":
             import std.stdio : stdout;
 
@@ -65,15 +60,11 @@ int runGenerate(in string[] args)
 /// The completion script for a shell: the embedded asset, validated
 /// shell name first.  Static text, so the dispatch test can compare
 /// the output against the asset directly.
-package(tachy) string completionsText(string shell)
-{
+package(tachy) string completionsText(string shell) {
     switch(shell) {
-        case "bash":
-            return completionBash;
-        case "zsh":
-            return completionZsh;
-        case "fish":
-            return completionFish;
+        case "bash": return completionBash;
+        case "zsh": return completionZsh;
+        case "fish": return completionFish;
         default:
             throw new TachyError(shell.length
                     ? "generate completions: unknown shell '" ~ shell
@@ -84,8 +75,7 @@ package(tachy) string completionsText(string shell)
 
 /// New age key pair: `age-keygen -o <path>` writes the identity (0600,
 /// refusing to overwrite) and prints the public key; both are relayed.
-private int generateKey(string path) @trusted
-{
+private int generateKey(string path) @trusted {
     import std.conv : text;
     import std.string : strip;
 
@@ -105,8 +95,7 @@ private int generateKey(string path) @trusted
 }
 
 /// `execute` with a clear error when the binary is not installed.
-private auto executeSafe(string[] cmd) @trusted
-{
+private auto executeSafe(string[] cmd) @trusted {
     import std.process : execute;
 
     try
@@ -117,8 +106,7 @@ private auto executeSafe(string[] cmd) @trusted
 }
 
 /// Sample tasks file; refuses to overwrite (generate creates new files).
-package(tachy) int generateTask(string path)
-{
+package(tachy) int generateTask(string path) {
     import std.file : exists, write;
     import std.stdio : writefln;
 
@@ -138,8 +126,7 @@ package(tachy) int generateTask(string path)
 
 /// Sample config file; refuses to overwrite (generate creates new
 /// files).
-private int generateConfig(string path)
-{
+private int generateConfig(string path) {
     import std.file : exists, write;
     import std.stdio : writefln;
 
@@ -163,8 +150,7 @@ private int generateConfig(string path)
 /// when missing ('.' fills the current directory); an existing
 /// non-directory aborts, and any already-present sample aborts the
 /// whole scaffold before anything is written (all three or nothing).
-package(tachy) int generateProject(string name)
-{
+package(tachy) int generateProject(string name) {
     import std.file : exists, isDir, mkdirRecurse, write;
     import std.path : buildPath;
     import std.stdio : writefln;

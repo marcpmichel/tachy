@@ -65,8 +65,7 @@ struct RunOptions {
 /// project whose entry file is "main.pravic"; anything else is used as
 /// the tasks file itself.  With no argument, "main.pravic" in the
 /// current directory is the entry point.
-string[] resolveTasksFiles(in string[] args)
-{
+string[] resolveTasksFiles(in string[] args) {
     import std.file : exists, isDir;
 
     if(!args.length)
@@ -78,8 +77,7 @@ string[] resolveTasksFiles(in string[] args)
     return resolved;
 }
 
-int runTachy(RunOptions optsIn)
-{
+int runTachy(RunOptions optsIn) {
     installSignalHandlers();
 
     if(!optsIn.selection.length)
@@ -114,8 +112,7 @@ int runTachy(RunOptions optsIn)
 /// vocabulary instead — `all`, every host name, every `@tag`, one per
 /// line — the machine format the `generate completions` scripts call.
 /// No host is contacted and no tasks file is needed.
-int runHosts(in string[] args, const RunOptions opts)
-{
+int runHosts(in string[] args, const RunOptions opts) {
     if(!args.length)
         throw new TachyError("hosts: expected 'list [<selection>]' or"
                 ~ " 'info <host>' — examples: tachy hosts list,"
@@ -156,32 +153,26 @@ int runHosts(in string[] args, const RunOptions opts)
 /// host name and every `@tag`, one per line — the machine format the
 /// `generate completions` scripts parse.  Not human output; the human
 /// list is `hostsListText`.
-package(tachy) string selectionCandidatesText(HostConfig[] hosts) @safe
-{
+package(tachy) string selectionCandidatesText(HostConfig[] hosts) @safe {
     import std.algorithm.iteration : uniq;
     import std.algorithm.sorting : sort;
 
     string[] tags;
-    foreach(ref h; hosts)
-        tags ~= h.tags;
+    foreach(ref h; hosts) tags ~= h.tags;
     tags.sort();
 
     string out_ = "all\n";
-    foreach(ref h; hosts)
-        out_ ~= h.name ~ "\n";
-    foreach(t; uniq(tags))
-        out_ ~= "@" ~ t ~ "\n";
+    foreach(ref h; hosts) out_ ~= h.name ~ "\n";
+    foreach(t; uniq(tags)) out_ ~= "@" ~ t ~ "\n";
     return out_;
 }
 
 /// Text of `hosts list`: the selection header line, then one line per
 /// host (the output of the former --list-hosts option, unchanged).
-package(tachy) string hostsListText(string selection, HostConfig[] hosts)
-{
+package(tachy) string hostsListText(string selection, HostConfig[] hosts) {
     string out_ = format("== %s | hosts: %s\n", selection,
             hosts.mapHosts().join(", "));
-    foreach(ref h; hosts)
-        out_ ~= format("  %s (%s)\n", h.name, describeHost(h));
+    foreach(ref h; hosts) out_ ~= format("  %s (%s)\n", h.name, describeHost(h));
     return out_;
 }
 
@@ -189,8 +180,7 @@ package(tachy) string hostsListText(string selection, HostConfig[] hosts)
 /// then its attributes — connection and port always (they have
 /// defaults), address/user/key/tags when set — and its effective
 /// variables (global < host, keys sorted, values as Pravic).
-package(tachy) string hostInfoText(in HostConfig h, in Val[string] vars)
-{
+package(tachy) string hostInfoText(in HostConfig h, in Val[string] vars) {
     import std.algorithm.sorting : sort;
     import std.array : array;
 
@@ -216,8 +206,7 @@ package(tachy) string hostInfoText(in HostConfig h, in Val[string] vars)
 }
 
 /// One `hosts info` attribute line: name padded to ten columns.
-private string attrLine(string name, string value) @safe pure
-{
+private string attrLine(string name, string value) @safe pure {
     return format("  %-10s  %s\n", name, value);
 }
 
@@ -226,8 +215,7 @@ private string attrLine(string name, string value) @safe pure
 // ---------------------------------------------------------------------------
 
 private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] hosts,
-        const Config config)
-{
+        const Config config) {
     const bool tty = isStdoutTty() || opts.forceColor;
     const bool machine = opts.directReport.length > 0;
 
@@ -359,8 +347,7 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
 /// controller is skipped — it may live under an import landing, which
 /// only exists inside the bundle.
 package(tachy) void validateRenders(in LoadedTasks loaded,
-        const Inventory inventory, const HostConfig[] hosts)
-{
+        const Inventory inventory, const HostConfig[] hosts) {
     import std.file : exists;
 
     foreach(ref const host; hosts) {
@@ -385,8 +372,7 @@ package(tachy) void validateRenders(in LoadedTasks loaded,
     }
 }
 
-private void writeDirectReport(string path, ulong ok, ulong changed, ulong failed)
-{
+private void writeDirectReport(string path, ulong ok, ulong changed, ulong failed) {
     try {
         auto f = File(path, "w");
         f.writefln("%s %s %s", ok, changed, failed);
@@ -404,8 +390,7 @@ private struct DeployedBundle {
 }
 
 private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] hosts,
-        const Config config)
-{
+        const Config config) {
     const bool tty = isStdoutTty();
     const bool rawEvents = opts.events; // display the raw event stream
     TextRenderer renderer = TextRenderer((string l) => terminalSink(l), tty,
@@ -448,8 +433,9 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
             LoadedTasks secretLoaded = loaded;
             string secretProjectDir = projectDir;
             string staging; // the mirror lives for the whole tasks file
-            scope(exit)
+            scope(exit) {
                 removeStaging(staging);
+            }
             if(loaded.deferred.length) {
                 staging = makeStaging(projectDir, imports);
                 secretProjectDir = staging;
@@ -500,10 +486,11 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
                     // one bundle, and neither must two files whose
                     // age-marked sources differ.
                     DecryptedFile[] decrypted;
-                    if(anyAgeSrc)
+                    if(anyAgeSrc) {
                         decrypted = collectDecryptedFiles(secretLoaded,
                                 inventory.varsFor(host.name), secretProjectDir,
                                 opts.identity, decryptedCache);
+                    }
                     const string key = host.name ~ "\0" ~ projectDir
                         ~ "\0" ~ importsSignature(imports)
                         ~ "\0" ~ decryptedSignature(decrypted);
@@ -600,33 +587,29 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
 
     // An interrupted run exits with the conventional 128 + signal; the
     // finally above already removed the deployed bundles (cleanup).
-    if(signalReceived())
-        return signalExitCode();
+    if(signalReceived()) return signalExitCode();
     return totalFailed > 0 ? 1 : 0;
 }
 
 /// Cache-key signature of a bundle's import set (sources are resolved
 /// absolute and collected in deterministic order).
-private string importsSignature(in ImportSpec[] imports) @safe pure
-{
+private string importsSignature(in ImportSpec[] imports) @safe pure {
     string s;
-    foreach(ref const i; imports)
-        s ~= i.src ~ "\0" ~ i.dest ~ "\n";
+    foreach(ref const i; imports) { s ~= i.src ~ "\0" ~ i.dest ~ "\n"; }
     return s;
 }
 
 /// Cache-key signature of a bundle's decrypted-secret set.
-private string decryptedSignature(in DecryptedFile[] decrypted) @safe pure
-{
+private string decryptedSignature(in DecryptedFile[] decrypted) @safe pure {
     import std.algorithm.sorting : sort;
 
     auto rels = new string[decrypted.length];
-    foreach(i, ref const d; decrypted)
+    foreach(i, ref const d; decrypted) {
         rels[i] = d.relPath;
+    }
     rels.sort();
     string s;
-    foreach(r; rels)
-        s ~= r ~ "\n";
+    foreach(r; rels) { s ~= r ~ "\n"; }
     return s;
 }
 
@@ -636,11 +619,11 @@ private string decryptedSignature(in DecryptedFile[] decrypted) @safe pure
 private bool hasAgeSrc(in LoadedTasks loaded) @safe
 {
     foreach(ref const job; loaded.jobs) {
-        if(job.moduleName != "file")
-            continue;
-        if(auto a = "age" in job.params)
-            if((*a).kind == Val.Kind.boolean_ && (*a).boolean_)
-                return true;
+        if(job.moduleName != "file") continue;
+
+        if(auto a = "age" in job.params) {
+            if((*a).kind == Val.Kind.boolean_ && (*a).boolean_) return true;
+        }
     }
     return false;
 }
@@ -653,36 +636,35 @@ private bool hasAgeSrc(in LoadedTasks loaded) @safe
 /// decryption across hosts (resolved path -> plaintext).
 package(tachy) DecryptedFile[] collectDecryptedFiles(in LoadedTasks loaded,
         in Val[string] hostVars, string projectDir, string identity,
-        ref string[string] cache) @trusted
-{
+        ref string[string] cache) @trusted {
+
     DecryptedFile[] out_;
     bool[string] seenRel;
     foreach(ref const job; loaded.jobs) {
-        if(job.moduleName != "file")
-            continue;
+        if(job.moduleName != "file") continue;
         auto a = "age" in job.params;
-        if(a is null || (*a).kind != Val.Kind.boolean_ || !(*a).boolean_)
-            continue;
+        if(a is null || (*a).kind != Val.Kind.boolean_ || !(*a).boolean_) continue;
 
         auto vars = deepMerge(hostVars, job.overlay);
         auto params = renderParams(job.params, vars);
         auto s = "src" in params;
-        if(s is null || (*s).kind != Val.Kind.string_)
+        if(s is null || (*s).kind != Val.Kind.string_) {
             throw new TachyError(job.origin ~ ": 'age' requires 'src'"
                     ~ " (it marks that source file as age-encrypted)");
-        const string src = (*s).str_;
+        }
 
+        const string src = (*s).str_;
         string srcPath = src;
-        if(!isAbsolute(srcPath))
-            srcPath = buildPath(job.tasksFileDir, src);
+
+        if(!isAbsolute(srcPath)) srcPath = buildPath(job.tasksFileDir, src);
         srcPath = buildNormalizedPath(absolutePath(srcPath));
-        if(!srcPath.startsWith(projectDir ~ "/"))
+        if(!srcPath.startsWith(projectDir ~ "/")) {
             throw new TachyError(job.origin ~ ": age-marked 'src' '" ~ src
                     ~ "' must live inside the project directory '" ~ projectDir
                     ~ "' (only the project is copied into the bundle)");
+        }
         const string rel = srcPath[projectDir.length + 1 .. $];
-        if(rel in seenRel)
-            continue;
+        if(rel in seenRel) continue;
         seenRel[rel] = true;
 
         if(auto hit = srcPath in cache) {
@@ -751,8 +733,7 @@ package(tachy) string makeStaging(string projectDir, in ImportSpec[] imports)
 
 /// Best-effort staging removal; symlinks are unlinked, never followed
 /// into the real project or import sources.  Never throws.
-package(tachy) void removeStaging(string staging) @trusted
-{
+package(tachy) void removeStaging(string staging) @trusted {
     import std.file : rmdirRecurse;
 
     if(!staging.length)
@@ -766,51 +747,44 @@ package(tachy) void removeStaging(string staging) @trusted
 /// A project must be self-contained: every file of the composition has
 /// to live inside the tasks file's parent directory, since only that
 /// directory is copied to the host.
-private void checkProjectContained(in LoadedTasks loaded, string projectDir)
-{
+private void checkProjectContained(in LoadedTasks loaded, string projectDir) {
     const string prefix = projectDir ~ "/";
-    foreach(f; loaded.sourceFiles)
-        if(!startsWith(f, prefix))
+    foreach(f; loaded.sourceFiles) {
+        if(!startsWith(f, prefix)) {
             throw new TachyError("the composition applies '" ~ f
                     ~ "', which is outside the project directory '" ~ projectDir
                     ~ "'; a project (the tasks file's parent directory) must be"
                     ~ " self-contained");
+        }
+    }
 }
 
-private bool readReport(Transport t, string path, out ulong ok, out ulong changed, out ulong failed)
-{
+private bool readReport(Transport t, string path, out ulong ok, out ulong changed, out ulong failed) {
     ok = changed = failed = 0;
     auto r = t.run("cat -- " ~ shQuote(path));
-    if(!r.ok)
-        return false;
+    if(!r.ok) return false;
     return parseReport(r.outText, ok, changed, failed);
 }
 
 // ---------------------------------------------------------------------------
 
-private string[] mapHosts()(HostConfig[] hosts)
-{
+private string[] mapHosts()(HostConfig[] hosts) {
     import std.array : array;
     import std.algorithm.iteration : map;
 
     return hosts.map!(h => h.name).array;
 }
 
-private string describeHost(in HostConfig h) @safe pure
-{
-    if(h.connection == "local")
-        return "local";
+private string describeHost(in HostConfig h) @safe pure {
+    if(h.connection == "local") return "local";
     auto s = "ssh ";
-    if(h.user.length)
-        s ~= h.user ~ "@";
+    if(h.user.length) s ~= h.user ~ "@";
     s ~= h.address.length ? h.address : h.name;
-    if(h.port != 22)
-        s ~= text(":", h.port);
+    if(h.port != 22) s ~= text(":", h.port);
     return s;
 }
 
-private string defaultLabel(string kind, in Val[string] params) @safe pure
-{
+private string defaultLabel(string kind, in Val[string] params) @safe pure {
     // files and directories key their params by "path", compose by the
     // injected "dir", probe by the injected "url", everything else by
     // the injected "name".
@@ -823,21 +797,18 @@ private string defaultLabel(string kind, in Val[string] params) @safe pure
 
 /// Terminal event sink: writes each rendered line and flushes, so lines
 /// from a streamed run appear as they happen.
-private void terminalSink(string line)
-{
+private void terminalSink(string line) {
     stdout.write(line);
     stdout.flush();
 }
 
 /// Machine mode: one JSON event per line on stdout, flushed as emitted.
-private void emitRawEvent(JobEvent ev)
-{
+private void emitRawEvent(JobEvent ev) {
     stdout.writeln(eventLine(ev));
     stdout.flush();
 }
 
-private bool isStdoutTty() @trusted
-{
+private bool isStdoutTty() @trusted {
     version(Posix) {
         import core.sys.posix.unistd : isatty;
 

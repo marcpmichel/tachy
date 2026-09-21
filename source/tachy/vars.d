@@ -35,15 +35,13 @@ struct AgeIdentity {
     string path;
     string material;
 
-    static AgeIdentity fromPath(string p)
-    {
+    static AgeIdentity fromPath(string p) {
         AgeIdentity id;
         id.path = p;
         return id;
     }
 
-    static AgeIdentity fromMaterial(string m)
-    {
+    static AgeIdentity fromMaterial(string m) {
         AgeIdentity id;
         id.material = m;
         return id;
@@ -58,8 +56,7 @@ package(tachy) enum string ageFileHeader = "age-encryption.org/v1\n";
 /// plaintext inside a deployed bundle (the controller decrypts them
 /// when building the bundle, exactly like it decrypts inventory vars
 /// into the generated inventory); this check tells the two apart.
-package(tachy) bool isAgeCiphertext(const char[] bytes) @safe pure nothrow
-{
+package(tachy) bool isAgeCiphertext(const char[] bytes) @safe pure nothrow {
     return bytes.length >= ageFileHeader.length
         && bytes[0 .. ageFileHeader.length] == ageFileHeader;
 }
@@ -70,8 +67,7 @@ package(tachy) bool isAgeCiphertext(const char[] bytes) @safe pure nothrow
 /// marked `age = true`, running where the identity lives — the
 /// controller.
 package(tachy) string decryptAgeFile(string agePath, string explicitIdentity,
-        string where) @trusted
-{
+        string where) @trusted {
     const AgeIdentity identity = resolveAgeIdentity(explicitIdentity, where);
     try
         return ageDecrypt(agePath, identity, where);
@@ -101,8 +97,7 @@ string delegate(string agePath, in AgeIdentity identity, string where) ageDecryp
 /// resolves to the empty string (the default only covers a missing
 /// value).
 Val[string] resolveEnvVars(in Val[string] vars, string context,
-        in AgeConfig age = AgeConfig.init) @trusted
-{
+        in AgeConfig age = AgeConfig.init) @trusted {
     Val[string] r;
     string[string][string] dotenvCache; // resolved path -> parsed entries
     foreach(string k, const Val v; vars)
@@ -111,8 +106,7 @@ Val[string] resolveEnvVars(in Val[string] vars, string context,
 }
 
 private Val resolveEnvVal(in Val v, string where, string context,
-        ref string[string][string] dotenvCache, in AgeConfig age) @trusted
-{
+        ref string[string][string] dotenvCache, in AgeConfig age) @trusted {
     import std.process : environment;
 
     if(v.kind != Val.Kind.table_)
@@ -246,8 +240,7 @@ private Val resolveEnvVal(in Val v, string where, string context,
 /// stream's output when it has any); so is output that is not valid
 /// UTF-8 (binary does not fit variables).
 private string runCapture(string command, bool wantStderr, string where,
-        string context) @trusted
-{
+        string context) @trusted {
     import core.thread : Thread;
     import std.array : appender;
     import std.conv : text;
@@ -317,8 +310,7 @@ private string runCapture(string command, bool wantStderr, string where,
 }
 
 /// The first line of `s`, capped for error messages.
-private string firstLine(string s) @safe pure
-{
+private string firstLine(string s) @safe pure {
     import std.string : indexOf;
 
     const ptrdiff_t nl = indexOf(s, '\n');
@@ -329,8 +321,7 @@ private string firstLine(string s) @safe pure
 /// Resolve a `from` path like any other tasks-file path: absolute
 /// paths pass through, relative ones are relative to the directory of
 /// the file declaring the vars table.
-private string resolveDotenvPath(string from, string context) @trusted
-{
+private string resolveDotenvPath(string from, string context) @trusted {
     import std.path : buildPath, dirName, isAbsolute;
 
     return isAbsolute(from) ? from : buildPath(dirName(context), from);
@@ -340,8 +331,7 @@ private string resolveDotenvPath(string from, string context) @trusted
 /// most once per resolveEnvVars call.  Returns false when the file
 /// does not define the key; `value` receives the entry otherwise.
 private bool dotenvLookup(string path, string key, string where,
-        ref string[string][string] dotenvCache, out string value) @trusted
-{
+        ref string[string][string] dotenvCache, out string value) @trusted {
     if(auto cached = path in dotenvCache) {
         if(auto hit = key in *cached) {
             value = *hit;
@@ -360,7 +350,6 @@ private bool dotenvLookup(string path, string key, string where,
     string[string] entries = parseDotenv(content, where, path);
     dotenvCache[path] = entries;
     if(auto hit = key in entries) {
-
         value = *hit;
         return true;
     }
@@ -373,8 +362,7 @@ private bool dotenvLookup(string path, string key, string where,
 /// variable (an existing file path, or raw key material), then the
 /// controller's default ssh key — age accepts ed25519 ssh private
 /// keys natively.  Anything else is an error naming the options.
-private AgeIdentity resolveAgeIdentity(string explicitIdentity, string where) @trusted
-{
+private AgeIdentity resolveAgeIdentity(string explicitIdentity, string where) @trusted {
     import std.file : exists;
     import std.path : buildPath;
     import std.process : environment;
@@ -411,8 +399,7 @@ private AgeIdentity resolveAgeIdentity(string explicitIdentity, string where) @t
 /// Recognize raw age key material: an `AGE-SECRET-KEY-1...` secret key
 /// or an ssh private key block.  Anything else that is not an existing
 /// path is a configuration error, not material to hand to age.
-private bool isKeyMaterial(string s) @safe pure
-{
+private bool isKeyMaterial(string s) @safe pure {
     import std.algorithm.searching : canFind, startsWith;
 
     return s.startsWith("AGE-SECRET-KEY-1") || canFind(s, "PRIVATE KEY");
@@ -422,8 +409,7 @@ private bool isKeyMaterial(string s) @safe pure
 /// fed to `/dev/stdin` — it is never written to disk.  stderr is
 /// drained after stdout (age's error output is one short line).
 private string defaultAgeDecrypt(string agePath, in AgeIdentity identity,
-        string where) @trusted
-{
+        string where) @trusted {
     import std.array : appender;
     import std.conv : text;
     import std.process : Redirect, pipeProcess, wait;
@@ -474,8 +460,7 @@ private string defaultAgeDecrypt(string agePath, in AgeIdentity identity,
 /// whitespace ends an unquoted value; an empty value is a value;
 /// later keys win.  Anything else is an error naming file and line.
 private string[string] parseDotenv(string content, string where, string path)
-@trusted
-{
+@trusted {
     import std.conv : text;
     import std.string : indexOf, splitLines, strip;
 
@@ -498,8 +483,7 @@ private string[string] parseDotenv(string content, string where, string path)
     return entries;
 }
 
-private string parseDotenvValue(string rest, string origin) @trusted
-{
+private string parseDotenvValue(string rest, string origin) @trusted {
     import std.string : strip, stripLeft;
 
     const string v = rest.stripLeft();
@@ -567,8 +551,7 @@ private string parseDotenvValue(string rest, string origin) @trusted
 
 /// Deep merge: `over` wins per leaf key; nested tables merge recursively.
 /// Arrays and scalars replace.  Returns a fresh tree; inputs are untouched.
-Val[string] deepMerge(in Val[string] base, in Val[string] over) @trusted pure
-{
+Val[string] deepMerge(in Val[string] base, in Val[string] over) @trusted pure {
     Val[string] r;
     foreach(string k, const Val v; base)
         r[k] = cast(Val) v;
@@ -582,8 +565,7 @@ Val[string] deepMerge(in Val[string] base, in Val[string] over) @trusted pure
     return r;
 }
 /// Look up a dotted path like `nginx.port` in nested variable tables.
-const(Val)* lookupPath(in Val[string] vars, string dottedPath) @safe pure
-{
+const(Val)* lookupPath(in Val[string] vars, string dottedPath) @safe pure {
     import std.algorithm.iteration : splitter;
 
     const(Val)* cur;
@@ -604,8 +586,7 @@ const(Val)* lookupPath(in Val[string] vars, string dottedPath) @safe pure
 }
 
 /// Render `{{ expr }}` templates in `input` using `vars`.
-string renderTemplate(string input, in Val[string] vars, string[] active = null)
-{
+string renderTemplate(string input, in Val[string] vars, string[] active = null) {
     if(!canFind(input, "{{"))
         return input;
 
@@ -637,8 +618,7 @@ string renderTemplate(string input, in Val[string] vars, string[] active = null)
     return app.data;
 }
 
-private string resolveExpr(string expr, in Val[string] vars, string[] active)
-{
+private string resolveExpr(string expr, in Val[string] vars, string[] active) {
     import std.string : join;
 
     if(canFind(active, expr))
@@ -691,8 +671,7 @@ private string resolveExpr(string expr, in Val[string] vars, string[] active)
 /// the `_` default, which the parser makes mandatory.  The chosen value
 /// is returned as-is; the caller renders it in its own context.
 private Val evalChoose(in Val v, in Val[string] vars, string[] active)
-@trusted
-{
+@trusted {
     const string subject = renderTemplate(v.str_, vars, active);
     size_t defaultIdx;
     foreach(size_t i; 0 .. v.choosePatterns_.length) {
@@ -705,16 +684,14 @@ private Val evalChoose(in Val v, in Val[string] vars, string[] active)
 }
 
 /// Deep-copy `params`, rendering every string against `vars`.
-Val[string] renderParams(in Val[string] params, in Val[string] vars) @trusted
-{
+Val[string] renderParams(in Val[string] params, in Val[string] vars) @trusted {
     Val[string] r;
     foreach(string k, const Val v; params)
         r[k] = renderVal(v, vars);
     return r;
 }
 
-private Val renderVal(in Val v, in Val[string] vars) @trusted
-{
+private Val renderVal(in Val v, in Val[string] vars) @trusted {
     final switch(v.kind) {
         case Val.Kind.string_:
             return Val(renderTemplate(v.str_, vars));
@@ -746,8 +723,7 @@ private Val renderVal(in Val v, in Val[string] vars) @trusted
 /// Resolve an entry path (`template`, `src`) the way `file`/`service`
 /// do: absolute paths pass through, relative ones resolve against the
 /// defining tasks file's directory.
-package(tachy) string resolveEntryPath(string path, string baseDir) @safe pure
-{
+package(tachy) string resolveEntryPath(string path, string baseDir) @safe pure {
     import std.path : buildPath, isAbsolute;
 
     return isAbsolute(path) ? path : buildPath(baseDir, path);
@@ -758,8 +734,7 @@ package(tachy) string resolveEntryPath(string path, string baseDir) @safe pure
 /// win) — exactly the scope `file`/`service` render `template` with at
 /// run time.  `where` prefixes errors ("file: ", "service: ").
 package(tachy) string renderTemplateFile(string tplPath, string baseDir,
-        Val[string] vars, in Val[string] params, string where) @trusted
-{
+        Val[string] vars, in Val[string] params, string where) @trusted {
     import std.file : readText;
 
     const string abs = resolveEntryPath(tplPath, baseDir);

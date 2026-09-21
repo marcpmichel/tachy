@@ -55,8 +55,7 @@ void delegate(in string tmpPath, in string exePath) replaceHook = null;
 
 /// `tachy upgrade` — check, ask (unless --yes), download, replace.
 int runUpgrade(const RunOptions opts, in string currentVersion, in string[] args)
-@trusted
-{
+@trusted {
     if(args.length)
         throw new TachyError("upgrade takes no sub-commands — just run"
                 ~ " \"tachy upgrade\" (add --yes to skip the confirmation)");
@@ -125,8 +124,7 @@ int runUpgrade(const RunOptions opts, in string currentVersion, in string[] args
 /// The y/N prompt for a real terminal: refused outright when stdin is
 /// not one — an unattended run must not block on a question it cannot
 /// see; `--yes` is the way through.
-private bool askOnTty(in string question) @trusted
-{
+private bool askOnTty(in string question) @trusted {
     version(Posix) {
         import core.sys.posix.unistd : isatty;
 
@@ -139,16 +137,14 @@ private bool askOnTty(in string question) @trusted
 
 /// Write the question and read one line: only "y"/"yes" (any case)
 /// proceeds; EOF and anything else decline, the N of "y/N".
-private bool promptYesNo(in string question) @trusted
-{
+private bool promptYesNo(in string question) @trusted {
     import std.stdio : stdin, stdout;
     import std.string : toLower;
 
     stdout.write(question);
     stdout.flush();
     const line = stdin.readln();
-    if(line is null)
-        return false;
+    if(line is null) return false;
     const answer = strip(line).toLower;
     return answer == "y" || answer == "yes";
 }
@@ -156,21 +152,20 @@ private bool promptYesNo(in string question) @trusted
 /// The file the running process was started from: the kernel resolves
 /// it, so a tachy on $PATH behind symlinks still lands on the real
 /// binary.
-private string runningBinaryPath() @trusted
-{
+private string runningBinaryPath() @trusted {
     import std.file : thisExePath;
 
-    try
+    try {
         return thisExePath();
-    catch(Exception e)
-        throw new TachyError("upgrade: cannot locate the running binary: "
-                ~ e.msg);
+    }
+    catch(Exception e) {
+        throw new TachyError("upgrade: cannot locate the running binary: " ~ e.msg);
+    }
 }
 
 /// The release asset URL for a version, the name `mise run release`
 /// uploads.
-private string assetUrl(in string v) @safe pure
-{
+private string assetUrl(in string v) @safe pure {
     return "https://github.com/" ~ repoSlug ~ "/releases/download/v"
         ~ v ~ "/tachy-" ~ v ~ "-linux-amd64";
 }
@@ -180,15 +175,13 @@ private string assetUrl(in string v) @safe pure
 /// system store, non-200 fails — a "not found" page must not become
 /// the new binary.  The one-minute timeout bounds each stalled IO
 /// operation, not the whole transfer.
-private void downloadRelease(in string url, in string tmpPath) @trusted
-{
+private void downloadRelease(in string url, in string tmpPath) @trusted {
     httpDownload(url, tmpPath, [], 60.seconds, "upgrade");
 }
 
 /// Prove the downloaded file is the release we asked for before it
 /// replaces anything: executable, and its `version` output matches.
-private void verifyDownloaded(in string tmpPath, in string expected) @trusted
-{
+private void verifyDownloaded(in string tmpPath, in string expected) @trusted {
     auto t = new LocalTransport;
     auto ch = t.run("chmod 0755 -- " ~ shQuote(tmpPath));
     if(!ch.ok)
@@ -213,8 +206,7 @@ private void verifyDownloaded(in string tmpPath, in string expected) @trusted
 /// over a running binary is fine; only its directory needs write
 /// permission.
 package(tachy) void defaultReplace(in string tmpPath, in string exePath)
-@trusted
-{
+@trusted {
     import std.file : rename;
 
     try
@@ -225,8 +217,7 @@ package(tachy) void defaultReplace(in string tmpPath, in string exePath)
                     ? " (re-run with sudo to upgrade a system-wide install)" : ""));
 }
 
-private string failText(in CommandResult r) @safe pure
-{
+private string failText(in CommandResult r) @safe pure {
     const m = r.errText.strip;
     return m.length ? m : "exit status " ~ intText(r.status);
 }
@@ -235,8 +226,7 @@ private string failText(in CommandResult r) @safe pure
 /// answers a HEAD request with a 302 whose Location points at the
 /// newest release tag — one tiny request, no API.  Redirects stay
 /// unfollowed: the redirect is the answer.
-private string defaultLatestRelease() @trusted
-{
+private string defaultLatestRelease() @trusted {
     auto rq = Request();
     rq.maxRedirects = 0;
     rq.timeout = 30.seconds;
@@ -262,8 +252,7 @@ private string defaultLatestRelease() @trusted
 /// Extract the release version from the effective URL of the
 /// "releases/latest" redirect: ".../releases/tag/v26.09.20" →
 /// "26.09.20".
-package(tachy) string latestFromEffectiveUrl(string url) @safe pure
-{
+package(tachy) string latestFromEffectiveUrl(string url) @safe pure {
     if(!canFind(url, "/tag/"))
         throw new TachyError("upgrade: cannot determine the latest release from '"
                 ~ url ~ "' (no /tag/ in the redirect)");
@@ -279,8 +268,7 @@ package(tachy) string latestFromEffectiveUrl(string url) @safe pure
 
 /// Compare two tachy versions (dates, "YY.mm.dd"): segment-wise
 /// numeric, so "26.9.10" sorts before "26.10.1" regardless of padding.
-package(tachy) int compareVersions(string a, string b) @safe pure
-{
+package(tachy) int compareVersions(string a, string b) @safe pure {
     const long[] x = segments(a);
     const long[] y = segments(b);
     foreach(i; 0 .. (x.length > y.length ? x.length : y.length)) {
@@ -292,8 +280,7 @@ package(tachy) int compareVersions(string a, string b) @safe pure
     return 0;
 }
 
-private long[] segments(string s) @safe pure
-{
+private long[] segments(string s) @safe pure {
     import std.algorithm.iteration : splitter;
     import std.conv : ConvException, to;
 
@@ -307,9 +294,9 @@ private long[] segments(string s) @safe pure
     return r;
 }
 
-private string intText(int v) @safe pure
-{
+private string intText(int v) @safe pure {
     import std.conv : text;
 
     return text(v);
 }
+

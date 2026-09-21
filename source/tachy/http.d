@@ -52,8 +52,7 @@ struct HttpResponse {
 // ---------------------------------------------------------------------------
 
 /// RFC 7230 token characters (methods and header names are tokens).
-private bool isTokenChar(char c) @safe pure nothrow
-{
+private bool isTokenChar(char c) @safe pure nothrow {
     if((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
         return true;
     foreach(immutable good; "!#$%&'*+-.^_`|~")
@@ -64,8 +63,7 @@ private bool isTokenChar(char c) @safe pure nothrow
 
 /// A method is a non-empty token ("GET", "POST", ...).  Throws on
 /// anything else, so an accidental typo cannot smuggle request framing.
-void validateMethod(string method, string context)
-{
+void validateMethod(string method, string context) {
     if(method.length) {
         bool ok = true;
         foreach(immutable char c; method)
@@ -82,8 +80,7 @@ void validateMethod(string method, string context)
 
 /// A header entry is "Name=Value" with a token name and a value free of
 /// control characters (no request smuggling through parameters).
-void validateHeader(string header, string context)
-{
+void validateHeader(string header, string context) {
     const size_t eq = header.indexOf('=');
     if(eq == 0 || eq == cast(size_t)-1)
         throw new TachyError(context ~ ": 'headers' entries must look like"
@@ -100,8 +97,7 @@ void validateHeader(string header, string context)
 
 /// Only http and https travel: anything else is a spelling error, not
 /// a request the library should interpret (it would also accept ftp).
-private void enforceScheme(string url, string context) @safe pure
-{
+private void enforceScheme(string url, string context) @safe pure {
     const bool ok = (url.length >= 7 && !icmp(url[0 .. 7], "http://"))
         || (url.length >= 8 && !icmp(url[0 .. 8], "https://"));
     if(!ok)
@@ -119,8 +115,7 @@ private void enforceScheme(string url, string context) @safe pure
 /// (0 means: the answer of the exact URL is the answer).
 HttpResponse httpQuery(string method, string url, in string[] headers,
         string data, Duration timeout, string context,
-        uint maxRedirects = defaultMaxRedirects, bool insecure = false)
-{
+        uint maxRedirects = defaultMaxRedirects, bool insecure = false) {
     auto rs = perform(method, url, headers, data, timeout, maxBodyBytes,
             maxRedirects, context, insecure);
     HttpResponse r;
@@ -137,8 +132,7 @@ HttpResponse httpQuery(string method, string url, in string[] headers,
 /// non-200 status, a timeout, an oversized body or a transport failure
 /// throws with `context` and writes nothing.
 void httpDownload(string url, string path, in string[] headers,
-        Duration timeout, string context) @trusted
-{
+        Duration timeout, string context) @trusted {
     auto rs = perform("GET", url, headers, null, timeout, maxDownloadBytes,
             defaultMaxRedirects, context);
     if(rs.code != 200)
@@ -155,8 +149,7 @@ void httpDownload(string url, string path, in string[] headers,
 /// the buffered body both by Content-Length and by bytes received.
 private Response perform(string method, string url, in string[] headers,
         string data, Duration timeout, size_t maxBytes, uint maxRedirects,
-        string context, bool insecure = false) @trusted
-{
+        string context, bool insecure = false) @trusted {
     validateMethod(method, context);
     foreach(immutable h; headers)
         validateHeader(h, context);
@@ -193,8 +186,7 @@ private Response perform(string method, string url, in string[] headers,
         rq.addHeaders(extra);
 
     try {
-        if(data is null)
-            return rq.execute(method, url);
+        if(data is null) return rq.execute(method, url);
         // A flat array keeps the wire shape of the query tool: the body
         // travels with Content-Length, never chunked.
         return rq.execute(method, url, data.representation, contentType);
@@ -206,15 +198,13 @@ private Response perform(string method, string url, in string[] headers,
 }
 
 /// "HTTP/1.1 200 OK" -> "OK" (the text after the three-digit code).
-private string reasonOf(string statusLine, int status) @safe pure
-{
+private string reasonOf(string statusLine, int status) @safe pure {
     const needle = text(status) ~ " ";
     const ptrdiff_t idx = statusLine.indexOf(needle);
     return idx >= 0 ? statusLine[idx + needle.length .. $].strip : "";
 }
 
-private string secs(Duration d) @safe pure
-{
+private string secs(Duration d) @safe pure {
     immutable s = d.total!"seconds";
     return s ? text(s) ~ "s" : text(d);
 }

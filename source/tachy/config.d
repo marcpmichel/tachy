@@ -56,15 +56,13 @@ struct Config {
 /// The run's age identity: the `--identity` flag supersedes the
 /// config file's `identity` entry.  An empty result falls back to
 /// AGE_IDENTITY, then ~/.ssh/id_ed25519 (resolved at use time).
-string effectiveIdentity(string flagIdentity, in Config config) @safe pure nothrow
-{
+string effectiveIdentity(string flagIdentity, in Config config) @safe pure nothrow {
     return flagIdentity.length ? flagIdentity : config.identity;
 }
 
 /// Discover and load the config file; never throws for a file that is
 /// simply absent, only for one that exists but is wrong.
-Config loadConfig(string explicitPath) @trusted
-{
+Config loadConfig(string explicitPath) @trusted {
     Config s;
     const string path = discoverConfig(explicitPath);
     if(!path.length) return s;

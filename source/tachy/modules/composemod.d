@@ -48,8 +48,7 @@ import tachy.value : Val;
 /// Static validation (values may still contain templates at parse time).
 /// Called from the module registry; `context` reads like
 /// `"<file>: compose \"<dir>\" (compose)"`.
-void validateComposeParams(in Val[string] params, string context)
-{
+void validateComposeParams(in Val[string] params, string context) {
     if("file" !in params)
         throw new TachyError(context ~ ": 'file' is required");
     foreach(k; ["file", "project"])
@@ -125,8 +124,7 @@ void validateComposeParams(in Val[string] params, string context)
         throw new TachyError(context ~ ": 'wait_timeout' is only meaningful with 'wait = true'");
 }
 
-TaskResult runComposeModule(Val[string] params, TaskContext ctx)
-{
+TaskResult runComposeModule(Val[string] params, TaskContext ctx) {
     auto t = ctx.transport;
 
     const string dir = requireStr(params, "dir", "compose");
@@ -201,16 +199,11 @@ TaskResult runComposeModule(Val[string] params, TaskContext ctx)
             okMsg = text(selected.length) ~ " service(s) up to date";
             if(drift.reasons.length) {
                 string cmd = base ~ " up --detach";
-                if(pull != "missing")
-                    cmd ~= " --pull " ~ pull;
-                if(build == "always")
-                    cmd ~= " --build";
-                else if(build == "never")
-                    cmd ~= " --no-build";
-                if(recreate == "always")
-                    cmd ~= " --force-recreate";
-                else if(recreate == "never")
-                    cmd ~= " --no-recreate";
+                if(pull != "missing") cmd ~= " --pull " ~ pull;
+                if(build == "always") cmd ~= " --build";
+                else if(build == "never") cmd ~= " --no-build";
+                if(recreate == "always") cmd ~= " --force-recreate";
+                else if(recreate == "never") cmd ~= " --no-recreate";
                 if(wait) {
                     cmd ~= " --wait";
                     if(waitTimeout > 0)
@@ -313,8 +306,7 @@ TaskResult runComposeModule(Val[string] params, TaskContext ctx)
 
 /// Compose's own default project name: the lowercased basename of the
 /// project directory with everything outside [a-z0-9_-] removed.
-private string defaultProjectName(string dir)
-{
+private string defaultProjectName(string dir) {
     import std.string : toLower;
 
     string r;
@@ -328,8 +320,7 @@ private string defaultProjectName(string dir)
 }
 
 /// Docker's project-name rule: `[a-z0-9][a-z0-9_-]*`.
-private void checkProjectName(string p, string context)
-{
+private void checkProjectName(string p, string context) {
     bool ok = p.length && p[0] != '-' && p[0] != '_';
     foreach(char c; p)
         if(!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-'))
@@ -339,16 +330,14 @@ private void checkProjectName(string p, string context)
                 ~ "\" is invalid (docker wants [a-z0-9][a-z0-9_-]*)");
 }
 
-private void checkChoice(string key, string v, string[] allowed)
-{
+private void checkChoice(string key, string v, string[] allowed) {
     if(!canFind(allowed, v))
         throw new TachyError("compose: '" ~ key ~ "' must be one of " ~ allowed.join(", ")
                 ~ ", not \"" ~ v ~ "\"");
 }
 
 /// Like checkChoice, but tolerant of templates (checked again at run time).
-private void checkLiteralChoice(string key, in Val v, string[] allowed, string context)
-{
+private void checkLiteralChoice(string key, in Val v, string[] allowed, string context) {
     if(v.kind != Val.Kind.string_)
         throw new TachyError(context ~ ": '" ~ key ~ "' must be a string, not a " ~ v.typeName());
     if(canFind(v.str_, "{{") || canFind(allowed, v.str_))
@@ -358,16 +347,14 @@ private void checkLiteralChoice(string key, in Val v, string[] allowed, string c
 }
 
 /// The literal value of `key`, or null when absent, non-string or templated.
-private string literalStr(in Val[string] params, string key)
-{
+private string literalStr(in Val[string] params, string key) {
     auto p = key in params;
     if(p is null || (*p).kind != Val.Kind.string_ || canFind((*p).str_, "{{"))
         return null;
     return (*p).str_;
 }
 
-private string[] servicesParam(in Val[string] params)
-{
+private string[] servicesParam(in Val[string] params) {
     auto pv = "services" in params;
     if(pv is null)
         return null;
@@ -386,8 +373,7 @@ private string[] servicesParam(in Val[string] params)
     return r;
 }
 
-private long optIntParam(in Val[string] p, string key, string mod)
-{
+private long optIntParam(in Val[string] p, string key, string mod) {
     auto pv = key in p;
     if(pv is null)
         return 0;
@@ -401,8 +387,7 @@ private long optIntParam(in Val[string] p, string key, string mod)
 
 /// Map the `services` subset onto the model; empty means every service the
 /// selected file enables (profile-gated services are excluded by compose).
-private string[] resolveSelected(in string[] services, in string[] model, string file)
-{
+private string[] resolveSelected(in string[] services, in string[] model, string file) {
     if(!services.length)
         return model.dup;
     foreach(s; services)
@@ -413,8 +398,7 @@ private string[] resolveSelected(in string[] services, in string[] model, string
 
 /// `docker compose config --services`: the model the file selects.  Also
 /// the availability check for the compose file itself.
-private string[] modelServices(Transport t, string base, string file)
-{
+private string[] modelServices(Transport t, string base, string file) {
     auto r = t.run(base ~ " config --services");
     if(!r.ok)
         throw new TachyError("compose: cannot load " ~ file ~ ": " ~ firstMeaningful(r));
@@ -430,8 +414,7 @@ private string[] modelServices(Transport t, string base, string file)
 /// `docker compose config --hash <service>` prints "<service> <sha256>" —
 /// the canonical config hash compose stamps into each container's
 /// com.docker.compose.config-hash label.
-private string configHash(Transport t, string base, string service, string file)
-{
+private string configHash(Transport t, string base, string service, string file) {
     auto r = t.run(base ~ " config --hash " ~ shQuote(service));
     if(!r.ok)
         throw new TachyError("compose: cannot hash service '" ~ service ~ "' in " ~ file
@@ -451,8 +434,7 @@ private struct ContainerInfo {
 }
 
 /// Every container carrying the project's label (running or not).
-private ContainerInfo[] projectContainers(Transport t, string project)
-{
+private ContainerInfo[] projectContainers(Transport t, string project) {
     auto r = t.run("docker ps -a --filter label=com.docker.compose.project="
             ~ shQuote(project) ~ " --format " ~ shQuote(psFormat));
     if(!r.ok)
@@ -485,8 +467,7 @@ private struct HealthInfo {
 
 /// Runtime state and health of given containers; "none" when the container
 /// has no healthcheck (running is then all that can hold).
-private HealthInfo[] containerHealth(Transport t, string[] names, string project)
-{
+private HealthInfo[] containerHealth(Transport t, string[] names, string project) {
     auto r = t.run("docker inspect --format " ~ shQuote(inspectFormat) ~ " "
             ~ names.map!shQuote.join(" "));
     if(!r.ok)
@@ -518,8 +499,7 @@ private struct Drift {
 /// Compare every selected service's containers against the canonical
 /// hashes; when those hold, check runtime state and health.
 private Drift runningDrift(Transport t, string project, in string[] selected,
-        in string[string] want)
-{
+        in string[string] want) {
     Drift d;
     auto containers = projectContainers(t, project);
     foreach(s; selected) {
@@ -557,8 +537,7 @@ private Drift runningDrift(Transport t, string project, in string[] selected,
     return d;
 }
 
-private void put(ref string[] a, string v)
-{
+private void put(ref string[] a, string v) {
     if(!canFind(a, v))
         a ~= v;
 }
@@ -566,8 +545,7 @@ private void put(ref string[] a, string v)
 /// True when any container, network or (only when asked) named volume of
 /// the project still exists.  Label-based, so it works without the compose
 /// file — absent needs nothing until something has to go.
-private bool projectExists(Transport t, string project, bool volumesToo)
-{
+private bool projectExists(Transport t, string project, bool volumesToo) {
     auto r = t.run("docker ps -a --filter label=com.docker.compose.project="
             ~ shQuote(project) ~ " -q");
     if(!r.ok)
@@ -595,8 +573,7 @@ private bool projectExists(Transport t, string project, bool volumesToo)
 }
 
 /// First line of stderr, else stdout, else the exit status.
-private string firstMeaningful(in CommandResult r)
-{
+private string firstMeaningful(in CommandResult r) {
     auto m = r.errText.strip;
     if(!m.length)
         m = r.outText.strip;

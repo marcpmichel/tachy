@@ -25,8 +25,7 @@ struct CommandResult {
     string outText;
     string errText;
 
-    bool ok() const @safe pure nothrow
-    {
+    bool ok() const @safe pure nothrow {
         return status == 0;
     }
 }
@@ -47,8 +46,7 @@ abstract class Transport {
     /// synchronized; a final line without a trailing newline is flushed
     /// at end of stream.  The returned result still carries the full
     /// text.
-    CommandResult runStreaming(string command, void delegate(string, bool) sink)
-    {
+    CommandResult runStreaming(string command, void delegate(string, bool) sink) {
         import std.algorithm.searching : endsWith;
         import std.string : splitLines;
 
@@ -64,8 +62,7 @@ abstract class Transport {
 }
 
 /// Single-quote a string for safe interpolation into a shell command.
-string shQuote(string s) @safe pure
-{
+string shQuote(string s) @safe pure {
     string r = "'";
     foreach(char c; s) {
         if(c == '\'')
@@ -77,8 +74,8 @@ string shQuote(string s) @safe pure
 }
 
 private CommandResult runCommand(string[] argv, string input = null,
-        void delegate(string, bool) sink = null)
-{
+        void delegate(string, bool) sink = null) {
+
     auto outApp = appender!(ubyte[]);
     auto errApp = appender!(ubyte[])();
     string outCarry, errCarry;
@@ -104,8 +101,9 @@ private CommandResult runCommand(string[] argv, string input = null,
 
     const pid_t pidNum = pid.processID;
     trackChild(pidNum);
-    scope(exit)
+    scope(exit) {
         untrackChild(pidNum);
+    }
 
     // Parent must drop its copies so EOF semantics work.
     pout.writeEnd.close();
@@ -133,8 +131,7 @@ private CommandResult runCommand(string[] argv, string input = null,
             if(sink !is null)
                 feedLines(errCarry, cast(string) buf[0 .. n], sink, true);
         }
-        if(sink !is null && errCarry.length)
-            sink(errCarry, true);
+        if(sink !is null && errCarry.length) sink(errCarry, true);
     });
     errThread.start();
 
@@ -142,15 +139,13 @@ private CommandResult runCommand(string[] argv, string input = null,
         auto buf = new ubyte[65536];
         for(;;) {
             auto n = posixRead(pout.readEnd.fileno, buf);
-            if(n <= 0)
-                break;
+            if(n <= 0) break;
             outApp.put(buf[0 .. n]);
             if(sink !is null)
                 feedLines(outCarry, cast(string) buf[0 .. n], sink, false);
         }
     }
-    if(sink !is null && outCarry.length)
-        sink(outCarry, false);
+    if(sink !is null && outCarry.length) sink(outCarry, false);
 
     errThread.join();
     const int status = wait(pid);
@@ -163,8 +158,7 @@ private CommandResult runCommand(string[] argv, string input = null,
 /// semantics which would batch a streamed run until EOF.  Interrupted
 /// reads retry: -1/EINTR must not masquerade as end of stream, or a
 /// signal arriving mid-command silently truncates the output.
-private ptrdiff_t posixRead(int fd, ubyte[] buf) @system
-{
+private ptrdiff_t posixRead(int fd, ubyte[] buf) @system {
     version(Posix) {
         import core.sys.posix.unistd : read;
         import core.stdc.errno : errno, EINTR;
@@ -184,8 +178,7 @@ private ptrdiff_t posixRead(int fd, ubyte[] buf) @system
 /// `carry`.  Newlines are byte-level, so multibyte sequences split
 /// across chunks are reassembled safely.
 private void feedLines(ref string carry, string chunk,
-        void delegate(string, bool) sink, bool isErr)
-{
+        void delegate(string, bool) sink, bool isErr) {
     import std.algorithm.searching : canFind;
 
     carry ~= chunk;
@@ -196,31 +189,26 @@ private void feedLines(ref string carry, string chunk,
     }
 }
 
-private ptrdiff_t stdStringIndexOf(string s, char c) @safe pure
-{
+private ptrdiff_t stdStringIndexOf(string s, char c) @safe pure {
     import std.string : indexOf;
 
     return indexOf(s, c);
 }
 
 final class LocalTransport : Transport {
-    override CommandResult run(string command)
-    {
+    override CommandResult run(string command) {
         return runCommand(["/bin/sh", "-c", command]);
     }
 
-    override CommandResult runStreaming(string command, void delegate(string, bool) sink)
-    {
+    override CommandResult runStreaming(string command, void delegate(string, bool) sink) {
         return runCommand(["/bin/sh", "-c", command], null, sink);
     }
 
-    override CommandResult runWithInput(string command, string input)
-    {
+    override CommandResult runWithInput(string command, string input) {
         return runCommand(["/bin/sh", "-c", command], input);
     }
 
-    override string describe() const
-    {
+    override string describe() const {
         return "local";
     }
 }
@@ -231,58 +219,46 @@ final class SshTransport : Transport {
     private int port_;
     private string keyPath_;
 
-    this(string address, string user, int port, string keyPath)
-    {
+    this(string address, string user, int port, string keyPath) {
         address_ = address;
         user_ = user;
         port_ = port;
         keyPath_ = keyPath;
     }
 
-    override CommandResult run(string command)
-    {
+    override CommandResult run(string command) {
         return runCommand(argvFor(command));
     }
 
-    override CommandResult runStreaming(string command, void delegate(string, bool) sink)
-    {
+    override CommandResult runStreaming(string command, void delegate(string, bool) sink) {
         return runCommand(argvFor(command), null, sink);
     }
 
-    override CommandResult runWithInput(string command, string input)
-    {
+    override CommandResult runWithInput(string command, string input) {
         return runCommand(argvFor(command), input);
     }
 
-    override string describe() const
-    {
+    override string describe() const {
         auto s = "ssh://";
-        if(user_.length)
-            s ~= user_ ~ "@";
+        if(user_.length) s ~= user_ ~ "@";
         s ~= address_;
-        if(port_ != 22)
-            s ~= text(":", port_);
+        if(port_ != 22) s ~= text(":", port_);
         return s;
     }
 
-    private string[] argvFor(string command)
-    {
+    private string[] argvFor(string command) {
         string[] argv = ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new"];
-        if(user_.length)
-            argv ~= ["-l", user_];
-        if(port_ != 22)
-            argv ~= ["-p", text(port_)];
-        if(keyPath_.length)
-            argv ~= ["-i", keyPath_];
+        if(user_.length)    argv ~= ["-l", user_];
+        if(port_ != 22)     argv ~= ["-p", text(port_)];
+        if(keyPath_.length) argv ~= ["-i", keyPath_];
         argv ~= ["--", address_, command];
         return argv;
     }
 }
 
-Transport makeTransport(in HostConfig host)
-{
-    if(host.connection == "local")
-        return new LocalTransport;
+Transport makeTransport(in HostConfig host) {
+
+    if(host.connection == "local") return new LocalTransport;
     return new SshTransport(
             host.address.length ? host.address : host.name,
             host.user,
@@ -310,8 +286,8 @@ struct StatInfo {
 }
 
 /// `stat` a path; works for broken symlinks too.  Assumes GNU coreutils.
-StatInfo statPath(Transport t, string path)
-{
+StatInfo statPath(Transport t, string path) {
+
     auto q = shQuote(path);
     auto cmd = "if [ -e " ~ q ~ " ] || [ -L " ~ q ~ " ]; then stat -c '%F|%a|%U|%G' -- "
         ~ q ~ "; else echo __TACHY_ABSENT__; fi";
@@ -329,18 +305,10 @@ StatInfo statPath(Transport t, string path)
 
     StatInfo st;
     switch(parts[0]) {
-        case "directory":
-            st.kind = StatKind.directory;
-            break;
-        case "symbolic link":
-            st.kind = StatKind.link;
-            break;
-        case "regular file":
-            st.kind = StatKind.file;
-            break;
-        default:
-            st.kind = StatKind.other;
-            break;
+        case "directory": st.kind = StatKind.directory; break;
+        case "symbolic link": st.kind = StatKind.link; break;
+        case "regular file": st.kind = StatKind.file; break;
+        default: st.kind = StatKind.other; break;
     }
     st.mode = parseOctal(parts[1]);
     st.owner = parts[2];
@@ -349,27 +317,24 @@ StatInfo statPath(Transport t, string path)
 }
 
 /// Read the target of a symlink.
-string readLinkTarget(Transport t, string path)
-{
+string readLinkTarget(Transport t, string path) {
+
     auto r = t.run("readlink -- " ~ shQuote(path));
     if(!r.ok)
         throw new TachyError("readlink '" ~ path ~ "' failed: " ~ r.errText.strip);
     return r.outText.strip;
 }
 
-private string[] splitFirstLines(string line) @safe pure
-{
+private string[] splitFirstLines(string line) @safe pure {
     import std.string : split;
 
     return split(line, "|");
 }
 
-private int parseOctal(string s) @safe pure
-{
+private int parseOctal(string s) @safe pure {
     int m = 0;
     foreach(char c; s) {
-        if(c < '0' || c > '7')
-            return 0;
+        if(c < '0' || c > '7') return 0;
         m = m * 8 + (c - '0');
     }
     return m;

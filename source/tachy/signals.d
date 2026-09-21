@@ -36,15 +36,13 @@ private __gshared int trackedCount;
 
 private __gshared Mutex trackMutex; // guards the registry in normal code
 
-shared static this()
-{
+shared static this() {
     trackMutex = new Mutex;
 }
 
 /// Install the SIGINT/SIGTERM handler.  Idempotent; every entry point
 /// that runs jobs or serves the web calls this once.
-void installSignalHandlers() @trusted
-{
+void installSignalHandlers() @trusted {
     sigaction_t sa;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0; // no SA_RESTART: blocking calls return so loops re-check
@@ -54,33 +52,27 @@ void installSignalHandlers() @trusted
 }
 
 /// Signal number received so far, 0 when the run was not interrupted.
-int signalReceived() @trusted nothrow
-{
+int signalReceived() @trusted nothrow {
     return cast(int) atomicLoad(gotsig);
 }
 
 /// Exit code for an interrupted run: the conventional 128 + signal.
-int signalExitCode() @safe nothrow
-{
+int signalExitCode() @safe nothrow {
     const int sig = signalReceived();
     return sig ? 128 + sig : 0;
 }
 
 /// "SIGINT"/"SIGTERM" (or "SIG<n>" for anything else), for reports.
-string signalName(int sig) @safe pure nothrow
-{
+string signalName(int sig) @safe pure nothrow {
     switch(sig) {
-        case SIGINT:
-            return "SIGINT";
-        case SIGTERM:
-            return "SIGTERM";
+        case SIGINT: return "SIGINT";
+        case SIGTERM: return "SIGTERM";
         default:
             return "SIG" ~ (sig ? unsignedText(sig) : "0");
     }
 }
 
-private string unsignedText(int v) @safe pure nothrow
-{
+private string unsignedText(int v) @safe pure nothrow {
     import std.conv : text;
 
     return text(v);
@@ -89,8 +81,7 @@ private string unsignedText(int v) @safe pure nothrow
 /// Remember a child process so a signal can reach it.  The registry is
 /// bounded; beyond 64 concurrent children new ones simply stay
 /// untracked (they still die with the process group on Ctrl-C).
-package(tachy) void trackChild(pid_t pid) @trusted
-{
+package(tachy) void trackChild(pid_t pid) @trusted {
     synchronized(trackMutex) {
         if(trackedCount < maxTracked)
             trackedPids[trackedCount++] = pid;
@@ -98,29 +89,26 @@ package(tachy) void trackChild(pid_t pid) @trusted
 }
 
 /// Forget a child (called when it has been reaped).
-package(tachy) void untrackChild(pid_t pid) @trusted
-{
+package(tachy) void untrackChild(pid_t pid) @trusted {
     synchronized(trackMutex) {
-        foreach(i; 0 .. trackedCount)
+        foreach(i; 0 .. trackedCount) {
             if(trackedPids[i] == pid) {
                 trackedPids[i] = trackedPids[--trackedCount];
                 return;
             }
+        }
     }
 }
 
-private extern (C) void signalHandler(int sig) nothrow @nogc @system
-{
+private extern (C) void signalHandler(int sig) nothrow @nogc @system {
     if(gotsig != 0) {
         // Second signal: the user insists.  Kill the children hard and
         // leave now — the old die-immediately behavior.
-        foreach(i; 0 .. trackedCount)
-            kill(trackedPids[i], SIGKILL);
+        foreach(i; 0 .. trackedCount) { kill(trackedPids[i], SIGKILL); }
         _exit(128 + sig);
     }
     atomicStore(gotsig, sig);
     // Ask the in-flight commands to terminate so the run loop unblocks
     // and reaches its next interrupted check.
-    foreach(i; 0 .. trackedCount)
-        kill(trackedPids[i], SIGTERM);
+    foreach(i; 0 .. trackedCount) { kill(trackedPids[i], SIGTERM); }
 }

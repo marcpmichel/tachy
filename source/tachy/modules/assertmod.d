@@ -39,8 +39,7 @@ import tachy.value : Val, dupTable;
 /// tachy.modules, so both spellings of "no expectation" fail with the
 /// same message.
 package(tachy) Val assertionExpectation(in Val[string] params, string context)
-@safe pure
-{
+@safe pure {
     auto t = dupTable(params);
     t.remove("name");
     t.remove("value");
@@ -55,8 +54,7 @@ package(tachy) Val assertionExpectation(in Val[string] params, string context)
     return r;
 }
 
-TaskResult runAssertModule(Val[string] params, TaskContext ctx)
-{
+TaskResult runAssertModule(Val[string] params, TaskContext ctx) {
     const string name = requireStr(params, "name", "assert");
     const string value = requireStr(params, "value", "assert");
     // The shapes were validated at load time; this second parse runs

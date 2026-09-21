@@ -76,8 +76,7 @@ struct ImportSpec {
 /// plaintext (age-marked `src` secrets).
 ProjectBundle deployProject(Transport t, string localProjectDir,
         string hostName, in Val[string] hostVars, in ImportSpec[] imports = [],
-        in DecryptedFile[] decrypted = [])
-{
+        in DecryptedFile[] decrypted = []) {
     checkImports(localProjectDir, imports);
 
     auto mk = t.run("mktemp -d \"${TMPDIR:-/tmp}/tachy.XXXXXXXXXX\"");
@@ -141,8 +140,7 @@ ProjectBundle deployProject(Transport t, string localProjectDir,
 }
 
 /// Best-effort bundle removal; never throws.
-void removeBundle(Transport t, in ProjectBundle b)
-{
+void removeBundle(Transport t, in ProjectBundle b) {
     try
         t.run("rm -rf -- " ~ shQuote(b.root));
     catch(Exception) {
@@ -157,8 +155,7 @@ void removeBundle(Transport t, in ProjectBundle b)
 /// forwarding verbosity and colors, and reporting its counters to
 /// `reportPath`.
 string innerTachyCommand(in ProjectBundle b, string hostName, string tasksBaseName,
-        bool check, bool verbose, bool color, string reportPath)
-{
+        bool check, bool verbose, bool color, string reportPath) {
     string cmd = "cd " ~ shQuote(b.projectDir) ~ " && " ~ shQuote(b.tachyPath)
         ~ (check ? " check" : " apply") ~ " --direct --events";
     if(verbose)
@@ -172,8 +169,7 @@ string innerTachyCommand(in ProjectBundle b, string hostName, string tasksBaseNa
 }
 
 /// Parse an inner run's report ("ok changed failed" on one line).
-bool parseReport(string text, out ulong ok, out ulong changed, out ulong failed)
-{
+bool parseReport(string text, out ulong ok, out ulong changed, out ulong failed) {
     import std.array : split;
     import std.conv : to;
 
@@ -196,8 +192,7 @@ bool parseReport(string text, out ulong ok, out ulong changed, out ulong failed)
 
 /// A one-host, local-connection inventory carrying the host's effective
 /// variables (the controller's global < host merge).
-string hostInventoryPravic(string hostName, in Val[string] hostVars)
-{
+string hostInventoryPravic(string hostName, in Val[string] hostVars) {
     auto app = appender!string;
     app.put("host " ~ pravicKey(hostName) ~ " {\n");
     app.put("    connection = \"local\",\n");
@@ -210,8 +205,7 @@ string hostInventoryPravic(string hostName, in Val[string] hostVars)
 
 /// Emit one vars level: scalar and array keys, then nested tables as
 /// blocks.  Keys are sorted for deterministic output.
-private void writeVarEntries(ref Sink app, in Val[string] t, int depth)
-{
+private void writeVarEntries(ref Sink app, in Val[string] t, int depth) {
     auto keys = t.byKey.array;
     keys.sort();
     foreach(k; keys) {
@@ -225,15 +219,13 @@ private void writeVarEntries(ref Sink app, in Val[string] t, int depth)
     }
 }
 
-private string indentOf(int depth) @safe pure
-{
+private string indentOf(int depth) @safe pure {
     import std.array : replicate;
 
     return "    ".replicate(depth);
 }
 
-package(tachy) string pravicValue(in Val v)
-{
+package(tachy) string pravicValue(in Val v) {
     final switch(v.kind) {
         case Val.Kind.string_:
             return pravicString(v.str_);
@@ -271,31 +263,19 @@ package(tachy) string pravicValue(in Val v)
     }
 }
 
-private string pravicKey(string k)
-{
+private string pravicKey(string k) {
     return pravicString(k);
 }
 
-private string pravicString(string s)
-{
+private string pravicString(string s) {
     string r = "\"";
     foreach(char c; s) {
         switch(c) {
-            case '"':
-                r ~= "\\\"";
-                break;
-            case '\\':
-                r ~= "\\\\";
-                break;
-            case '\n':
-                r ~= "\\n";
-                break;
-            case '\r':
-                r ~= "\\r";
-                break;
-            case '\t':
-                r ~= "\\t";
-                break;
+            case '"': r ~= "\\\""; break;
+            case '\\': r ~= "\\\\"; break;
+            case '\n': r ~= "\\n"; break;
+            case '\r': r ~= "\\r"; break;
+            case '\t': r ~= "\\t"; break;
             default:
                 if(c < 0x20)
                     r ~= format!"\\u%04X"(c);
@@ -307,8 +287,7 @@ private string pravicString(string s)
 }
 
 /// Pravic floats need a fractional part or exponent to stay floats.
-private string pravicFloat(double d)
-{
+private string pravicFloat(double d) {
     import std.algorithm.searching : canFind;
     import std.string : toLower;
 
@@ -322,8 +301,7 @@ private string pravicFloat(double d)
 // Local helpers.
 // ---------------------------------------------------------------------------
 
-private string tarBundle(string dir, in ImportSpec[] imports)
-{
+private string tarBundle(string dir, in ImportSpec[] imports) {
     // One archive: the whole project, then each import from its own
     // parent directory under its destination name (multiple -C options
     // are positional in GNU tar).
@@ -335,8 +313,7 @@ private string tarBundle(string dir, in ImportSpec[] imports)
     auto buf = new ubyte[65536];
     for(;;) {
         auto n = p.stdout.rawRead(buf).length;
-        if(n == 0)
-            break;
+        if(n == 0) break;
         app.put(buf[0 .. n]);
     }
     const int status = wait(p.pid); // tar warnings go to our stderr directly
@@ -349,8 +326,7 @@ private string tarBundle(string dir, in ImportSpec[] imports)
 /// Validate import sources (controller side): each must exist, and its
 /// destination (the base name) must not collide with project content or
 /// with another import's destination.
-private void checkImports(string localProjectDir, in ImportSpec[] imports) @trusted
-{
+private void checkImports(string localProjectDir, in ImportSpec[] imports) @trusted {
     import std.file : exists;
 
     bool[string] dests;
@@ -368,13 +344,10 @@ private void checkImports(string localProjectDir, in ImportSpec[] imports) @trus
     }
 }
 
-private string failText(in CommandResult r)
-{
+private string failText(in CommandResult r) {
     auto m = r.errText.strip;
-    if(!m.length)
-        m = r.outText.strip;
-    if(!m.length)
-        m = "exit status " ~ text(r.status);
+    if(!m.length) m = r.outText.strip;
+    if(!m.length) m = "exit status " ~ text(r.status);
     return m;
 }
 

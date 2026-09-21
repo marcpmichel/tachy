@@ -42,8 +42,7 @@ import tachy.value : Val, optStringArray;
 // group
 // ---------------------------------------------------------------------------
 
-TaskResult runGroupModule(Val[string] params, TaskContext ctx)
-{
+TaskResult runGroupModule(Val[string] params, TaskContext ctx) {
     auto t = ctx.transport;
     const string name = requireStr(params, "name", "group");
     const string state = optStr(params, "state", "group", "present");
@@ -83,8 +82,7 @@ TaskResult runGroupModule(Val[string] params, TaskContext ctx)
 // user
 // ---------------------------------------------------------------------------
 
-TaskResult runUserModule(Val[string] params, TaskContext ctx)
-{
+TaskResult runUserModule(Val[string] params, TaskContext ctx) {
     auto t = ctx.transport;
     const string name = requireStr(params, "name", "user");
     const string state = optStr(params, "state", "user", "present");
@@ -120,27 +118,26 @@ TaskResult runUserModule(Val[string] params, TaskContext ctx)
         // after the user when it exists, otherwise let useradd create it.
         string primary = group.length ? group : name;
         if(!groupExists(t, primary)) {
-            if(group.length)
+            if(group.length) {
                 throw new TachyError("user: primary group '" ~ group
                         ~ "' does not exist; ensure it with [groups] first");
+            }
             primary = null; // useradd creates the per-user group
         }
 
-        foreach(g; groups)
-            if(!groupExists(t, g))
+        foreach(g; groups) {
+            if(!groupExists(t, g)) {
                 throw new TachyError("user: supplementary group '" ~ g
                         ~ "' does not exist; ensure it with [groups] first");
+            }
+        }
 
         string cmd = "useradd";
-        if(primary.length)
-            cmd ~= " -g " ~ q(primary);
-        if(groups.length)
-            cmd ~= " -G " ~ q(groups.join(","));
+        if(primary.length) cmd ~= " -g " ~ q(primary);
+        if(groups.length) cmd ~= " -G " ~ q(groups.join(","));
         cmd ~= " -s " ~ q(shell.length ? shell : "/bin/sh");
-        if(comment.length)
-            cmd ~= " -c " ~ q(comment);
-        if(home.length)
-            cmd ~= " -d " ~ q(home);
+        if(comment.length) cmd ~= " -c " ~ q(comment);
+        if(home.length) cmd ~= " -d " ~ q(home);
         cmd ~= createHome ? " -m" : " -M";
         cmd ~= " -- " ~ q(name);
         mustRun(t, ctx, details, cmd, "create user '" ~ name ~ "'");
@@ -201,25 +198,21 @@ TaskResult runUserModule(Val[string] params, TaskContext ctx)
 // Probes and helpers.
 // ---------------------------------------------------------------------------
 
-private string q(string s) @safe pure
-{
+private string q(string s) @safe pure {
     import tachy.transport : shQuote;
 
     return shQuote(s);
 }
 
-private bool groupExists(Transport t, string name)
-{
+private bool groupExists(Transport t, string name) {
     return t.run("getent group " ~ q(name)).ok;
 }
 
 /// The colon-separated fields of a passwd entry, or null when the user
 /// does not exist.  A single getent doubles as the existence probe.
-private string[] passwdEntry(Transport t, string name)
-{
+private string[] passwdEntry(Transport t, string name) {
     auto r = t.run("getent passwd " ~ q(name));
-    if(!r.ok)
-        return null;
+    if(!r.ok) return null;
     string[] fields = split(r.outText.strip, ":");
     if(fields.length != 7)
         throw new TachyError("user: unexpected passwd entry for '" ~ name ~ "': " ~ r.outText.strip);
@@ -227,8 +220,7 @@ private string[] passwdEntry(Transport t, string name)
 }
 
 /// The group name owning a gid.
-private string groupNameForGid(Transport t, string gid)
-{
+private string groupNameForGid(Transport t, string gid) {
     auto r = t.run("getent group " ~ q(gid));
     if(!r.ok)
         throw new TachyError("user: cannot resolve primary group id " ~ gid);
@@ -238,11 +230,9 @@ private string groupNameForGid(Transport t, string gid)
     return fields[0];
 }
 
-private bool canFindValue(in string[] haystack, string needle) @safe pure
-{
+private bool canFindValue(in string[] haystack, string needle) @safe pure {
     foreach(h; haystack)
-        if(h == needle)
-            return true;
+        if(h == needle) return true;
     return false;
 }
 

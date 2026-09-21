@@ -52,8 +52,7 @@ package(tachy) alias ChunkSink = void delegate(string chunk);
 // Entry point
 // ---------------------------------------------------------------------------
 
-int runWebUi(RunOptions optsIn) @trusted
-{
+int runWebUi(RunOptions optsIn) @trusted {
     import std.stdio : stdout;
 
     if(optsIn.webPort < 0 || optsIn.webPort > 65535)
@@ -91,8 +90,7 @@ int runWebUi(RunOptions optsIn) @trusted
 
 /// The listener for either web command: an explicit --port binds that
 /// port; the default (and 0) picks a random one in [10000, 65534].
-package(tachy) TcpSocket webListener(const RunOptions opts) @trusted
-{
+package(tachy) TcpSocket webListener(const RunOptions opts) @trusted {
     return opts.webPort == 0
         ? bindListenerAuto(opts.webAddress) : bindListener(opts.webAddress, cast(ushort) opts.webPort);
 }
@@ -110,8 +108,7 @@ private final class WebApp {
     private Run[] runs;
     private size_t nextId;
 
-    this(const RunOptions opts, const Config config)
-    {
+    this(const RunOptions opts, const Config config) {
         this.opts = opts;
         this.config = config;
         regM = new Mutex;
@@ -128,8 +125,7 @@ private final class WebApp {
 
     // -- GET /api/state ----------------------------------------------------
 
-    private Response apiState(Request req, string[string] params)
-    {
+    private Response apiState(Request req, string[string] params) {
         string[] members;
 
         string[] projects;
@@ -170,8 +166,7 @@ private final class WebApp {
 
     // -- POST /api/run -----------------------------------------------------
 
-    private Response apiRunPost(Request req, string[string] params)
-    {
+    private Response apiRunPost(Request req, string[string] params) {
         string[string] fields;
         try
             fields = parseStringObject(req.body);
@@ -217,8 +212,7 @@ private final class WebApp {
     /// The command the run executes: this binary, the mode, `--events`
     /// and the same inventory/config/identity the server was given —
     /// so a webui run behaves exactly like the same CLI invocation.
-    private string childCommand(string project, string selection, string mode) @trusted
-    {
+    private string childCommand(string project, string selection, string mode) @trusted {
         import std.file : thisExePath;
 
         string cmd = "exec " ~ shQuote(thisExePath) ~ " " ~ mode ~ " --events";
@@ -232,8 +226,7 @@ private final class WebApp {
 
     // -- GET /api/events/:id (SSE) ------------------------------------------
 
-    private Response apiEvents(Request req, string[string] params)
-    {
+    private Response apiEvents(Request req, string[string] params) {
         Run run;
         synchronized(regM)
             foreach(r; runs)
@@ -262,8 +255,7 @@ private final class WebApp {
     /// final records land in the registry instead of being cut off.
     /// A short grace afterwards lets the SSE connection threads flush
     /// the final frames before the process leaves.
-    void drainRuns() @trusted
-    {
+    void drainRuns() @trusted {
         import core.thread : Thread;
         import core.time : msecs;
 
@@ -307,8 +299,7 @@ package(tachy) final class Run {
     ulong ok, changed, failed;
     SysTime finished;
 
-    this(string id, string project, string selection, string mode)
-    {
+    this(string id, string project, string selection, string mode) {
         this.id = id;
         this.project = project;
         this.selection = selection;
@@ -318,8 +309,7 @@ package(tachy) final class Run {
         cond = new Condition(m);
     }
 
-    void appendEvent(const JobEvent ev)
-    {
+    void appendEvent(const JobEvent ev) {
         synchronized(m) {
             records ~= format!"{\"ts\":%s,\"ev\":%s}"(nowMs(), eventLine(ev));
             foldCounters(ev, ok, changed, failed);
@@ -327,16 +317,14 @@ package(tachy) final class Run {
         }
     }
 
-    void appendLog(string line)
-    {
+    void appendLog(string line) {
         synchronized(m) {
             records ~= format!"{\"ts\":%s,\"log\":%s}"(nowMs(), jsonEscStr(line));
             cond.notifyAll();
         }
     }
 
-    void finish(int status)
-    {
+    void finish(int status) {
         synchronized(m) {
             finished = Clock.currTime();
             exitStatus = status;
@@ -350,8 +338,7 @@ package(tachy) final class Run {
     /// until it is finished and everything has been sent.  Blocks the
     /// connection thread; a 15 s idle timeout becomes a keepalive
     /// comment so browsers keep the stream open.
-    static void streamRun(Run run, size_t since, ChunkSink send) @trusted
-    {
+    static void streamRun(Run run, size_t since, ChunkSink send) @trusted {
         import core.time : seconds;
 
         size_t i = since;
@@ -384,8 +371,7 @@ package(tachy) final class Run {
     }
 }
 
-package(tachy) string runJson(Run r) @trusted
-{
+package(tachy) string runJson(Run r) @trusted {
     string status;
     string startedS, finishedS;
     int exitStatus;
@@ -414,8 +400,7 @@ package(tachy) string runJson(Run r) @trusted
 }
 
 /// ISO timestamp with the fractional seconds cut to milliseconds —
-private string isoMs(SysTime t) @safe
-{
+private string isoMs(SysTime t) @safe {
     import std.algorithm.comparison : min;
 
     const string s = t.toISOExtString();
@@ -429,8 +414,7 @@ private string isoMs(SysTime t) @safe
     return s[0 .. dot] ~ s[dot .. min(dot + 4, end)] ~ s[end .. $];
 }
 
-private void startWorker(Run run, string cmd) @trusted
-{
+private void startWorker(Run run, string cmd) @trusted {
     auto t = new Thread({
         try {
             // The run is a normal CLI invocation whose stdout is the
@@ -494,14 +478,12 @@ final class Router {
 
     private Route[] routes;
 
-    void add(string method, string pattern, Handler dg)
-    {
+    void add(string method, string pattern, Handler dg) {
         Route r = {method, splitPath(pattern), dg};
         routes ~= r;
     }
 
-    Response dispatch(Request req)
-    {
+    Response dispatch(Request req) {
         const string[] segs = splitPath(req.path);
         bool pathMatched;
         foreach(ref r; routes) {
@@ -521,8 +503,7 @@ final class Router {
 /// webdoc default, since both are localhost conveniences and a fixed
 /// default port only ever collides.  A few random candidates are tried
 /// before falling back to a kernel-picked free port (port 0).
-public TcpSocket bindListenerAuto(string address) @trusted
-{
+public TcpSocket bindListenerAuto(string address) @trusted {
     import std.random : Random, uniform, unpredictableSeed;
 
     auto rng = Random(unpredictableSeed);
@@ -537,8 +518,7 @@ public TcpSocket bindListenerAuto(string address) @trusted
     return bindListener(address, 0); // kernel-picked free port
 }
 
-public TcpSocket bindListener(string address, ushort port) @trusted
-{
+public TcpSocket bindListener(string address, ushort port) @trusted {
     import std.socket : SocketOption, SocketOptionLevel;
 
     auto listener = new TcpSocket(AddressFamily.INET);
@@ -556,8 +536,7 @@ public TcpSocket bindListener(string address, ushort port) @trusted
 
 /// The URL a browser should open for a listener bound to `address`:
 /// every-interface binds still open on the loopback.
-package(tachy) string browserUrl(string address, ushort port) @safe pure
-{
+package(tachy) string browserUrl(string address, ushort port) @safe pure {
     import std.conv : text;
 
     const string host = address == "0.0.0.0" ? "127.0.0.1" : address;
@@ -568,8 +547,7 @@ package(tachy) string browserUrl(string address, ushort port) @safe pure
 /// waited for, so it cannot zombie; its output goes to /dev/null).
 /// Linux is the only supported platform and gio is the freedesktop
 /// opener; failures are silent — the listening URL is printed anyway.
-package(tachy) void tryOpenBrowser(string url) @trusted
-{
+package(tachy) void tryOpenBrowser(string url) @trusted {
     auto t = new Thread({
         try {
             import std.process : spawnProcess, wait;
@@ -589,8 +567,7 @@ package(tachy) void tryOpenBrowser(string url) @trusted
 /// handler has no SA_RESTART, so a signal wakes the blocking accept
 /// and the loop notices).  Returns 0, or the signal that ended the
 /// serving loop.
-public int serveForever(TcpSocket listener, Router router) @trusted
-{
+public int serveForever(TcpSocket listener, Router router) @trusted {
     import tachy.signals : signalReceived;
 
     for(;;) {
@@ -613,14 +590,12 @@ private final class Conn {
     private Socket sock;
     private Router router;
 
-    this(Socket sock, Router router)
-    {
+    this(Socket sock, Router router) {
         this.sock = sock;
         this.router = router;
     }
 
-    void run() @trusted
-    {
+    void run() @trusted {
         import core.time : seconds;
         import std.socket : SocketOption, SocketOptionLevel;
 
@@ -645,8 +620,7 @@ private final class Conn {
 private enum size_t maxHead = 64 * 1024;
 private enum size_t maxBody = 1024 * 1024;
 
-private Request readRequest(Socket sock) @trusted
-{
+private Request readRequest(Socket sock) @trusted {
     import std.algorithm.searching : canFind;
     import std.string : indexOf;
 
@@ -705,8 +679,7 @@ private Request readRequest(Socket sock) @trusted
 
 /// Parse "METHOD /path?query HTTP/1.x" plus header lines; names
 /// lowercased.  Malformed input is a TachyError.
-package(tachy) Request parseHead(string head) @safe pure
-{
+package(tachy) Request parseHead(string head) @safe pure {
     import std.algorithm.searching : startsWith;
     import std.array : split;
     import std.string : toLower;
@@ -741,8 +714,7 @@ package(tachy) Request parseHead(string head) @safe pure
     return req;
 }
 
-private void writeResponse(Socket sock, Response r) @trusted
-{
+private void writeResponse(Socket sock, Response r) @trusted {
     if(r.stream !is null) {
         sendAll(sock, "HTTP/1.1 200 OK\r\nContent-Type: " ~ r.contentType
                 ~ "\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n");
@@ -760,16 +732,14 @@ private void writeResponse(Socket sock, Response r) @trusted
         sendAll(sock, r.body);
 }
 
-private void sendSimple(Socket sock, ushort status, string msg) @trusted
-{
+private void sendSimple(Socket sock, ushort status, string msg) @trusted {
     try
         writeResponse(sock, errorJson(status, msg));
     catch(Exception e) {
     }
 }
 
-package(tachy) void sendAll(Socket sock, const char[] data) @trusted
-{
+package(tachy) void sendAll(Socket sock, const char[] data) @trusted {
     size_t off;
     while(off < data.length) {
         const ptrdiff_t n = sock.send(data[off .. $]);
@@ -779,28 +749,20 @@ package(tachy) void sendAll(Socket sock, const char[] data) @trusted
     }
 }
 
-private string statusText(ushort s) @safe pure nothrow
-{
+private string statusText(ushort s) @safe pure nothrow {
     switch(s) {
-        case 200:
-            return "OK";
-        case 204:
-            return "No Content";
-        case 400:
-            return "Bad Request";
-        case 404:
-            return "Not Found";
-        case 405:
-            return "Method Not Allowed";
-        case 413:
-            return "Payload Too Large";
+        case 200: return "OK";
+        case 204: return "No Content";
+        case 400: return "Bad Request";
+        case 404: return "Not Found";
+        case 405: return "Method Not Allowed";
+        case 413: return "Payload Too Large";
         default:
             return "Error";
     }
 }
 
-package(tachy) string[] splitPath(string path) @safe pure
-{
+package(tachy) string[] splitPath(string path) @safe pure {
     import std.array : array;
     import std.string : split;
 
@@ -810,8 +772,7 @@ package(tachy) string[] splitPath(string path) @safe pure
 }
 
 private bool matchSegs(in string[] pat, in string[] segs, ref string[string] params)
-@safe pure
-{
+@safe pure {
     if(pat.length != segs.length)
         return false;
     foreach(i, p; pat) {
@@ -828,33 +789,18 @@ private bool matchSegs(in string[] pat, in string[] segs, ref string[string] par
 // flat all-strings objects POST /api/run accepts
 // ---------------------------------------------------------------------------
 
-package(tachy) string jsonEscStr(string s) @safe pure
-{
+package(tachy) string jsonEscStr(string s) @safe pure {
     auto app = appender!string;
     app.put('"');
     foreach(char c; s) {
         switch(c) {
-            case '"':
-                app.put("\\\"");
-                break;
-            case '\\':
-                app.put("\\\\");
-                break;
-            case '\n':
-                app.put("\\n");
-                break;
-            case '\r':
-                app.put("\\r");
-                break;
-            case '\t':
-                app.put("\\t");
-                break;
-            case '\b':
-                app.put("\\b");
-                break;
-            case '\f':
-                app.put("\\f");
-                break;
+            case '"': app.put("\\\""); break;
+            case '\\': app.put("\\\\"); break;
+            case '\n': app.put("\\n"); break;
+            case '\r': app.put("\\r"); break;
+            case '\t': app.put("\\t"); break;
+            case '\b': app.put("\\b"); break;
+            case '\f': app.put("\\f"); break;
             default:
                 if(c < 0x20)
                     app.put(format!"\\u%04x"(c));
@@ -866,37 +812,31 @@ package(tachy) string jsonEscStr(string s) @safe pure
     return app.data;
 }
 
-package(tachy) string jstr(string key, string v) @safe pure
-{
+package(tachy) string jstr(string key, string v) @safe pure {
     return "\"" ~ key ~ "\":" ~ jsonEscStr(v);
 }
 
-private string jnum(string key, string decimal) @safe pure
-{
+private string jnum(string key, string decimal) @safe pure {
     return "\"" ~ key ~ "\":" ~ decimal;
 }
 
-package(tachy) string sseFrame(size_t id, string data) @safe pure
-{
+package(tachy) string sseFrame(size_t id, string data) @safe pure {
     return format!"id: %d\ndata: %s\n\n"(id, data);
 }
 
 /// Parse a flat JSON object whose values are all strings.  Strict: a
 /// malformed body is a TachyError naming the problem.
-package(tachy) string[string] parseStringObject(string body) @safe pure
-{
+package(tachy) string[string] parseStringObject(string body) @safe pure {
     string[string] out_;
     size_t i = 0;
 
-    void skipWs()
-    {
+    void skipWs() {
         while(i < body.length && (body[i] == ' ' || body[i] == '\t'
                 || body[i] == '\n' || body[i] == '\r'))
             i++;
     }
 
-    void expect(char c, string what)
-    {
+    void expect(char c, string what) {
         skipWs();
         if(i >= body.length || body[i] != c)
             throw new TachyError("request body: expected '" ~ text(c) ~ "' " ~ what);
@@ -938,48 +878,26 @@ package(tachy) string[string] parseStringObject(string body) @safe pure
 }
 
 /// One JSON string at body[i]; the same escapes `eventLine` writes.
-private string parseJsonString(string s, ref size_t i) @safe pure
-{
+private string parseJsonString(string s, ref size_t i) @safe pure {
     if(i >= s.length || s[i] != '"')
         throw new TachyError("request body: expected a string");
     i++;
     auto app = appender!string;
     while(i < s.length) {
         char c = s[i++];
-        if(c == '"')
-            return app.data;
-        if(c != '\\') {
-            app.put(c);
-            continue;
-        }
-        if(i >= s.length)
-            break;
+        if(c == '"') return app.data;
+        if(c != '\\') { app.put(c); continue; }
+        if(i >= s.length) break;
         char e = s[i++];
         final switch(e) {
-            case '"':
-                app.put('"');
-                break;
-            case '\\':
-                app.put('\\');
-                break;
-            case '/':
-                app.put('/');
-                break;
-            case 'n':
-                app.put('\n');
-                break;
-            case 'r':
-                app.put('\r');
-                break;
-            case 't':
-                app.put('\t');
-                break;
-            case 'b':
-                app.put('\b');
-                break;
-            case 'f':
-                app.put('\f');
-                break;
+            case '"': app.put('"'); break;
+            case '\\': app.put('\\'); break;
+            case '/': app.put('/'); break;
+            case 'n': app.put('\n'); break;
+            case 'r': app.put('\r'); break;
+            case 't': app.put('\t'); break;
+            case 'b': app.put('\b'); break;
+            case 'f': app.put('\f'); break;
             case 'u':
                 if(i + 4 > s.length)
                     throw new TachyError("request body: truncated \\u escape");
@@ -991,8 +909,7 @@ private string parseJsonString(string s, ref size_t i) @safe pure
     throw new TachyError("request body: unterminated string");
 }
 
-private string hex4Char(string hex) @safe pure
-{
+private string hex4Char(string hex) @safe pure {
     import std.conv : to;
     import std.utf : encode;
 
@@ -1006,24 +923,21 @@ private string hex4Char(string hex) @safe pure
 // Small helpers
 // ---------------------------------------------------------------------------
 
-public Response asset(string content, string contentType)
-{
+public Response asset(string content, string contentType) {
     auto r = new Response;
     r.contentType = contentType;
     r.body = content;
     return r;
 }
 
-package(tachy) Response jsonBody(string json)
-{
+package(tachy) Response jsonBody(string json) {
     auto r = new Response;
     r.contentType = "application/json";
     r.body = json;
     return r;
 }
 
-package(tachy) Response errorJson(ushort status, string msg)
-{
+package(tachy) Response errorJson(ushort status, string msg) {
     auto r = new Response;
     r.status = status;
     r.contentType = "application/json";
@@ -1031,8 +945,7 @@ package(tachy) Response errorJson(ushort status, string msg)
     return r;
 }
 
-private string projectJson(string path) @trusted
-{
+private string projectJson(string path) @trusted {
     import std.file : exists, isDir;
 
     string kind = "missing";
@@ -1042,8 +955,7 @@ private string projectJson(string path) @trusted
         ~ "," ~ jstr("kind", kind) ~ "}";
 }
 
-private string describeHostWeb(in HostConfig h) @safe pure
-{
+private string describeHostWeb(in HostConfig h) @safe pure {
     if(h.connection == "local")
         return "local";
     auto s = "ssh ";
@@ -1055,8 +967,7 @@ private string describeHostWeb(in HostConfig h) @safe pure
     return s;
 }
 
-private bool validSelection(string s) @safe pure
-{
+private bool validSelection(string s) @safe pure {
     if(!s.length || s.length > 256 || s[0] == '-')
         return false;
     foreach(char c; s)
@@ -1065,53 +976,46 @@ private bool validSelection(string s) @safe pure
     return true;
 }
 
-private bool pathExists(string p) @trusted
-{
+private bool pathExists(string p) @trusted {
     import std.file : exists;
 
     return exists(p);
 }
 
-private bool canFindString(in string[] hay, string needle) @safe pure
-{
+private bool canFindString(in string[] hay, string needle) @safe pure {
     foreach(s; hay)
         if(s == needle)
             return true;
     return false;
 }
 
-private string mapJson(in string[] items) @safe pure
-{
+private string mapJson(in string[] items) @safe pure {
     string[] parts;
     foreach(s; items)
         parts ~= jsonEscStr(s);
     return parts.join(",");
 }
 
-private void sortStrings(ref string[] s) @safe pure
-{
+private void sortStrings(ref string[] s) @safe pure {
     import std.algorithm.sorting : sort;
 
     s.sort();
 }
 
-private size_t stdStringIndexOf(string s, char c) @safe pure
-{
+private size_t stdStringIndexOf(string s, char c) @safe pure {
     import std.string : indexOf;
 
     const auto r = indexOf(s, c);
     return r == -1 ? size_t.max : cast(size_t) r;
 }
 
-private bool among3(string s, string a, string b, string c) @safe pure nothrow
-{
+private bool among3(string s, string a, string b, string c) @safe pure nothrow {
     return s == a || s == b || s == c;
 }
 
 /// Milliseconds since the Unix epoch (SysTime.stdTime counts hnsecs
 /// since year 1601; the constant is the 1970 offset in hnsecs).
-private long nowMs() @trusted nothrow
-{
+private long nowMs() @trusted nothrow {
     return (Clock.currTime().stdTime - 116444736000000000L) / 10_000;
 }
 

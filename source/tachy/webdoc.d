@@ -38,8 +38,7 @@ import tachy.web : Request, Response, Router, asset, bindListener,
 
 package(tachy) enum string docSource = import("DOCUMENTATION.md");
 
-int runWebDoc(const RunOptions opts) @trusted
-{
+int runWebDoc(const RunOptions opts) @trusted {
     if(opts.webPort < 0 || opts.webPort > 65535)
         throw new TachyError("--port must be between 0 and 65535");
 
@@ -83,8 +82,7 @@ package(tachy) final class DocSite {
     Section[string] bySlug;
     string[string] anchorPage; // heading id (and compact alias) -> page slug
 
-    this(string md)
-    {
+    this(string md) {
         sections = splitSections(md, anchorPage);
         foreach(ref s; sections)
             bySlug[s.slug] = s;
@@ -94,8 +92,7 @@ package(tachy) final class DocSite {
         router.add("GET", "/favicon.ico", (req, p) => new Response);
     }
 
-    private Response page(string slug)
-    {
+    private Response page(string slug) {
         auto s = slug in bySlug;
         if(s is null) {
             auto r = asset(layout("No such section", menuHtml(sections, null),
@@ -122,8 +119,7 @@ package(tachy) final class DocSite {
 /// keeps slugs unique and the menu ordered).  Each rendered heading
 /// registers its slug (and compact alias) in `anchorPage` so internal
 /// links can be rewritten to the right page.
-package(tachy) Section[] splitSections(string md, ref string[string] anchorPage)
-{
+package(tachy) Section[] splitSections(string md, ref string[string] anchorPage) {
     import std.string : splitLines;
 
     Section[] secs;
@@ -213,18 +209,15 @@ package(tachy) struct MdRenderer {
     string pageSlug;
     private string[string]* anchors; // anchor map, by reference
 
-    this(string pageSlug, ref string[string] anchorPage)
-    {
+    this(string pageSlug, ref string[string] anchorPage) {
         this.pageSlug = pageSlug;
         this.anchors = &anchorPage;
     }
 
-    string render(string[] lines)
-    {
+    string render(string[] lines) {
         auto app = appender!string;
         string[] para;
-        void flushPara()
-        {
+        void flushPara() {
             if(para.length) {
                 app.put("<p>" ~ inlineMd(para.join(" "), anchors) ~ "</p>\n");
                 para = [];
@@ -235,12 +228,10 @@ package(tachy) struct MdRenderer {
         while(i < lines.length) {
             auto l = lines[i];
 
-            if(l.startsWith("```")) // fenced code block
-            {
+            if(l.startsWith("```")) { // fenced code block
                 flushPara();
                 auto lang = stripLeft(l[3 .. $]);
-                if(!isWord(lang))
-                    lang = "";
+                if(!isWord(lang)) lang = "";
                 auto code = appender!(string[]);
                 for(i++; i < lines.length && !lines[i].startsWith("```"); i++)
                     code.put(lines[i]);
@@ -304,8 +295,7 @@ package(tachy) struct MdRenderer {
 
     /// A `###`/`####` heading becomes an h2/h3 with an id; the id (and
     /// its compact alias) points link rewrites at this page.
-    private string heading(string l)
-    {
+    private string heading(string l) {
         const bool h3 = l.startsWith("#### ");
         const string text = l[h3 ? 5 : 4 .. $];
         const string id = slugify(text);
@@ -319,8 +309,7 @@ package(tachy) struct MdRenderer {
 // Inline markdown: escape, `code`, [link](#anchor|url), **bold**, *italic*
 // ---------------------------------------------------------------------------
 
-package(tachy) string inlineMd(string s, const(string[string])* anchors)
-{
+package(tachy) string inlineMd(string s, const(string[string])* anchors) {
     import std.regex : replaceAll;
 
     s = htmlEscape(s);
@@ -338,14 +327,12 @@ package(tachy) string inlineMd(string s, const(string[string])* anchors)
     return s;
 }
 
-private string codeSpan(ref string[] codes, string content)
-{
+private string codeSpan(ref string[] codes, string content) {
     codes ~= "<code>" ~ content ~ "</code>"; // content is escaped already
     return "\x01" ~ text(codes.length - 1) ~ "\x01";
 }
 
-private string makeLink(string label, string href, const(string[string])* anchors)
-{
+private string makeLink(string label, string href, const(string[string])* anchors) {
     if(href.length > 1 && href[0] == '#' && anchors !is null) {
         const string id = href[1 .. $];
         if(auto page = id in *anchors)
@@ -362,8 +349,7 @@ private string makeLink(string label, string href, const(string[string])* anchor
 /// (runs collapse), every other character is dropped — GitHub-style
 /// slugs, matching the file's link spellings ("Config
 /// (config.pravic)" -> config-configpravic).
-package(tachy) string slugify(string t) @safe pure
-{
+package(tachy) string slugify(string t) @safe pure {
     import std.ascii : isDigit, isLower, toLower;
 
     string r;
@@ -383,8 +369,7 @@ package(tachy) string slugify(string t) @safe pure
     return r;
 }
 /// Alphanumerics only (the compact anchor spelling the file also uses).
-package(tachy) string compactOf(string id) @safe pure
-{
+package(tachy) string compactOf(string id) @safe pure {
     import std.ascii : isDigit, isLower;
 
     string r;
@@ -394,8 +379,7 @@ package(tachy) string compactOf(string id) @safe pure
     return r;
 }
 
-private void registerAnchor(ref string[string] map, string id, string page)
-{
+private void registerAnchor(ref string[string] map, string id, string page) {
     if(!id.length || id in map)
         return;
     map[id] = page;
@@ -404,37 +388,25 @@ private void registerAnchor(ref string[string] map, string id, string page)
         map[compact] = page;
 }
 
-private string stripTicks(string s) @safe pure
-{
+private string stripTicks(string s) @safe pure {
     import std.array : replace;
 
     return s.replace("`", "");
 }
 
-private string htmlEscape(string s) @safe pure
-{
+private string htmlEscape(string s) @safe pure {
     string r;
     foreach(char c; s)switch(c) {
-        case '&':
-            r ~= "&amp;";
-            break;
-        case '<':
-            r ~= "&lt;";
-            break;
-        case '>':
-            r ~= "&gt;";
-            break;
-        case '"':
-            r ~= "&quot;";
-            break;
-        default:
-            r ~= c;
+        case '&': r ~= "&amp;"; break;
+        case '<': r ~= "&lt;"; break;
+        case '>': r ~= "&gt;"; break;
+        case '"': r ~= "&quot;"; break;
+        default: r ~= c;
     }
     return r;
 }
 
-private bool isWord(string s) @safe pure
-{
+private bool isWord(string s) @safe pure {
     import std.ascii : isDigit, isLower;
 
     foreach(char c; s)
@@ -444,8 +416,7 @@ private bool isWord(string s) @safe pure
 }
 
 /// A table separator row: `|---|:---:|` (pipes optional at both ends).
-private bool isTableSeparator(string l) @safe pure
-{
+private bool isTableSeparator(string l) @safe pure {
     import std.algorithm.searching : all;
 
     auto s = l.strip;
@@ -458,26 +429,20 @@ private bool isTableSeparator(string l) @safe pure
     return s.splitPipe().all!(c => isDashCell(strip(c)));
 }
 
-private bool isDashCell(string c) @safe pure
-{
-    if(!c.length)
-        return false;
-    if(c[0] == ':')
-        c = c[1 .. $];
-    if(c.length && c[$ - 1] == ':')
-        c = c[0 .. $ - 1];
-    if(!c.length)
-        return false;
-    foreach(char ch; c)
-        if(ch != '-')
-            return false;
+private bool isDashCell(string c) @safe pure {
+    if(!c.length) return false;
+    if(c[0] == ':') c = c[1 .. $];
+    if(c.length && c[$ - 1] == ':') c = c[0 .. $ - 1];
+    if(!c.length) return false;
+    foreach(char ch; c) {
+        if(ch != '-') return false;
+    }
     return true;
 }
 
 /// Split a table row into cells: strip the outer pipes, split on `|`
 /// (a `\|` inside a cell is a literal pipe, not a separator).
-private string[] tableCells(string row) @safe pure
-{
+private string[] tableCells(string row) @safe pure {
     auto s = row.strip;
     if(s.length && s[0] == '|')
         s = s[1 .. $];
@@ -487,8 +452,7 @@ private string[] tableCells(string row) @safe pure
 }
 
 /// Split on unescaped pipes; `\|` stays in the cell as `|`.
-private string[] splitPipe(string s) @safe pure
-{
+private string[] splitPipe(string s) @safe pure {
     import std.algorithm.searching : canFind;
 
     string[] cells;
@@ -504,14 +468,12 @@ private string[] splitPipe(string s) @safe pure
             cur ~= s[i];
     }
     cells ~= cur;
-    foreach(ref c; cells)
-        c = c.strip;
+    foreach(ref c; cells) { c = c.strip; }
     return cells;
 }
 
 /// True when the row's last character is a real (unescaped) pipe.
-private bool endsWithEscapedPipe(string s) @safe pure
-{
+private bool endsWithEscapedPipe(string s) @safe pure {
     return s.length >= 2 && s[$ - 1] == '|' && s[$ - 2] == '\\';
 }
 
@@ -519,8 +481,7 @@ private bool endsWithEscapedPipe(string s) @safe pure
 // Page chrome: menu, layout, CSS
 // ---------------------------------------------------------------------------
 
-package(tachy) string menuHtml(in Section[] all, string current)
-{
+package(tachy) string menuHtml(in Section[] all, string current) {
     auto app = appender!string;
     app.put("<a class=\"brand\" href=\"/doc/" ~ all[0].slug ~ "\">tachy<span>documentation</span></a>\n<ul>\n");
     bool inGroup;
@@ -541,14 +502,12 @@ package(tachy) string menuHtml(in Section[] all, string current)
                     ~ "</a></li>\n");
         }
     }
-    if(inGroup)
-        app.put("</ul>\n</li>\n");
+    if(inGroup) app.put("</ul>\n</li>\n");
     app.put("</ul>\n");
     return app.data;
 }
 
-package(tachy) string layout(string title, string menu, string content)
-{
+package(tachy) string layout(string title, string menu, string content) {
     return "<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>"
         ~ htmlEscape(
                 title) ~ " — tachy documentation</title>\n<style>"
