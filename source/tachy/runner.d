@@ -41,27 +41,25 @@ import tachy.transport;
 import tachy.value;
 import tachy.vars;
 
-struct RunOptions
-{
+struct RunOptions {
     string inventoryPath = "inventory.pravic";
-    string selection;      // host names / @tags / all, comma separated
+    string selection; // host names / @tags / all, comma separated
     bool checkMode;
     bool verbose;
-    bool forceColor;       // color statuses even when stdout is not a tty
-    bool keepBundle;      // keep the deployed bundle on each host (debugging)
-    bool direct;           // apply jobs in this process, no project bundling
-    string directReport;   // with --direct: write "ok changed failed" here
-    bool events;           // with --direct: print one JSON event per line
-    string identity;       // age identity for { age = ... } inventory vars
-    string config;         // optional config file (default: discovered)
+    bool forceColor; // color statuses even when stdout is not a tty
+    bool keepBundle; // keep the deployed bundle on each host (debugging)
+    bool direct; // apply jobs in this process, no project bundling
+    string directReport; // with --direct: write "ok changed failed" here
+    bool events; // with --direct: print one JSON event per line
+    string identity; // age identity for { age = ... } inventory vars
+    string config; // optional config file (default: discovered)
     string webAddress = "127.0.0.1"; // webui/webdoc: bind address
-    int webPort = 0;       // webui/webdoc: listen port (0 = random in 10000..65534)
-    bool noBrowser;        // webui/webdoc: do not open the browser window
-    bool yes;              // upgrade: skip the y/N confirmation
-    bool completion;       // hosts list: selection candidates for completions
+    int webPort = 0; // webui/webdoc: listen port (0 = random in 10000..65534)
+    bool noBrowser; // webui/webdoc: do not open the browser window
+    bool yes; // upgrade: skip the y/N confirmation
+    bool completion; // hosts list: selection candidates for completions
     string[] tasksFiles;
 }
-
 
 /// Interpret the positional tasks-file arguments: a directory names a
 /// project whose entry file is "main.pravic"; anything else is used as
@@ -70,11 +68,12 @@ struct RunOptions
 string[] resolveTasksFiles(in string[] args)
 {
     import std.file : exists, isDir;
-    if (!args.length)
+
+    if(!args.length)
         return ["main.pravic"];
     auto resolved = args.dup;
-    foreach (ref f; resolved)
-        if (f.length && exists(f) && isDir(f))
+    foreach(ref f; resolved)
+        if(f.length && exists(f) && isDir(f))
             f = buildPath(f, "main.pravic");
     return resolved;
 }
@@ -83,7 +82,7 @@ int runTachy(RunOptions optsIn)
 {
     installSignalHandlers();
 
-    if (!optsIn.selection.length)
+    if(!optsIn.selection.length)
         throw new TachyError("missing hosts selection (comma-separated host names or @tags, or \"all\")");
 
     // The config file is read once here for the whole run; the
@@ -94,12 +93,12 @@ int runTachy(RunOptions optsIn)
 
     auto inventory = Inventory.load(opts.inventoryPath, opts.identity);
     auto hosts = inventory.select(opts.selection);
-    if (!hosts.length)
+    if(!hosts.length)
         throw new TachyError("selection '" ~ opts.selection ~ "' matched no hosts");
-    if (hosts.length == 1 && hosts[0].connection == "local" && !opts.tasksFiles.length)
+    if(hosts.length == 1 && hosts[0].connection == "local" && !opts.tasksFiles.length)
         throw new TachyError("no tasks files given (a local host needs"
-            ~ " at least one tasks file argument)");
-    if (opts.direct)
+                ~ " at least one tasks file argument)");
+    if(opts.direct)
         return runDirect(opts, inventory, hosts, config);
     return runBundled(opts, inventory, hosts, config);
 }
@@ -117,38 +116,34 @@ int runTachy(RunOptions optsIn)
 /// No host is contacted and no tasks file is needed.
 int runHosts(in string[] args, const RunOptions opts)
 {
-    if (!args.length)
+    if(!args.length)
         throw new TachyError("hosts: expected 'list [<selection>]' or"
-            ~ " 'info <host>' — examples: tachy hosts list,"
-            ~ " tachy hosts list @web, tachy hosts info web1");
-    if (!args[0].among!("list", "info"))
+                ~ " 'info <host>' — examples: tachy hosts list,"
+                ~ " tachy hosts list @web, tachy hosts info web1");
+    if(!args[0].among!("list", "info"))
         throw new TachyError("hosts: unknown sub-command '" ~ args[0]
-            ~ "' (expected 'list' or 'info')");
-    if (args[0] == "list" && args.length > 2)
+                ~ "' (expected 'list' or 'info')");
+    if(args[0] == "list" && args.length > 2)
         throw new TachyError("hosts list: expected at most one selection"
-            ~ " (host names, @tags or \"all\"), not " ~ text(args.length - 1));
-    if (args[0] == "list" && opts.completion && args.length > 1)
+                ~ " (host names, @tags or \"all\"), not " ~ text(args.length - 1));
+    if(args[0] == "list" && opts.completion && args.length > 1)
         throw new TachyError("hosts list --completion takes no selection —"
-            ~ " it prints every candidate (all, host names, @tags),"
-            ~ " which a selection would only trim");
-    if (args[0] == "info" && args.length != 2)
+                ~ " it prints every candidate (all, host names, @tags),"
+                ~ " which a selection would only trim");
+    if(args[0] == "info" && args.length != 2)
         throw new TachyError("hosts info: expected exactly one host name");
 
     const string selection = args.length == 2 ? args[1] : "all";
     const Config config = loadConfig(opts.config);
     auto inventory = Inventory.load(opts.inventoryPath,
-        effectiveIdentity(opts.identity, config));
-    if (args[0] == "list")
-    {
+            effectiveIdentity(opts.identity, config));
+    if(args[0] == "list") {
         auto hosts = inventory.select(selection);
-        if (!hosts.length)
+        if(!hosts.length)
             throw new TachyError(text("selection '", selection, "' matched no hosts"));
         writeln(opts.completion
-            ? selectionCandidatesText(hosts)
-            : hostsListText(selection, hosts));
-    }
-    else
-    {
+                ? selectionCandidatesText(hosts) : hostsListText(selection, hosts));
+    } else {
         const HostConfig h = inventory.host(args[1]);
         auto vars = inventory.varsFor(h.name);
         vars.remove("inventory_hostname"); // builtin, restated by the header
@@ -167,14 +162,14 @@ package(tachy) string selectionCandidatesText(HostConfig[] hosts) @safe
     import std.algorithm.sorting : sort;
 
     string[] tags;
-    foreach (ref h; hosts)
+    foreach(ref h; hosts)
         tags ~= h.tags;
     tags.sort();
 
     string out_ = "all\n";
-    foreach (ref h; hosts)
+    foreach(ref h; hosts)
         out_ ~= h.name ~ "\n";
-    foreach (t; uniq(tags))
+    foreach(t; uniq(tags))
         out_ ~= "@" ~ t ~ "\n";
     return out_;
 }
@@ -184,8 +179,8 @@ package(tachy) string selectionCandidatesText(HostConfig[] hosts) @safe
 package(tachy) string hostsListText(string selection, HostConfig[] hosts)
 {
     string out_ = format("== %s | hosts: %s\n", selection,
-        hosts.mapHosts().join(", "));
-    foreach (ref h; hosts)
+            hosts.mapHosts().join(", "));
+    foreach(ref h; hosts)
         out_ ~= format("  %s (%s)\n", h.name, describeHost(h));
     return out_;
 }
@@ -201,21 +196,20 @@ package(tachy) string hostInfoText(in HostConfig h, in Val[string] vars)
 
     string info = format("== %s (%s)\n", h.name, describeHost(h));
     info ~= attrLine("connection", h.connection);
-    if (h.address.length)
+    if(h.address.length)
         info ~= attrLine("address", h.address);
-    if (h.user.length)
+    if(h.user.length)
         info ~= attrLine("user", h.user);
     info ~= attrLine("port", text(h.port));
-    if (h.key.length)
+    if(h.key.length)
         info ~= attrLine("key", h.key);
-    if (h.tags.length)
+    if(h.tags.length)
         info ~= attrLine("tags", h.tags.join(", "));
-    if (vars.length)
-    {
+    if(vars.length) {
         info ~= "  vars:\n";
         auto keys = vars.byKey.array;
         keys.sort();
-        foreach (k; keys)
+        foreach(k; keys)
             info ~= format("    %s = %s\n", k, pravicValue(vars[k]));
     }
     return info;
@@ -232,7 +226,7 @@ private string attrLine(string name, string value) @safe pure
 // ---------------------------------------------------------------------------
 
 private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] hosts,
-    const Config config)
+        const Config config)
 {
     const bool tty = isStdoutTty() || opts.forceColor;
     const bool machine = opts.directReport.length > 0;
@@ -244,13 +238,12 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
     // job events only: the controller owns the header/footer events,
     // so the raw --events stream is not doubled.
     TextRenderer renderer = TextRenderer((string l) => terminalSink(l), tty,
-        opts.verbose, config.outputFormat == "tree");
+            opts.verbose, config.outputFormat == "tree");
     void consume(JobEvent ev)
     {
-        if (machine && ev.kind != JobEvent.Kind.job)
+        if(machine && ev.kind != JobEvent.Kind.job)
             return; // machine mode: job events only, no headers/footers
-        if (opts.events)
-        {
+        if(opts.events) {
             stdout.writeln(eventLine(ev));
             stdout.flush();
             return;
@@ -261,8 +254,7 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
     int totalFailed;
     bool stop; // a SIGINT/SIGTERM arrived: finish the summary and leave
 
-    foreach (tasksFile; opts.tasksFiles)
-    {
+    foreach(tasksFile; opts.tasksFiles) {
         auto loaded = loadTasksFile(tasksFile, config);
         validateRenders(loaded, inventory, hosts);
 
@@ -271,25 +263,22 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
         // compose them from, so --direct skips them (bundled mode
         // composes them on the host, where the import has landed).
         // stderr keeps stdout machine-clean in --events mode.
-        foreach (d; loaded.deferred)
+        foreach(d; loaded.deferred)
             stderr.writeln("-- skipped (under an import destination,"
-                ~ " no bundle with --direct): ", d);
+                    ~ " no bundle with --direct): ", d);
 
         consume(evFileStart(tasksFile, hosts.mapHosts()));
 
         ulong ok, changed, failed;
-        foreach (ref const host; hosts)
-        {
-            if (stop || signalReceived())
-            {
+        foreach(ref const host; hosts) {
+            if(stop || signalReceived()) {
                 stop = true;
                 break;
             }
             Transport t;
             try
                 t = makeTransport(host);
-            catch (Exception e)
-            {
+            catch(Exception e) {
                 auto ev = evJob(host.name, tasksFile, host.name, "failed", e.msg);
                 foldCounters(ev, ok, changed, failed);
                 consume(ev);
@@ -298,35 +287,29 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
 
             auto hostVars = inventory.varsFor(host.name);
 
-            foreach (ref const job; loaded.jobs)
-            {
-                if (stop || signalReceived())
-                {
+            foreach(ref const job; loaded.jobs) {
+                if(stop || signalReceived()) {
                     stop = true;
                     break;
                 }
-                try
-                {
+                try {
                     auto vars = deepMerge(hostVars, job.overlay);
                     auto params = renderParams(job.params, vars);
                     TaskContext ctx = TaskContext(t, opts.checkMode, host.name,
-                        job.tasksFileDir, vars, opts.identity);
+                            job.tasksFileDir, vars, opts.identity);
                     StopWatch sw;
                     sw.start();
                     auto r = runModule(job.moduleName, params, ctx);
                     const ulong ms = sw.peek.total!"msecs";
                     string status = r.changed ? "changed" : "ok";
-                    if (r.changed && opts.checkMode)
+                    if(r.changed && opts.checkMode)
                         status = "changed (check)";
                     auto ev = evJob(host.name, tasksFile, defaultLabel(job.kind, params),
-                        status, r.msg, r.details, ms);
+                            status, r.msg, r.details, ms);
                     foldCounters(ev, ok, changed, failed);
                     consume(ev);
-                }
-                catch (Exception e)
-                {
-                    if (stop || signalReceived())
-                    {
+                } catch(Exception e) {
+                    if(stop || signalReceived()) {
                         // The in-flight command died because the signal
                         // killed it, not because the host misbehaved:
                         // no failure to report — the interrupted
@@ -342,18 +325,18 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
             }
         }
 
-        if (machine)
+        if(machine)
             writeDirectReport(opts.directReport, ok, changed, failed);
         consume(evFileDone(tasksFile, ok, changed, failed, opts.checkMode,
-            signalReceived()));
+                signalReceived()));
         totalFailed += cast(int) failed;
-        if (stop)
+        if(stop)
             break; // the summary above is the report; nothing else runs
     }
 
     // An interrupted run exits with the conventional 128 + signal —
     // even when the jobs it completed before the signal all succeeded.
-    if (signalReceived())
+    if(signalReceived())
         return signalExitCode();
     return totalFailed > 0 ? 1 : 0;
 }
@@ -376,81 +359,71 @@ private int runDirect(const RunOptions opts, Inventory inventory, HostConfig[] h
 /// controller is skipped — it may live under an import landing, which
 /// only exists inside the bundle.
 package(tachy) void validateRenders(in LoadedTasks loaded,
-    const Inventory inventory, const HostConfig[] hosts)
+        const Inventory inventory, const HostConfig[] hosts)
 {
     import std.file : exists;
 
-    foreach (ref const host; hosts)
-    {
+    foreach(ref const host; hosts) {
         const Val[string] hostVars = inventory.varsFor(host.name);
-        foreach (ref const job; loaded.jobs)
-        {
+        foreach(ref const job; loaded.jobs) {
             Val[string] vars = deepMerge(hostVars, job.overlay);
-            try
-            {
+            try {
                 Val[string] params = renderParams(job.params, vars);
-                if (auto tpl = "template" in params)
-                {
-                    if ((*tpl).kind != Val.Kind.string_)
+                if(auto tpl = "template" in params) {
+                    if((*tpl).kind != Val.Kind.string_)
                         continue; // the module rejects it at run time
-                    if (!exists(resolveEntryPath((*tpl).str_, job.tasksFileDir)))
+                    if(!exists(resolveEntryPath((*tpl).str_, job.tasksFileDir)))
                         continue; // may only exist inside the bundle
                     renderTemplateFile((*tpl).str_, job.tasksFileDir,
-                        vars, params, "");
+                            vars, params, "");
                 }
-            }
-            catch (TachyError e)
-            {
+            } catch(TachyError e) {
                 throw new TachyError(job.origin ~ ": host " ~ host.name
-                    ~ ": " ~ e.msg);
+                        ~ ": " ~ e.msg);
             }
         }
     }
 }
+
 private void writeDirectReport(string path, ulong ok, ulong changed, ulong failed)
 {
-    try
-    {
+    try {
         auto f = File(path, "w");
         f.writefln("%s %s %s", ok, changed, failed);
         f.close();
-    }
-    catch (Exception e)
+    } catch(Exception e)
         throw new TachyError("cannot write the direct report '" ~ path ~ "': " ~ e.msg);
 }
 
 // ---------------------------------------------------------------------------
 
-private struct DeployedBundle
-{
+private struct DeployedBundle {
     string host;
     Transport transport;
     ProjectBundle bundle;
 }
 
 private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] hosts,
-    const Config config)
+        const Config config)
 {
     const bool tty = isStdoutTty();
     const bool rawEvents = opts.events; // display the raw event stream
     TextRenderer renderer = TextRenderer((string l) => terminalSink(l), tty,
-        opts.verbose, config.outputFormat == "tree");
+            opts.verbose, config.outputFormat == "tree");
     int totalFailed;
     bool stop; // a SIGINT/SIGTERM arrived: clean up and report, don't die
     DeployedBundle[string] deployed; // host \0 project dir -> bundle (reused)
 
     void display(JobEvent ev)
     {
-        if (rawEvents)
+        if(rawEvents)
             emitRawEvent(ev);
         else
             renderer.handle(ev);
     }
 
-    try
-    {
-        foreach (tasksFile; opts.tasksFiles)
-        {
+    try {
+        foreach(tasksFile; opts.tasksFiles) {
             auto loaded = loadTasksFile(tasksFile, config); // validate on the controller
 
             const string absTasks = buildNormalizedPath(absolutePath(tasksFile));
@@ -460,7 +433,7 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
             // import sources land in the bundle next to the project
             // copy, under their base name (bundled mode only).
             ImportSpec[] imports;
-            foreach (src; loaded.imports)
+            foreach(src; loaded.imports)
                 imports ~= ImportSpec(src, baseName(src));
 
             // Secret sources may also live inside applies that defer
@@ -475,13 +448,13 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
             LoadedTasks secretLoaded = loaded;
             string secretProjectDir = projectDir;
             string staging; // the mirror lives for the whole tasks file
-            scope (exit) removeStaging(staging);
-            if (loaded.deferred.length)
-            {
+            scope(exit)
+                removeStaging(staging);
+            if(loaded.deferred.length) {
                 staging = makeStaging(projectDir, imports);
                 secretProjectDir = staging;
                 secretLoaded = loadTasksFile(
-                    buildPath(staging, baseName(absTasks)), config);
+                        buildPath(staging, baseName(absTasks)), config);
             }
 
             // Every `{{ ... }}` of the composition must resolve for
@@ -499,60 +472,53 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
             const bool anyAgeSrc = hasAgeSrc(secretLoaded);
             string[string] decryptedCache; // resolved source path -> plaintext
 
-
             // display() routes through the raw-event serializer in
             // --events mode, so the machine stream is self-describing:
             // fileStart and fileDone wrap the job events of each file
             // (the webui consumes exactly this).
             display(evFileStart(tasksFile, hosts.mapHosts()));
 
-
             ulong ok, changed, failed;
-            foreach (ref const host; hosts)
-            {
-                if (stop || signalReceived())
-                {
+            foreach(ref const host; hosts) {
+                if(stop || signalReceived()) {
                     stop = true;
                     break;
                 }
                 Transport t;
                 try
                     t = makeTransport(host);
-                catch (Exception e)
-                {
+                catch(Exception e) {
                     failed++;
                     display(evJob(host.name, tasksFile, host.name, "failed", e.msg));
                     continue;
                 }
 
-                try
-                {
+                try {
                     // The cache key covers the import set and the
                     // decrypted-secret set: two entry files sharing a
                     // project but importing differently must not reuse
                     // one bundle, and neither must two files whose
                     // age-marked sources differ.
                     DecryptedFile[] decrypted;
-                    if (anyAgeSrc)
+                    if(anyAgeSrc)
                         decrypted = collectDecryptedFiles(secretLoaded,
-                            inventory.varsFor(host.name), secretProjectDir,
-                            opts.identity, decryptedCache);
+                                inventory.varsFor(host.name), secretProjectDir,
+                                opts.identity, decryptedCache);
                     const string key = host.name ~ "\0" ~ projectDir
                         ~ "\0" ~ importsSignature(imports)
                         ~ "\0" ~ decryptedSignature(decrypted);
                     ProjectBundle b;
-                    if (auto d = key in deployed)
+                    if(auto d = key in deployed)
                         b = (*d).bundle;
-                    else
-                    {
+                    else {
                         b = deployProject(t, projectDir, host.name,
-                            inventory.varsFor(host.name), imports, decrypted);
+                                inventory.varsFor(host.name), imports, decrypted);
                         deployed[key] = DeployedBundle(host.name, t, b);
                     }
 
                     const string reportPath = buildPath(b.root, "report");
                     const string cmd = innerTachyCommand(b, host.name, baseName(absTasks),
-                        opts.checkMode, opts.verbose, tty, reportPath);
+                            opts.checkMode, opts.verbose, tty, reportPath);
 
                     // Stream the inner run's events live: each stdout
                     // line is one JSON event, rendered as it arrives.
@@ -560,35 +526,27 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
                     // on the transport's drain thread); one lock
                     // serializes it.
                     Object sinkLock = new Object;
-                    auto r = t.runStreaming(cmd, (string line, bool isErr)
-                    {
-                        synchronized (sinkLock)
-                        {
-                            if (isErr)
-                            {
+                    auto r = t.runStreaming(cmd, (string line, bool isErr) {
+                        synchronized(sinkLock) {
+                            if(isErr) {
                                 stderr.writeln(line);
                                 return;
                             }
-                            if (rawEvents)
-                            {
+                            if(rawEvents) {
                                 stdout.writeln(line); // raw passthrough
                                 stdout.flush();
                                 return;
                             }
                             JobEvent ev;
-                            try
-                            {
-                                if (parseEventLine(line, ev))
-                                {
+                            try {
+                                if(parseEventLine(line, ev)) {
                                     // the controller prints its own
                                     // header/footer and owns the counters
-                                    if (ev.kind == JobEvent.Kind.job)
+                                    if(ev.kind == JobEvent.Kind.job)
                                         renderer.handle(ev);
                                     return;
                                 }
-                            }
-                            catch (TachyError e)
-                            {
+                            } catch(TachyError e) {
                                 stderr.writeln("bad event line from ",
                                     host.name, ": ", e.msg);
                                 return;
@@ -598,22 +556,17 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
                     });
 
                     ulong hOk, hChanged, hFailed;
-                    if (readReport(t, reportPath, hOk, hChanged, hFailed))
-                    {
+                    if(readReport(t, reportPath, hOk, hChanged, hFailed)) {
                         ok += hOk;
                         changed += hChanged;
                         failed += hFailed;
-                        if (!r.ok && hFailed == 0)
+                        if(!r.ok && hFailed == 0)
                             failed++; // killed or crashed after reporting
-                    }
-                    else
+                    } else
                         failed++; // inner run died before writing its report
-                }
-                catch (Exception e)
-                {
+                } catch(Exception e) {
                     failed++;
-                    if (stop || signalReceived())
-                    {
+                    if(stop || signalReceived()) {
                         // The inner run died because the signal killed
                         // the streaming ssh, not because the host
                         // misbehaved: the interrupted summary tells it.
@@ -625,45 +578,39 @@ private int runBundled(const RunOptions opts, Inventory inventory, HostConfig[] 
             }
 
             display(evFileDone(tasksFile, ok, changed, failed, opts.checkMode,
-                signalReceived()));
+                    signalReceived()));
             totalFailed += cast(int) failed;
-            if (stop)
+            if(stop)
                 break; // the finally below removes the deployed bundles
         }
-    }
-    finally
-    {
-        foreach (ref d; deployed.byValue())
-        {
-            if (opts.keepBundle)
-            {
+    } finally {
+        foreach(ref d; deployed.byValue()) {
+            if(opts.keepBundle) {
                 // keep the raw event stream machine-clean
-                if (rawEvents)
+                if(rawEvents)
                     stderr.writefln("-- bundle kept on %s at %s (remove it manually)",
-                        d.host, d.bundle.root);
+                            d.host, d.bundle.root);
                 else
                     writefln("-- bundle kept on %s at %s (remove it manually)",
-                        d.host, d.bundle.root);
-            }
-            else
+                            d.host, d.bundle.root);
+            } else
                 removeBundle(d.transport, d.bundle); // best-effort
         }
     }
 
     // An interrupted run exits with the conventional 128 + signal; the
     // finally above already removed the deployed bundles (cleanup).
-    if (signalReceived())
+    if(signalReceived())
         return signalExitCode();
     return totalFailed > 0 ? 1 : 0;
 }
-
 
 /// Cache-key signature of a bundle's import set (sources are resolved
 /// absolute and collected in deterministic order).
 private string importsSignature(in ImportSpec[] imports) @safe pure
 {
     string s;
-    foreach (ref const i; imports)
+    foreach(ref const i; imports)
         s ~= i.src ~ "\0" ~ i.dest ~ "\n";
     return s;
 }
@@ -672,12 +619,13 @@ private string importsSignature(in ImportSpec[] imports) @safe pure
 private string decryptedSignature(in DecryptedFile[] decrypted) @safe pure
 {
     import std.algorithm.sorting : sort;
+
     auto rels = new string[decrypted.length];
-    foreach (i, ref const d; decrypted)
+    foreach(i, ref const d; decrypted)
         rels[i] = d.relPath;
     rels.sort();
     string s;
-    foreach (r; rels)
+    foreach(r; rels)
         s ~= r ~ "\n";
     return s;
 }
@@ -687,12 +635,11 @@ private string decryptedSignature(in DecryptedFile[] decrypted) @safe pure
 /// controller-side decryption work.
 private bool hasAgeSrc(in LoadedTasks loaded) @safe
 {
-    foreach (ref const job; loaded.jobs)
-    {
-        if (job.moduleName != "file")
+    foreach(ref const job; loaded.jobs) {
+        if(job.moduleName != "file")
             continue;
-        if (auto a = "age" in job.params)
-            if ((*a).kind == Val.Kind.boolean_ && (*a).boolean_)
+        if(auto a = "age" in job.params)
+            if((*a).kind == Val.Kind.boolean_ && (*a).boolean_)
                 return true;
     }
     return false;
@@ -705,42 +652,40 @@ private bool hasAgeSrc(in LoadedTasks loaded) @safe
 /// ciphertext copies inside the bundle.  `cache` deduplicates
 /// decryption across hosts (resolved path -> plaintext).
 package(tachy) DecryptedFile[] collectDecryptedFiles(in LoadedTasks loaded,
-    in Val[string] hostVars, string projectDir, string identity,
-    ref string[string] cache) @trusted
+        in Val[string] hostVars, string projectDir, string identity,
+        ref string[string] cache) @trusted
 {
     DecryptedFile[] out_;
     bool[string] seenRel;
-    foreach (ref const job; loaded.jobs)
-    {
-        if (job.moduleName != "file")
+    foreach(ref const job; loaded.jobs) {
+        if(job.moduleName != "file")
             continue;
         auto a = "age" in job.params;
-        if (a is null || (*a).kind != Val.Kind.boolean_ || !(*a).boolean_)
+        if(a is null || (*a).kind != Val.Kind.boolean_ || !(*a).boolean_)
             continue;
 
         auto vars = deepMerge(hostVars, job.overlay);
         auto params = renderParams(job.params, vars);
         auto s = "src" in params;
-        if (s is null || (*s).kind != Val.Kind.string_)
+        if(s is null || (*s).kind != Val.Kind.string_)
             throw new TachyError(job.origin ~ ": 'age' requires 'src'"
-                ~ " (it marks that source file as age-encrypted)");
+                    ~ " (it marks that source file as age-encrypted)");
         const string src = (*s).str_;
 
         string srcPath = src;
-        if (!isAbsolute(srcPath))
+        if(!isAbsolute(srcPath))
             srcPath = buildPath(job.tasksFileDir, src);
         srcPath = buildNormalizedPath(absolutePath(srcPath));
-        if (!srcPath.startsWith(projectDir ~ "/"))
+        if(!srcPath.startsWith(projectDir ~ "/"))
             throw new TachyError(job.origin ~ ": age-marked 'src' '" ~ src
-                ~ "' must live inside the project directory '" ~ projectDir
-                ~ "' (only the project is copied into the bundle)");
+                    ~ "' must live inside the project directory '" ~ projectDir
+                    ~ "' (only the project is copied into the bundle)");
         const string rel = srcPath[projectDir.length + 1 .. $];
-        if (rel in seenRel)
+        if(rel in seenRel)
             continue;
         seenRel[rel] = true;
 
-        if (auto hit = srcPath in cache)
-        {
+        if(auto hit = srcPath in cache) {
             out_ ~= DecryptedFile(rel, *hit);
             continue;
         }
@@ -760,7 +705,7 @@ package(tachy) DecryptedFile[] collectDecryptedFiles(in LoadedTasks loaded,
 /// relative paths, `..` escapes back into the project and nested
 /// applies under the landing all resolve identically.
 package(tachy) string makeStaging(string projectDir, in ImportSpec[] imports)
-    @trusted
+@trusted
 {
     import std.conv : text;
     import std.file : FileException, SpanMode, dirEntries, mkdir, symlink;
@@ -768,46 +713,38 @@ package(tachy) string makeStaging(string projectDir, in ImportSpec[] imports)
 
     auto rng = Random(unpredictableSeed);
     string staging;
-    foreach (_; 0 .. 16)
-    {
+    foreach(_; 0 .. 16) {
         import std.file : tempDir;
+
         const string candidate = buildPath(tempDir, "tachy.stage."
-            ~ text(uniform!"[]"(0, int.max, rng)));
-        try
-        {
+                ~ text(uniform!"[]"(0, int.max, rng)));
+        try {
             mkdir(candidate);
             staging = candidate;
             break;
-        }
-        catch (FileException e)
-        {
+        } catch(FileException e) {
         }
     }
-    if (!staging.length)
+    if(!staging.length)
         throw new TachyError("cannot create a staging directory for the"
-            ~ " deferred-apply mirror in the system temp dir");
+                ~ " deferred-apply mirror in the system temp dir");
 
-    try
-    {
+    try {
         bool[string] mirrored;
-        foreach (e; dirEntries(projectDir, SpanMode.shallow))
-        {
+        foreach(e; dirEntries(projectDir, SpanMode.shallow)) {
             const string link = buildPath(staging, baseName(e.name));
             symlink(e.name, link);
             mirrored[baseName(e.name)] = true;
         }
-        foreach (ref const ImportSpec imp; imports)
-        {
-            if (imp.dest in mirrored)
+        foreach(ref const ImportSpec imp; imports) {
+            if(imp.dest in mirrored)
                 continue;
             symlink(imp.src, buildPath(staging, imp.dest));
         }
-    }
-    catch (Exception e)
-    {
+    } catch(Exception e) {
         removeStaging(staging);
         throw new TachyError("cannot mirror project '" ~ projectDir
-            ~ "' for deferred-apply secret collection: " ~ e.msg);
+                ~ "' for deferred-apply secret collection: " ~ e.msg);
     }
     return staging;
 }
@@ -817,11 +754,12 @@ package(tachy) string makeStaging(string projectDir, in ImportSpec[] imports)
 package(tachy) void removeStaging(string staging) @trusted
 {
     import std.file : rmdirRecurse;
-    if (!staging.length)
+
+    if(!staging.length)
         return; // nothing was mirrored (no deferred applies)
-    try rmdirRecurse(staging);
-    catch (Exception)
-    {
+    try
+        rmdirRecurse(staging);
+    catch(Exception) {
     }
 }
 
@@ -831,23 +769,22 @@ package(tachy) void removeStaging(string staging) @trusted
 private void checkProjectContained(in LoadedTasks loaded, string projectDir)
 {
     const string prefix = projectDir ~ "/";
-    foreach (f; loaded.sourceFiles)
-        if (!startsWith(f, prefix))
+    foreach(f; loaded.sourceFiles)
+        if(!startsWith(f, prefix))
             throw new TachyError("the composition applies '" ~ f
-                ~ "', which is outside the project directory '" ~ projectDir
-                ~ "'; a project (the tasks file's parent directory) must be"
-                ~ " self-contained");
+                    ~ "', which is outside the project directory '" ~ projectDir
+                    ~ "'; a project (the tasks file's parent directory) must be"
+                    ~ " self-contained");
 }
 
 private bool readReport(Transport t, string path, out ulong ok, out ulong changed, out ulong failed)
 {
     ok = changed = failed = 0;
     auto r = t.run("cat -- " ~ shQuote(path));
-    if (!r.ok)
+    if(!r.ok)
         return false;
     return parseReport(r.outText, ok, changed, failed);
 }
-
 
 // ---------------------------------------------------------------------------
 
@@ -855,18 +792,19 @@ private string[] mapHosts()(HostConfig[] hosts)
 {
     import std.array : array;
     import std.algorithm.iteration : map;
+
     return hosts.map!(h => h.name).array;
 }
 
 private string describeHost(in HostConfig h) @safe pure
 {
-    if (h.connection == "local")
+    if(h.connection == "local")
         return "local";
     auto s = "ssh ";
-    if (h.user.length)
+    if(h.user.length)
         s ~= h.user ~ "@";
     s ~= h.address.length ? h.address : h.name;
-    if (h.port != 22)
+    if(h.port != 22)
         s ~= text(":", h.port);
     return s;
 }
@@ -876,10 +814,9 @@ private string defaultLabel(string kind, in Val[string] params) @safe pure
     // files and directories key their params by "path", compose by the
     // injected "dir", probe by the injected "url", everything else by
     // the injected "name".
-    const string key = kind.among!("file", "directory") ? "path"
-        : kind == "compose" ? "dir" : kind == "probe" ? "url" : "name";
+    const string key = kind.among!("file", "directory") ? "path" : kind == "compose" ? "dir" : kind == "probe" ? "url" : "name";
     auto pv = key in params;
-    if (pv !is null && (*pv).kind == Val.Kind.string_)
+    if(pv !is null && (*pv).kind == Val.Kind.string_)
         return kind ~ " " ~ (*pv).str_;
     return kind;
 }
@@ -899,15 +836,13 @@ private void emitRawEvent(JobEvent ev)
     stdout.flush();
 }
 
-
 private bool isStdoutTty() @trusted
 {
-    version (Posix)
-    {
+    version(Posix) {
         import core.sys.posix.unistd : isatty;
+
         return isatty(1) != 0;
-    }
-    else
+    } else
         return false;
 }
 

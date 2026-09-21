@@ -40,7 +40,7 @@ package(tachy) enum string docSource = import("DOCUMENTATION.md");
 
 int runWebDoc(const RunOptions opts) @trusted
 {
-    if (opts.webPort < 0 || opts.webPort > 65535)
+    if(opts.webPort < 0 || opts.webPort > 65535)
         throw new TachyError("--port must be between 0 and 65535");
 
     auto site = new DocSite(docSource);
@@ -48,15 +48,16 @@ int runWebDoc(const RunOptions opts) @trusted
     auto listener = webListener(opts);
     auto addr = cast(InternetAddress) listener.localAddress();
     stdout.writefln("tachy webdoc listening on http://%s — Ctrl-C to stop",
-        addr.toString());
+            addr.toString());
     stdout.writefln("serving the compiled-in DOCUMENTATION.md (%d sections)",
-        site.sections.length);
+            site.sections.length);
     stdout.flush();
 
-    if (!opts.noBrowser)
+    if(!opts.noBrowser)
         tryOpenBrowser(browserUrl(addr.toAddrString(), addr.port));
 
     import tachy.signals : installSignalHandlers, signalExitCode;
+
     installSignalHandlers();
     serveForever(listener, site.router);
     return signalExitCode();
@@ -66,19 +67,17 @@ int runWebDoc(const RunOptions opts) @trusted
 // The site: sections parsed out of the markdown, plus routes
 // ---------------------------------------------------------------------------
 
-private struct Section
-{
-    string slug;      // "3-command-line"; the reading-order prefix keeps
-                      // slugs unique and the menu ordered
-    string title;     // heading text, backticks stripped
-    string[] lines;   // raw markdown, rendered in the second pass
-    string html;      // rendered body, without the page chrome
-    bool isGroup;     // a ## section (its page holds the group's intro)
+private struct Section {
+    string slug; // "3-command-line"; the reading-order prefix keeps
+    // slugs unique and the menu ordered
+    string title; // heading text, backticks stripped
+    string[] lines; // raw markdown, rendered in the second pass
+    string html; // rendered body, without the page chrome
+    bool isGroup; // a ## section (its page holds the group's intro)
     string groupSlug; // owning group's slug (a group's own slug)
 }
 
-package(tachy) final class DocSite
-{
+package(tachy) final class DocSite {
     Router router;
     Section[] sections;
     Section[string] bySlug;
@@ -87,7 +86,7 @@ package(tachy) final class DocSite
     this(string md)
     {
         sections = splitSections(md, anchorPage);
-        foreach (ref s; sections)
+        foreach(ref s; sections)
             bySlug[s.slug] = s;
         router = new Router;
         router.add("GET", "/", (req, p) => page(sections[0].slug));
@@ -98,17 +97,16 @@ package(tachy) final class DocSite
     private Response page(string slug)
     {
         auto s = slug in bySlug;
-        if (s is null)
-        {
+        if(s is null) {
             auto r = asset(layout("No such section", menuHtml(sections, null),
-                "<p>There is no section at this address.</p>"),
-                "text/html; charset=utf-8");
+                    "<p>There is no section at this address.</p>"),
+                    "text/html; charset=utf-8");
             r.status = 404;
             return r;
         }
         return asset(layout((*s).title, menuHtml(sections, slug),
                 "<h1>" ~ inlineMd((*s).title, null) ~ "</h1>\n" ~ (*s).html),
-            "text/html; charset=utf-8");
+                "text/html; charset=utf-8");
     }
 }
 
@@ -135,13 +133,13 @@ package(tachy) Section[] splitSections(string md, ref string[string] anchorPage)
     size_t n;
     string groupTitle, curGroupSlug;
     bool groupEmitted;
-    string[] intro;   // the open group's intro lines
+    string[] intro; // the open group's intro lines
     string subTitle;
-    string[] body;    // the open subsection's lines
+    string[] body; // the open subsection's lines
 
     void emitGroup()
     {
-        if (!groupTitle.length || groupEmitted)
+        if(!groupTitle.length || groupEmitted)
             return;
         groupEmitted = true;
         n++;
@@ -158,7 +156,7 @@ package(tachy) Section[] splitSections(string md, ref string[string] anchorPage)
 
     void emitSub()
     {
-        if (!subTitle.length)
+        if(!subTitle.length)
             return;
         n++;
         Section s;
@@ -172,25 +170,20 @@ package(tachy) Section[] splitSections(string md, ref string[string] anchorPage)
         body = [];
     }
 
-    foreach (size_t i; first .. lines.length)
-    {
+    foreach(size_t i; first .. lines.length) {
         auto l = lines[i];
-        if (l.startsWith("## "))
-        {
-            emitSub();   // close the open subsection, then the group
+        if(l.startsWith("## ")) {
+            emitSub(); // close the open subsection, then the group
             emitGroup(); // (an intro-only group closes here)
             groupTitle = l[3 .. $];
             intro = [];
             groupEmitted = false;
-        }
-        else if (l.startsWith("### "))
-        {
+        } else if(l.startsWith("### ")) {
             emitSub();
             emitGroup(); // the intro ends here: the group's page comes first
             subTitle = l[4 .. $];
             body = [];
-        }
-        else if (subTitle.length)
+        } else if(subTitle.length)
             body ~= l;
         else
             intro ~= l;
@@ -201,12 +194,11 @@ package(tachy) Section[] splitSections(string md, ref string[string] anchorPage)
     // Second pass: the anchor map is complete only now — a group's page
     // links to sections that come after it — so in-page headings are
     // registered and the bodies rendered against the full map.
-    foreach (ref s; secs)
-        foreach (l; s.lines)
-            if (l.startsWith("#### "))
+    foreach(ref s; secs)
+        foreach(l; s.lines)
+            if(l.startsWith("#### "))
                 registerAnchor(anchorPage, slugify(l[5 .. $]), s.slug);
-    foreach (ref s; secs)
-    {
+    foreach(ref s; secs) {
         auto rend = MdRenderer(s.slug, anchorPage);
         s.html = rend.render(s.lines);
     }
@@ -217,8 +209,7 @@ package(tachy) Section[] splitSections(string md, ref string[string] anchorPage)
 // Markdown subset renderer (block level)
 // ---------------------------------------------------------------------------
 
-package(tachy) struct MdRenderer
-{
+package(tachy) struct MdRenderer {
     string pageSlug;
     private string[string]* anchors; // anchor map, by reference
 
@@ -234,53 +225,49 @@ package(tachy) struct MdRenderer
         string[] para;
         void flushPara()
         {
-            if (para.length)
-            {
+            if(para.length) {
                 app.put("<p>" ~ inlineMd(para.join(" "), anchors) ~ "</p>\n");
                 para = [];
             }
         }
 
         size_t i;
-        while (i < lines.length)
-        {
+        while(i < lines.length) {
             auto l = lines[i];
 
-            if (l.startsWith("```")) // fenced code block
+            if(l.startsWith("```")) // fenced code block
             {
                 flushPara();
                 auto lang = stripLeft(l[3 .. $]);
-                if (!isWord(lang))
+                if(!isWord(lang))
                     lang = "";
                 auto code = appender!(string[]);
-                for (i++; i < lines.length && !lines[i].startsWith("```"); i++)
+                for(i++; i < lines.length && !lines[i].startsWith("```"); i++)
                     code.put(lines[i]);
                 i++; // the closing fence
                 app.put("<pre><code" ~ (lang.length ? " class=\"lang-" ~ lang ~ "\"" : "")
-                    ~ ">" ~ htmlEscape(code.data.join("\n") ~ "\n") ~ "</code></pre>\n");
+                        ~ ">" ~ htmlEscape(
+                            code.data.join("\n") ~ "\n") ~ "</code></pre>\n");
                 continue;
             }
 
-            if (l.startsWith("### ") || l.startsWith("#### "))
-            {
+            if(l.startsWith("### ") || l.startsWith("#### ")) {
                 flushPara();
                 app.put(heading(l));
                 i++;
                 continue;
             }
 
-            if (l.length && l[0] == '|' && i + 1 < lines.length
-                    && isTableSeparator(lines[i + 1]))
-            {
+            if(l.length && l[0] == '|' && i + 1 < lines.length
+                    && isTableSeparator(lines[i + 1])) {
                 flushPara();
                 app.put("<table>\n<thead>\n<tr>");
-                foreach (c; tableCells(l))
+                foreach(c; tableCells(l))
                     app.put("<th>" ~ inlineMd(c, anchors) ~ "</th>");
                 app.put("</tr>\n</thead>\n<tbody>\n");
-                for (i += 2; i < lines.length && lines[i].length && lines[i][0] == '|'; i++)
-                {
+                for(i += 2; i < lines.length && lines[i].length && lines[i][0] == '|'; i++) {
                     app.put("<tr>");
-                    foreach (c; tableCells(lines[i]))
+                    foreach(c; tableCells(lines[i]))
                         app.put("<td>" ~ inlineMd(c, anchors) ~ "</td>");
                     app.put("</tr>\n");
                 }
@@ -288,14 +275,12 @@ package(tachy) struct MdRenderer
                 continue;
             }
 
-            if (l.startsWith("- ") || l == "-")
-            {
+            if(l.startsWith("- ") || l == "-") {
                 flushPara();
                 app.put("<ul>\n");
-                while (i < lines.length && (lines[i].startsWith("- ") || lines[i] == "-"))
-                {
+                while(i < lines.length && (lines[i].startsWith("- ") || lines[i] == "-")) {
                     string item = lines[i] == "-" ? "" : lines[i][2 .. $];
-                    for (i++; i < lines.length && lines[i].length && lines[i][0] == ' '
+                    for(i++; i < lines.length && lines[i].length && lines[i][0] == ' '
                             && strip(lines[i]).length; i++)
                         item ~= " " ~ strip(lines[i]); // wrapped item text
                     app.put("<li>" ~ inlineMd(item, anchors) ~ "</li>\n");
@@ -304,8 +289,7 @@ package(tachy) struct MdRenderer
                 continue;
             }
 
-            if (!strip(l).length)
-            {
+            if(!strip(l).length) {
                 flushPara();
                 i++;
                 continue;
@@ -362,10 +346,9 @@ private string codeSpan(ref string[] codes, string content)
 
 private string makeLink(string label, string href, const(string[string])* anchors)
 {
-    if (href.length > 1 && href[0] == '#' && anchors !is null)
-    {
+    if(href.length > 1 && href[0] == '#' && anchors !is null) {
         const string id = href[1 .. $];
-        if (auto page = id in *anchors)
+        if(auto page = id in *anchors)
             href = "/doc/" ~ *page ~ "#" ~ id;
     }
     return "<a href=\"" ~ href ~ "\">" ~ label ~ "</a>";
@@ -382,23 +365,20 @@ private string makeLink(string label, string href, const(string[string])* anchor
 package(tachy) string slugify(string t) @safe pure
 {
     import std.ascii : isDigit, isLower, toLower;
+
     string r;
     bool sep;
-    foreach (char c; stripTicks(t))
-    {
+    foreach(char c; stripTicks(t)) {
         c = toLower(c);
-        if (isDigit(c) || isLower(c))
-        {
+        if(isDigit(c) || isLower(c)) {
             r ~= c;
             sep = false;
-        }
-        else if ((c == ' ' || c == '\t') && !sep && r.length)
-        {
+        } else if((c == ' ' || c == '\t') && !sep && r.length) {
             r ~= '-';
             sep = true;
         }
     }
-    while (r.length && r[$ - 1] == '-')
+    while(r.length && r[$ - 1] == '-')
         r = r[0 .. $ - 1];
     return r;
 }
@@ -406,49 +386,59 @@ package(tachy) string slugify(string t) @safe pure
 package(tachy) string compactOf(string id) @safe pure
 {
     import std.ascii : isDigit, isLower;
+
     string r;
-    foreach (char c; id)
-        if (isDigit(c) || isLower(c))
+    foreach(char c; id)
+        if(isDigit(c) || isLower(c))
             r ~= c;
     return r;
 }
 
 private void registerAnchor(ref string[string] map, string id, string page)
 {
-    if (!id.length || id in map)
+    if(!id.length || id in map)
         return;
     map[id] = page;
     const string compact = compactOf(id);
-    if (compact.length && compact != id && compact !in map)
+    if(compact.length && compact != id && compact !in map)
         map[compact] = page;
 }
 
 private string stripTicks(string s) @safe pure
 {
     import std.array : replace;
+
     return s.replace("`", "");
 }
 
 private string htmlEscape(string s) @safe pure
 {
     string r;
-    foreach (char c; s)
-        switch (c)
-        {
-            case '&': r ~= "&amp;"; break;
-            case '<': r ~= "&lt;"; break;
-            case '>': r ~= "&gt;"; break;
-            case '"': r ~= "&quot;"; break;
-            default: r ~= c;
-        }
+    foreach(char c; s)switch(c) {
+        case '&':
+            r ~= "&amp;";
+            break;
+        case '<':
+            r ~= "&lt;";
+            break;
+        case '>':
+            r ~= "&gt;";
+            break;
+        case '"':
+            r ~= "&quot;";
+            break;
+        default:
+            r ~= c;
+    }
     return r;
 }
 
 private bool isWord(string s) @safe pure
 {
     import std.ascii : isDigit, isLower;
-    foreach (char c; s)
-        if (!isLower(c) && !isDigit(c) && c != '-')
+
+    foreach(char c; s)
+        if(!isLower(c) && !isDigit(c) && c != '-')
             return false;
     return s.length > 0;
 }
@@ -457,28 +447,29 @@ private bool isWord(string s) @safe pure
 private bool isTableSeparator(string l) @safe pure
 {
     import std.algorithm.searching : all;
+
     auto s = l.strip;
-    if (s.length && s[0] == '|')
+    if(s.length && s[0] == '|')
         s = s[1 .. $];
-    if (s.length && s[$ - 1] == '|')
+    if(s.length && s[$ - 1] == '|')
         s = s[0 .. $ - 1];
-    if (!s.length)
+    if(!s.length)
         return false;
     return s.splitPipe().all!(c => isDashCell(strip(c)));
 }
 
 private bool isDashCell(string c) @safe pure
 {
-    if (!c.length)
+    if(!c.length)
         return false;
-    if (c[0] == ':')
+    if(c[0] == ':')
         c = c[1 .. $];
-    if (c.length && c[$ - 1] == ':')
+    if(c.length && c[$ - 1] == ':')
         c = c[0 .. $ - 1];
-    if (!c.length)
+    if(!c.length)
         return false;
-    foreach (char ch; c)
-        if (ch != '-')
+    foreach(char ch; c)
+        if(ch != '-')
             return false;
     return true;
 }
@@ -488,9 +479,9 @@ private bool isDashCell(string c) @safe pure
 private string[] tableCells(string row) @safe pure
 {
     auto s = row.strip;
-    if (s.length && s[0] == '|')
+    if(s.length && s[0] == '|')
         s = s[1 .. $];
-    if (s.length && s[$ - 1] == '|' && !endsWithEscapedPipe(s))
+    if(s.length && s[$ - 1] == '|' && !endsWithEscapedPipe(s))
         s = s[0 .. $ - 1];
     return splitPipe(s);
 }
@@ -499,25 +490,21 @@ private string[] tableCells(string row) @safe pure
 private string[] splitPipe(string s) @safe pure
 {
     import std.algorithm.searching : canFind;
+
     string[] cells;
     string cur;
-    for (size_t i = 0; i < s.length; i++)
-    {
-        if (s[i] == '\\' && i + 1 < s.length && s[i + 1] == '|')
-        {
+    for(size_t i = 0; i < s.length; i++) {
+        if(s[i] == '\\' && i + 1 < s.length && s[i + 1] == '|') {
             cur ~= '|';
             i++;
-        }
-        else if (s[i] == '|')
-        {
+        } else if(s[i] == '|') {
             cells ~= cur;
             cur = "";
-        }
-        else
+        } else
             cur ~= s[i];
     }
     cells ~= cur;
-    foreach (ref c; cells)
+    foreach(ref c; cells)
         c = c.strip;
     return cells;
 }
@@ -528,7 +515,6 @@ private bool endsWithEscapedPipe(string s) @safe pure
     return s.length >= 2 && s[$ - 1] == '|' && s[$ - 2] == '\\';
 }
 
-
 // ---------------------------------------------------------------------------
 // Page chrome: menu, layout, CSS
 // ---------------------------------------------------------------------------
@@ -538,28 +524,24 @@ package(tachy) string menuHtml(in Section[] all, string current)
     auto app = appender!string;
     app.put("<a class=\"brand\" href=\"/doc/" ~ all[0].slug ~ "\">tachy<span>documentation</span></a>\n<ul>\n");
     bool inGroup;
-    foreach (ref const s; all)
-    {
-        if (s.isGroup)
-        {
-            if (inGroup)
-            {
+    foreach(ref const s; all) {
+        if(s.isGroup) {
+            if(inGroup) {
                 app.put("</ul>\n</li>\n");
                 inGroup = false;
             }
             app.put("<li><a class=\"group" ~ (s.slug == current ? " active" : "")
-                ~ "\" href=\"/doc/" ~ s.slug ~ "\">" ~ inlineMd(s.title, null)
-                ~ "</a>\n<ul>\n");
+                    ~ "\" href=\"/doc/" ~ s.slug ~ "\">" ~ inlineMd(
+                        s.title, null)
+                    ~ "</a>\n<ul>\n");
             inGroup = true;
-        }
-        else
-        {
+        } else {
             app.put("<li><a" ~ (s.slug == current ? " class=\"active\"" : "")
-                ~ " href=\"/doc/" ~ s.slug ~ "\">" ~ inlineMd(s.title, null)
-                ~ "</a></li>\n");
+                    ~ " href=\"/doc/" ~ s.slug ~ "\">" ~ inlineMd(s.title, null)
+                    ~ "</a></li>\n");
         }
     }
-    if (inGroup)
+    if(inGroup)
         app.put("</ul>\n</li>\n");
     app.put("</ul>\n");
     return app.data;
@@ -568,7 +550,8 @@ package(tachy) string menuHtml(in Section[] all, string current)
 package(tachy) string layout(string title, string menu, string content)
 {
     return "<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>"
-        ~ htmlEscape(title) ~ " — tachy documentation</title>\n<style>"
+        ~ htmlEscape(
+                title) ~ " — tachy documentation</title>\n<style>"
         ~ pageCss ~ "</style>\n</head>\n<body class=\"webdoc\">\n<nav id=\"menu\">" ~ menu
         ~ "</nav>\n<main>" ~ content ~ "</main>\n</body>\n</html>\n";
 }

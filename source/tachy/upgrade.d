@@ -55,39 +55,35 @@ void delegate(in string tmpPath, in string exePath) replaceHook = null;
 
 /// `tachy upgrade` — check, ask (unless --yes), download, replace.
 int runUpgrade(const RunOptions opts, in string currentVersion, in string[] args)
-    @trusted
+@trusted
 {
-    if (args.length)
+    if(args.length)
         throw new TachyError("upgrade takes no sub-commands — just run"
-            ~ " \"tachy upgrade\" (add --yes to skip the confirmation)");
+                ~ " \"tachy upgrade\" (add --yes to skip the confirmation)");
 
     const latest = latestReleaseHook ? latestReleaseHook() : defaultLatestRelease();
 
     import std.stdio : stdout;
+
     const cmp = compareVersions(currentVersion, latest);
-    if (cmp > 0)
-    {
+    if(cmp > 0) {
         stdout.writeln("the installed tachy ", currentVersion,
-            " is newer than the latest release (", latest, ")");
+                " is newer than the latest release (", latest, ")");
         return 0;
     }
-    if (cmp == 0)
-    {
+    if(cmp == 0) {
         stdout.writeln("tachy is up to date (", currentVersion, ")");
         return 0;
     }
 
     stdout.writeln("an update is available: tachy ", latest,
-        " (installed: ", currentVersion, ")");
+            " (installed: ", currentVersion, ")");
 
-    if (!opts.yes)
-    {
+    if(!opts.yes) {
         const question = "upgrade tachy now? [y/N] ";
         const bool proceed = confirmHook !is null
-            ? confirmHook(question)
-            : askOnTty(question);
-        if (!proceed)
-        {
+            ? confirmHook(question) : askOnTty(question);
+        if(!proceed) {
             stdout.writeln("upgrade cancelled");
             return 0;
         }
@@ -97,31 +93,32 @@ int runUpgrade(const RunOptions opts, in string currentVersion, in string[] args
     import core.sys.posix.unistd : getpid;
     import std.conv : text;
     import std.path : buildPath, dirName;
+
     const tmp = buildPath(dirName(exe),
-        ".tachy-upgrade-" ~ text(getpid()) ~ ".tmp");
+            ".tachy-upgrade-" ~ text(getpid()) ~ ".tmp");
     import std.file : remove;
-    scope (failure)
+
+    scope(failure)
         try
             remove(tmp);
-        catch (Exception)
-        {
+        catch(Exception) {
         }
 
     const url = assetUrl(latest);
     stdout.writeln("downloading ", url, " ...");
-    if (downloadReleaseHook !is null)
+    if(downloadReleaseHook !is null)
         downloadReleaseHook(url, tmp);
     else
         downloadRelease(url, tmp);
     verifyDownloaded(tmp, latest);
 
-    if (replaceHook !is null)
+    if(replaceHook !is null)
         replaceHook(tmp, exe);
     else
         defaultReplace(tmp, exe);
 
     stdout.writeln("upgraded: tachy ", currentVersion, " -> ", latest,
-        " (the new version takes effect on the next run)");
+            " (the new version takes effect on the next run)");
     return 0;
 }
 
@@ -130,12 +127,12 @@ int runUpgrade(const RunOptions opts, in string currentVersion, in string[] args
 /// see; `--yes` is the way through.
 private bool askOnTty(in string question) @trusted
 {
-    version (Posix)
-    {
+    version(Posix) {
         import core.sys.posix.unistd : isatty;
-        if (isatty(0) == 0)
+
+        if(isatty(0) == 0)
             throw new TachyError("no terminal to confirm the upgrade —"
-                ~ " re-run with --yes to upgrade unattended");
+                    ~ " re-run with --yes to upgrade unattended");
     }
     return promptYesNo(question);
 }
@@ -146,10 +143,11 @@ private bool promptYesNo(in string question) @trusted
 {
     import std.stdio : stdin, stdout;
     import std.string : toLower;
+
     stdout.write(question);
     stdout.flush();
     const line = stdin.readln();
-    if (line is null)
+    if(line is null)
         return false;
     const answer = strip(line).toLower;
     return answer == "y" || answer == "yes";
@@ -161,11 +159,12 @@ private bool promptYesNo(in string question) @trusted
 private string runningBinaryPath() @trusted
 {
     import std.file : thisExePath;
+
     try
         return thisExePath();
-    catch (Exception e)
+    catch(Exception e)
         throw new TachyError("upgrade: cannot locate the running binary: "
-            ~ e.msg);
+                ~ e.msg);
 }
 
 /// The release asset URL for a version, the name `mise run release`
@@ -192,21 +191,21 @@ private void verifyDownloaded(in string tmpPath, in string expected) @trusted
 {
     auto t = new LocalTransport;
     auto ch = t.run("chmod 0755 -- " ~ shQuote(tmpPath));
-    if (!ch.ok)
+    if(!ch.ok)
         throw new TachyError("upgrade: cannot make the downloaded binary"
-            ~ " executable: " ~ failText(ch));
+                ~ " executable: " ~ failText(ch));
     auto r = t.run(shQuote(tmpPath) ~ " version");
     const got = r.outText.strip;
-    if (!r.ok)
+    if(!r.ok)
         throw new TachyError("upgrade: the downloaded file does not run as tachy "
-            ~ expected
-            ~ (got.length ? " (it answered '" ~ got ~ "')" : "")
-            ~ ": " ~ failText(r) ~ "; keeping the installed tachy");
-    if (got != "tachy " ~ expected)
+                ~ expected
+                ~ (got.length ? " (it answered '" ~ got ~ "')" : "")
+                ~ ": " ~ failText(r) ~ "; keeping the installed tachy");
+    if(got != "tachy " ~ expected)
         throw new TachyError("upgrade: the downloaded file is not tachy "
-            ~ expected
-            ~ (got.length ? " (it answered '" ~ got ~ "')" : " (no output)")
-            ~ "; keeping the installed tachy");
+                ~ expected
+                ~ (got.length ? " (it answered '" ~ got ~ "')" : " (no output)")
+                ~ "; keeping the installed tachy");
 }
 
 /// The final swap: one rename inside the binary's own directory, so it
@@ -214,16 +213,16 @@ private void verifyDownloaded(in string tmpPath, in string expected) @trusted
 /// over a running binary is fine; only its directory needs write
 /// permission.
 package(tachy) void defaultReplace(in string tmpPath, in string exePath)
-    @trusted
+@trusted
 {
     import std.file : rename;
+
     try
         rename(tmpPath, exePath);
-    catch (Exception e)
+    catch(Exception e)
         throw new TachyError("cannot replace '" ~ exePath ~ "': " ~ e.msg
-            ~ (canFind(e.msg, "Permission denied")
-                ? " (re-run with sudo to upgrade a system-wide install)"
-                : ""));
+                ~ (canFind(e.msg, "Permission denied")
+                    ? " (re-run with sudo to upgrade a system-wide install)" : ""));
 }
 
 private string failText(in CommandResult r) @safe pure
@@ -243,21 +242,20 @@ private string defaultLatestRelease() @trusted
     rq.timeout = 30.seconds;
     string location;
     ushort code;
-    try
-    {
+    try {
         auto rs = rq.exec!"HEAD"("https://github.com/" ~ repoSlug
-            ~ "/releases/latest");
+                ~ "/releases/latest");
         code = rs.code;
-        if (auto loc = "location" in rs.responseHeaders)
+        if(auto loc = "location" in rs.responseHeaders)
             location = (*loc).strip;
-    }
-    catch (Exception e)
+    } catch(Exception e)
         throw new TachyError("upgrade: cannot reach the releases of " ~ repoSlug
-            ~ ": " ~ e.msg);
-    if (!location.length)
+                ~ ": " ~ e.msg);
+    if(!location.length)
         throw new TachyError("upgrade: cannot determine the latest release of "
-            ~ repoSlug ~ ": status " ~ intText(code)
-            ~ " without a Location header");
+                ~ repoSlug ~ ": status " ~ intText(
+                    code)
+                ~ " without a Location header");
     return latestFromEffectiveUrl(location);
 }
 
@@ -266,14 +264,15 @@ private string defaultLatestRelease() @trusted
 /// "26.09.20".
 package(tachy) string latestFromEffectiveUrl(string url) @safe pure
 {
-    if (!canFind(url, "/tag/"))
+    if(!canFind(url, "/tag/"))
         throw new TachyError("upgrade: cannot determine the latest release from '"
-            ~ url ~ "' (no /tag/ in the redirect)");
+                ~ url ~ "' (no /tag/ in the redirect)");
     import std.string : split;
+
     string v = split(url, "/tag/")[$ - 1].strip;
-    if (v.startsWith("v"))
+    if(v.startsWith("v"))
         v = v[1 .. $];
-    if (!v.length)
+    if(!v.length)
         throw new TachyError("upgrade: empty version in the redirect URL '" ~ url ~ "'");
     return v;
 }
@@ -284,11 +283,10 @@ package(tachy) int compareVersions(string a, string b) @safe pure
 {
     const long[] x = segments(a);
     const long[] y = segments(b);
-    foreach (i; 0 .. (x.length > y.length ? x.length : y.length))
-    {
+    foreach(i; 0 .. (x.length > y.length ? x.length : y.length)) {
         const long l = i < x.length ? x[i] : 0;
         const long r = i < y.length ? y[i] : 0;
-        if (l != r)
+        if(l != r)
             return l < r ? -1 : 1;
     }
     return 0;
@@ -298,18 +296,20 @@ private long[] segments(string s) @safe pure
 {
     import std.algorithm.iteration : splitter;
     import std.conv : ConvException, to;
+
     long[] r;
-    foreach (part; s.splitter("."))
+    foreach(part; s.splitter("."))
         try
             r ~= to!long(part);
-        catch (ConvException e)
+        catch(ConvException e)
             throw new TachyError("upgrade: cannot compare version '" ~ s
-                ~ "' (expected numbers separated by dots)");
+                    ~ "' (expected numbers separated by dots)");
     return r;
 }
 
 private string intText(int v) @safe pure
 {
     import std.conv : text;
+
     return text(v);
 }

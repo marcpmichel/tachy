@@ -45,13 +45,12 @@ import tachy.errors;
 import tachy.parser : loadPractic;
 import tachy.value;
 
-struct Config
-{
-    string identity;        // age identity file, absolute ("" when unset)
-    string[] importPaths;    // absolute directories searched for import sources
-    string[] webuiProjects;  // absolute project paths offered by `tachy webui`
+struct Config {
+    string identity; // age identity file, absolute ("" when unset)
+    string[] importPaths; // absolute directories searched for import sources
+    string[] webuiProjects; // absolute project paths offered by `tachy webui`
     string outputFormat = "flat"; // apply/check event output: "flat" or "tree"
-    string file;             // where these came from ("" when none found)
+    string file; // where these came from ("" when none found)
 }
 
 /// The run's age identity: the `--identity` flag supersedes the
@@ -68,133 +67,130 @@ Config loadConfig(string explicitPath) @trusted
 {
     Config s;
     const string path = discoverConfig(explicitPath);
-    if (!path.length)
-        return s;
+    if(!path.length) return s;
     s.file = path;
 
     auto doc = loadPractic(path);
-    foreach (const ref stmt; doc.stmts)
-    {
-        if (stmt.kind == "identity")
-        {
-            if (s.identity.length)
-                throw new TachyError(path ~ ": line " ~ importConv(stmt.line)
-                    ~ ": duplicate 'identity' entry");
-            if (stmt.key == "path" && stmt.value.kind == Val.Kind.string_)
-                s.identity = resolveSearchPath(stmt.value.str_, path);
-            else if (stmt.value.kind == Val.Kind.table_
-                && stmt.value.table_.length == 0)
-                s.identity = resolveSearchPath(stmt.key, path);
-            else
-                throw new TachyError(path ~ ": line " ~ importConv(stmt.line)
-                    ~ ": identity takes a path — 'identity \"key.txt\"' or"
-                    ~ " 'identity { path = \"key.txt\" }', not attributes");
-        }
-        else if (stmt.kind == "imports")
-        {
-            if (stmt.key != "paths")
-                throw new TachyError(path ~ ": imports holds only 'paths', not '"
-                    ~ stmt.key ~ "'");
-            if (stmt.value.kind != Val.Kind.array_)
-                throw new TachyError(path ~ ": imports.paths must be an"
-                    ~ " array of strings, not a " ~ stmt.value.typeName());
-            foreach (ref const e; stmt.value.array_)
-            {
-                if (e.kind != Val.Kind.string_)
-                    throw new TachyError(path ~ ": imports.paths must"
-                        ~ " contain strings, not a " ~ e.typeName());
-                s.importPaths ~= resolveSearchPath(e.str_, path);
-            }
-        }
-        else if (stmt.kind == "webui")
-        {
-            if (stmt.key != "projects")
-                throw new TachyError(path ~ ": webui holds only 'projects', not '"
-                    ~ stmt.key ~ "'");
-            if (stmt.value.kind != Val.Kind.array_)
-                throw new TachyError(path ~ ": webui.projects must be an"
-                    ~ " array of strings, not a " ~ stmt.value.typeName());
-            foreach (ref const e; stmt.value.array_)
-            {
-                if (e.kind != Val.Kind.string_)
-                    throw new TachyError(path ~ ": webui.projects must"
-                        ~ " contain strings, not a " ~ e.typeName());
-                // a project entry may be a directory (its main.pravic is
-                // the entry point) or a tasks file; existence is not a
-                // load-time concern — the webui reports it per project
-                s.webuiProjects ~= resolveSearchPath(e.str_, path);
-            }
-        }
-        else if (stmt.kind == "output")
-        {
-            if (stmt.key != "format")
-                throw new TachyError(path ~ ": output holds only 'format', not '"
-                    ~ stmt.key ~ "'");
-            if (stmt.value.kind != Val.Kind.string_)
-                throw new TachyError(path ~ ": output.format must be a string,"
-                    ~ " not a " ~ stmt.value.typeName());
-            if (stmt.value.str_ != "flat" && stmt.value.str_ != "tree")
-                throw new TachyError(path ~ ": output.format must be \"flat\""
-                    ~ " or \"tree\", not \"" ~ stmt.value.str_ ~ "\"");
-            s.outputFormat = stmt.value.str_;
-        }
-        else
+    foreach(const ref stmt; doc.stmts) {
+      switch(stmt.kind) {
+        case "identity": checkCmdIdentity(stmt, s, path); break;
+        case "imports": checkCmdImports(stmt, s, path); break;
+        case "webui": checkCmdWebui(stmt, s, path); break;
+        case "output": checkCmdOutput(stmt, s, path); break;
+        default:
             throw new TachyError(path ~ ": line "
-                ~ importConv(stmt.line) ~ ": '" ~ stmt.kind
-                ~ "' is not valid in a config file");
+                    ~ importConv(stmt.line) ~ ": '" ~ stmt.kind
+                    ~ "' is not valid in a config file");
+      }
     }
     return s;
 }
 
-private string importConv(T)(T v)
-{
+private void checkCmdIdentity(const PracticStmt stmt, ref Config c, const string path) {
+  if(c.identity.length)
+    throw new TachyError(path ~ ": line " ~ importConv(stmt.line) ~ ": duplicate 'identity' entry");
+
+  if(stmt.key == "path" && stmt.value.kind == Val.Kind.string_)
+    c.identity = resolveSearchPath(stmt.value.str_, path);
+  else if(stmt.value.kind == Val.Kind.table_
+      && stmt.value.table_.length == 0)
+    c.identity = resolveSearchPath(stmt.key, path);
+  else
+    throw new TachyError(path ~ ": line " ~ importConv(stmt.line)
+        ~ ": identity takes a path — 'identity \"key.txt\"' or"
+        ~ " 'identity { path = \"key.txt\" }', not attributes");
+}
+
+private void checkCmdWebui(const PracticStmt stmt, ref Config c, const string path) {
+  if(stmt.key != "projects")
+    throw new TachyError(path ~ ": webui holds only 'projects', not '"
+        ~ stmt.key ~ "'");
+  if(stmt.value.kind != Val.Kind.array_)
+    throw new TachyError(path ~ ": webui.projects must be an"
+        ~ " array of strings, not a " ~ stmt.value.typeName());
+  foreach(ref const e; stmt.value.array_) {
+    if(e.kind != Val.Kind.string_)
+      throw new TachyError(path ~ ": webui.projects must"
+          ~ " contain strings, not a " ~ e.typeName());
+    // a project entry may be a directory (its main.pravic is
+    // the entry point) or a tasks file; existence is not a
+    // load-time concern — the webui reports it per project
+    c.webuiProjects ~= resolveSearchPath(e.str_, path);
+  }
+}
+
+private void checkCmdOutput(const PracticStmt stmt, ref Config c, const string path) {
+  if(stmt.key != "format")
+    throw new TachyError(path ~ ": output holds only 'format', not '" ~ stmt.key ~ "'");
+  
+  if(stmt.value.kind != Val.Kind.string_)
+    throw new TachyError(path ~ ": output.format must be a string," ~ " not a " ~ stmt.value.typeName());
+
+  if(stmt.value.str_ != "flat" && stmt.value.str_ != "tree")
+    throw new TachyError(path ~ ": output.format must be \"flat\"" ~ " or \"tree\", not \"" ~ stmt.value.str_ ~ "\"");
+  
+  c.outputFormat = stmt.value.str_;
+}
+
+private void checkCmdImports(const PracticStmt stmt, ref Config c, const string path) {
+  if(stmt.key != "paths")
+    throw new TachyError(path ~ ": imports holds only 'paths', not '"
+        ~ stmt.key ~ "'");
+  if(stmt.value.kind != Val.Kind.array_)
+    throw new TachyError(path ~ ": imports.paths must be an"
+        ~ " array of strings, not a " ~ stmt.value.typeName());
+  foreach(ref const e; stmt.value.array_) {
+    if(e.kind != Val.Kind.string_)
+      throw new TachyError(path ~ ": imports.paths must"
+          ~ " contain strings, not a " ~ e.typeName());
+    c.importPaths ~= resolveSearchPath(e.str_, path);
+  }
+}
+
+
+private string importConv(T)(T v) {
     import std.conv : text;
+
     return text(v);
 }
 
 /// One search-path entry: ~-expanded, then relative to the config
 /// file's directory, always absolute.
-private string resolveSearchPath(string entry, string configPath) @trusted
-{
+private string resolveSearchPath(string entry, string configPath) @trusted {
     import std.file : exists;
 
     auto dir = expandTilde(entry);
-    if (isAbsolute(dir))
-        return buildNormalizedPath(dir);
+    if(isAbsolute(dir)) return buildNormalizedPath(dir);
     return buildNormalizedPath(
-        buildPath(dirName(absolutePath(configPath)), dir));
+            buildPath(dirName(absolutePath(configPath)), dir));
 }
 
-private string discoverConfig(string explicitPath) @trusted
-{
+private string discoverConfig(string explicitPath) @trusted {
     import std.file : exists;
     import std.process : environment;
 
-    if (explicitPath.length)
-    {
+    if(explicitPath.length) {
         auto p = expandTilde(explicitPath);
-        if (!exists(p))
+        if(!exists(p))
             throw new TachyError("config file '" ~ explicitPath
-                ~ "' does not exist");
+                    ~ "' does not exist");
         return p;
     }
     const string env = environment.get("TACHY_CONFIG");
-    if (env.length)
-    {
+    if(env.length) {
         auto p = expandTilde(env);
-        if (!exists(p))
+        if(!exists(p))
             throw new TachyError("TACHY_CONFIG '" ~ env ~ "' does not exist");
         return p;
     }
-    if (exists("config.pravic"))
-        return "config.pravic";
+
+    if(exists("config.pravic")) return "config.pravic";
+    
     const string xdg = environment.get("XDG_CONFIG_HOME");
-    const string xdgRoot = xdg.length ? xdg
-        : buildPath(environment.get("HOME"), ".config");
-    if (xdgRoot.length)
-    {
+    const string xdgRoot = xdg.length ? xdg : buildPath(environment.get("HOME"), ".config");
+    if(xdgRoot.length) {
         auto p = buildPath(xdgRoot, "tachy", "config.pravic");
-        if (exists(p))
+        if(exists(p))
             return p;
     }
     return null;

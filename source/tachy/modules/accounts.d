@@ -47,31 +47,26 @@ TaskResult runGroupModule(Val[string] params, TaskContext ctx)
     auto t = ctx.transport;
     const string name = requireStr(params, "name", "group");
     const string state = optStr(params, "state", "group", "present");
-    if (state != "present" && state != "absent")
+    if(state != "present" && state != "absent")
         throw new TachyError("group: 'state' must be \"present\" or \"absent\", not \"" ~ state ~ "\"");
 
     string[] actions;
     string[] details;
     const bool exists = groupExists(t, name);
 
-    if (state == "present")
-    {
-        if (!exists)
-        {
+    if(state == "present") {
+        if(!exists) {
             mustRun(t, ctx, details, "groupadd -- " ~ q(name), "create group '" ~ name ~ "'");
             actions ~= "created group";
         }
-    }
-    else if (exists)
-    {
+    } else if(exists) {
         try
             mustRun(t, ctx, details, "groupdel -- " ~ q(name), "delete group '" ~ name ~ "'");
-        catch (TachyError e)
-        {
-            if (indexOf(e.msg, "primary group") >= 0)
+        catch(TachyError e) {
+            if(indexOf(e.msg, "primary group") >= 0)
                 throw new TachyError(e.msg ~ " (a user still has '" ~ name
-                    ~ "' as primary group; remove the user first — e.g. a [users] "
-                    ~ "removal in an earlier tasks file)");
+                        ~ "' as primary group; remove the user first — e.g. a [users] "
+                        ~ "removal in an earlier tasks file)");
             throw e;
         }
         actions ~= "removed group";
@@ -79,8 +74,7 @@ TaskResult runGroupModule(Val[string] params, TaskContext ctx)
 
     TaskResult res;
     res.changed = actions.length != 0;
-    res.msg = actions.length ? actions.join("; ")
-        : state == "present" ? "group present" : "already absent";
+    res.msg = actions.length ? actions.join("; ") : state == "present" ? "group present" : "already absent";
     res.details = details;
     return res;
 }
@@ -94,7 +88,7 @@ TaskResult runUserModule(Val[string] params, TaskContext ctx)
     auto t = ctx.transport;
     const string name = requireStr(params, "name", "user");
     const string state = optStr(params, "state", "user", "present");
-    if (state != "present" && state != "absent")
+    if(state != "present" && state != "absent")
         throw new TachyError("user: 'state' must be \"present\" or \"absent\", not \"" ~ state ~ "\"");
 
     const string group = optStr(params, "group", "user");
@@ -104,7 +98,7 @@ TaskResult runUserModule(Val[string] params, TaskContext ctx)
     const string home = optStr(params, "home", "user");
     const bool createHome = optBool(params, "create_home", "user", true);
     const bool removeHome = optBool(params, "remove_home", "user", false);
-    if (removeHome && state == "present")
+    if(removeHome && state == "present")
         throw new TachyError("user: 'remove_home' is only used with state = \"absent\"");
 
     string[] actions;
@@ -112,108 +106,93 @@ TaskResult runUserModule(Val[string] params, TaskContext ctx)
     const string[] entry = passwdEntry(t, name); // null when the user is missing
     const bool exists = entry !is null;
 
-    if (state == "absent")
-    {
-        if (exists)
-        {
+    if(state == "absent") {
+        if(exists) {
             string del = "userdel";
-            if (removeHome)
+            if(removeHome)
                 del ~= " -r";
             mustRun(t, ctx, details, del ~ " -- " ~ q(name), "delete user '" ~ name ~ "'");
             actions ~= removeHome ? "removed user (and home)" : "removed user";
         }
-    }
-    else if (!exists)
-    {
+    } else if(!exists) {
         // Creation.  The primary group: an explicit `group` must already
         // exist ([groups] manages that); without one, reuse a group named
         // after the user when it exists, otherwise let useradd create it.
         string primary = group.length ? group : name;
-        if (!groupExists(t, primary))
-        {
-            if (group.length)
+        if(!groupExists(t, primary)) {
+            if(group.length)
                 throw new TachyError("user: primary group '" ~ group
-                    ~ "' does not exist; ensure it with [groups] first");
+                        ~ "' does not exist; ensure it with [groups] first");
             primary = null; // useradd creates the per-user group
         }
 
-        foreach (g; groups)
-            if (!groupExists(t, g))
+        foreach(g; groups)
+            if(!groupExists(t, g))
                 throw new TachyError("user: supplementary group '" ~ g
-                    ~ "' does not exist; ensure it with [groups] first");
+                        ~ "' does not exist; ensure it with [groups] first");
 
         string cmd = "useradd";
-        if (primary.length)
+        if(primary.length)
             cmd ~= " -g " ~ q(primary);
-        if (groups.length)
+        if(groups.length)
             cmd ~= " -G " ~ q(groups.join(","));
         cmd ~= " -s " ~ q(shell.length ? shell : "/bin/sh");
-        if (comment.length)
+        if(comment.length)
             cmd ~= " -c " ~ q(comment);
-        if (home.length)
+        if(home.length)
             cmd ~= " -d " ~ q(home);
         cmd ~= createHome ? " -m" : " -M";
         cmd ~= " -- " ~ q(name);
         mustRun(t, ctx, details, cmd, "create user '" ~ name ~ "'");
         actions ~= "created user";
-    }
-    else
-    {
+    } else {
         // Existing user: enforce the attributes that were set (unset
         // attributes only shape creation and are left alone).
         const string[] fields = entry; // name x uid gid gecos home shell
 
         string flags;
-        if (group.length)
-        {
+        if(group.length) {
             const string current = groupNameForGid(t, fields[3]);
-            if (current != group)
-            {
+            if(current != group) {
                 flags ~= " -g " ~ q(group);
                 actions ~= text("primary group ", current, " -> ", group);
             }
         }
-        if (shell.length && shell != fields[6])
-        {
+        if(shell.length && shell != fields[6]) {
             flags ~= " -s " ~ q(shell);
             actions ~= text("shell ", fields[6], " -> ", shell);
         }
-        if (comment.length && comment != fields[4])
-        {
+        if(comment.length && comment != fields[4]) {
             flags ~= " -c " ~ q(comment);
             actions ~= text("comment ", fields[4].length ? fields[4] : "(none)",
-                " -> ", comment);
+                    " -> ", comment);
         }
-        if (home.length && home != fields[5])
-        {
+        if(home.length && home != fields[5]) {
             flags ~= " -m -d " ~ q(home); // -m moves the existing home
             actions ~= text("home ", fields[5], " -> ", home);
         }
 
-        if (groups.length)
-        {
+        if(groups.length) {
             // Additive only: memberships outside the list are kept.
             auto r = t.run("id -nG -- " ~ q(name));
-            if (!r.ok)
+            if(!r.ok)
                 throw new TachyError("user: cannot list groups of '" ~ name ~ "': " ~ r.errText.strip);
             const string[] current = split(r.outText.strip);
             const string[] missing = groups.filter!(g => !canFindValue(current, g)).array;
-            if (missing.length)
-            {
+            if(missing.length) {
                 flags ~= " -aG " ~ q(missing.join(","));
                 actions ~= "added to " ~ missing.join(", ");
             }
         }
 
-        if (flags.length)
+        if(flags.length)
             mustRun(t, ctx, details, "usermod" ~ flags ~ " -- " ~ q(name),
-                "modify user '" ~ name ~ "'");
+                    "modify user '" ~ name ~ "'");
     }
 
     TaskResult res;
     res.changed = actions.length != 0;
-    res.msg = actions.length ? actions.join("; ")
-        : state == "present" ? "user present" : "already absent";
+    res.msg = actions.length ? actions.join("; ") : state == "present" ? "user present" : "already absent";
     res.details = details;
     return res;
 }
@@ -225,6 +204,7 @@ TaskResult runUserModule(Val[string] params, TaskContext ctx)
 private string q(string s) @safe pure
 {
     import tachy.transport : shQuote;
+
     return shQuote(s);
 }
 
@@ -238,10 +218,10 @@ private bool groupExists(Transport t, string name)
 private string[] passwdEntry(Transport t, string name)
 {
     auto r = t.run("getent passwd " ~ q(name));
-    if (!r.ok)
+    if(!r.ok)
         return null;
     string[] fields = split(r.outText.strip, ":");
-    if (fields.length != 7)
+    if(fields.length != 7)
         throw new TachyError("user: unexpected passwd entry for '" ~ name ~ "': " ~ r.outText.strip);
     return fields;
 }
@@ -250,18 +230,18 @@ private string[] passwdEntry(Transport t, string name)
 private string groupNameForGid(Transport t, string gid)
 {
     auto r = t.run("getent group " ~ q(gid));
-    if (!r.ok)
+    if(!r.ok)
         throw new TachyError("user: cannot resolve primary group id " ~ gid);
     const string[] fields = split(r.outText.strip, ":");
-    if (fields.length < 3 || fields[2] != gid)
+    if(fields.length < 3 || fields[2] != gid)
         throw new TachyError("user: unexpected group entry for id " ~ gid ~ ": " ~ r.outText.strip);
     return fields[0];
 }
 
 private bool canFindValue(in string[] haystack, string needle) @safe pure
 {
-    foreach (h; haystack)
-        if (h == needle)
+    foreach(h; haystack)
+        if(h == needle)
             return true;
     return false;
 }

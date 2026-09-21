@@ -44,9 +44,9 @@ TaskResult runRepoModule(Val[string] params, TaskContext ctx)
     const string type = optStr(params, "type", "repo", "git");
     const string branch = optStr(params, "branch", "repo");
     const string tag = optStr(params, "tag", "repo");
-    if (type != "git")
+    if(type != "git")
         throw new TachyError("repo '" ~ path ~ "': unsupported repository type '"
-            ~ type ~ "' (only \"git\" is implemented)");
+                ~ type ~ "' (only \"git\" is implemented)");
 
     const string q = shQuote(path);
     string[] actions;
@@ -56,10 +56,7 @@ TaskResult runRepoModule(Val[string] params, TaskContext ctx)
     {
         TaskResult res;
         res.changed = actions.length != 0;
-        res.msg = actions.length ? actions.join("; ")
-            : tag.length ? "at tag " ~ tag
-            : branch.length ? "up to date with origin/" ~ branch
-            : "up to date with origin";
+        res.msg = actions.length ? actions.join("; ") : tag.length ? "at tag " ~ tag : branch.length ? "up to date with origin/" ~ branch : "up to date with origin";
         res.details = details;
         return res;
     }
@@ -80,36 +77,31 @@ TaskResult runRepoModule(Val[string] params, TaskContext ctx)
     // Not a git repository yet: clone it (with the declared branch/tag).
     // A failing probe on an existing-but-broken path surfaces as a
     // clone failure naming git's own error.
-    if (!probe("git -C " ~ q ~ " rev-parse --git-dir"))
-    {
+    if(!probe("git -C " ~ q ~ " rev-parse --git-dir")) {
         string clone = "git clone";
-        if (branch.length)
+        if(branch.length)
             clone ~= " --branch " ~ shQuote(branch);
-        else if (tag.length)
+        else if(tag.length)
             clone ~= " --branch " ~ shQuote(tag);
         clone ~= " " ~ shQuote(url) ~ " " ~ q;
         act(clone, "clone");
         actions ~= (ctx.checkMode ? "would clone from " : "cloned repository from ")
-            ~ url ~ (branch.length ? " (branch " ~ branch ~ ")"
-                : tag.length ? " (tag " ~ tag ~ ")" : "");
+            ~ url ~ (branch.length ? " (branch " ~ branch ~ ")" : tag.length ? " (tag " ~ tag ~ ")" : "");
         return finish();
     }
 
     // Enforce `url` on the origin remote; a retarget invalidates the
     // fetch below, so check mode stops here.
     auto origin = t.run("git -C " ~ q ~ " remote get-url origin");
-    if (!origin.ok)
-    {
+    if(!origin.ok) {
         act("git -C " ~ q ~ " remote add origin " ~ shQuote(url), "add origin to");
         actions ~= "origin added (" ~ url ~ ")";
-        if (ctx.checkMode)
+        if(ctx.checkMode)
             return finish();
-    }
-    else if (origin.outText.strip != url)
-    {
+    } else if(origin.outText.strip != url) {
         act("git -C " ~ q ~ " remote set-url origin " ~ shQuote(url), "retarget origin");
         actions ~= "origin retargeted to " ~ url;
-        if (ctx.checkMode)
+        if(ctx.checkMode)
             return finish();
     }
 
@@ -117,21 +109,20 @@ TaskResult runRepoModule(Val[string] params, TaskContext ctx)
     // so check mode fetches too); a failure names the repository.
     details ~= "cmd: git -C " ~ q ~ " fetch --prune origin";
     auto fetch = t.run("git -C " ~ q ~ " fetch --prune origin");
-    if (!fetch.ok)
-        throw new TachyError("fetch of repository '" ~ path ~ "' failed on "
-            ~ ctx.hostName ~ ": `git -C " ~ q ~ " fetch --prune origin`: "
-            ~ errMsg(fetch));
+    if(!fetch.ok)
+        throw new TachyError(
+                "fetch of repository '" ~ path ~ "' failed on "
+                ~ ctx.hostName ~ ": `git -C " ~ q ~ " fetch --prune origin`: "
+                ~ errMsg(fetch));
 
-    if (tag.length)
-    {
+    if(tag.length) {
         const string head = probe("git -C " ~ q ~ " rev-parse HEAD");
         const string commit = probe("git -C " ~ q ~ " rev-parse "
-            ~ shQuote(tag ~ "^{commit}"));
-        if (!commit.length)
+                ~ shQuote(tag ~ "^{commit}"));
+        if(!commit.length)
             throw new TachyError("repo '" ~ path ~ "': tag '" ~ tag
-                ~ "' not found (fetched from origin '" ~ url ~ "')");
-        if (head != commit)
-        {
+                    ~ "' not found (fetched from origin '" ~ url ~ "')");
+        if(head != commit) {
             act("git -C " ~ q ~ " checkout --detach " ~ shQuote(tag), "checkout tag");
             actions ~= (ctx.checkMode ? "would checkout tag " : "checked out tag ")
                 ~ tag;
@@ -139,40 +130,37 @@ TaskResult runRepoModule(Val[string] params, TaskContext ctx)
         return finish();
     }
 
-    if (branch.length)
-    {
+    if(branch.length) {
         const string cur = probe("git -C " ~ q ~ " rev-parse --abbrev-ref HEAD");
         const string originRef = "origin/" ~ branch;
         const string originSha = probe("git -C " ~ q ~ " rev-parse --verify --quiet "
-            ~ shQuote("refs/remotes/" ~ originRef));
-        if (!originSha.length)
+                ~ shQuote("refs/remotes/" ~ originRef));
+        if(!originSha.length)
             throw new TachyError("repo '" ~ path ~ "': branch '" ~ branch
-                ~ "' not found on origin '" ~ url ~ "'");
-        if (cur != branch)
-        {
+                    ~ "' not found on origin '" ~ url ~ "'");
+        if(cur != branch) {
             const string local = probe("git -C " ~ q ~ " rev-parse --verify --quiet "
-                ~ shQuote("refs/heads/" ~ branch));
+                    ~ shQuote("refs/heads/" ~ branch));
             act(local.length
-                    ? "git -C " ~ q ~ " checkout " ~ shQuote(branch)
-                    : "git -C " ~ q ~ " checkout -b " ~ shQuote(branch) ~ " "
-                        ~ shQuote(originRef),
-                "checkout branch");
+                    ? "git -C " ~ q ~ " checkout " ~ shQuote(branch) : "git -C " ~ q ~ " checkout -b " ~ shQuote(
+                        branch) ~ " "
+                    ~ shQuote(originRef),
+                    "checkout branch");
             actions ~= (ctx.checkMode ? "would checkout branch " : "switched to branch ")
                 ~ branch;
-            if (ctx.checkMode)
+            if(ctx.checkMode)
                 return finish();
         }
         const string head = probe("git -C " ~ q ~ " rev-parse HEAD");
-        if (head != originSha)
-        {
+        if(head != originSha) {
             auto ancestor = t.run("git -C " ~ q ~ " merge-base --is-ancestor HEAD "
-                ~ shQuote(originRef));
-            if (!ancestor.ok)
+                    ~ shQuote(originRef));
+            if(!ancestor.ok)
                 throw new TachyError("repo '" ~ path ~ "': branch '" ~ branch
-                    ~ "' and '" ~ originRef ~ "' have diverged (local commits"
-                    ~ " or a history rewrite); reconcile manually");
+                        ~ "' and '" ~ originRef ~ "' have diverged (local commits"
+                        ~ " or a history rewrite); reconcile manually");
             act("git -C " ~ q ~ " merge --ff-only " ~ shQuote(originRef),
-                "fast-forward branch");
+                    "fast-forward branch");
             actions ~= (ctx.checkMode ? "would fast-forward " : "fast-forwarded ")
                 ~ branch ~ " to " ~ originRef;
         }
@@ -185,9 +173,9 @@ TaskResult runRepoModule(Val[string] params, TaskContext ctx)
 private string errMsg(in CommandResult r) @safe
 {
     auto m = r.errText.strip;
-    if (!m.length)
+    if(!m.length)
         m = r.outText.strip;
-    if (!m.length)
+    if(!m.length)
         m = "exit status " ~ text(r.status);
     return m;
 }

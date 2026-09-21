@@ -27,20 +27,18 @@ import tachy.parser : loadPractic;
 import tachy.value;
 import tachy.vars : AgeConfig, deepMerge, resolveEnvVars;
 
-struct HostConfig
-{
+struct HostConfig {
     string name;
     string connection = "ssh"; // "ssh" or "local"
-    string address;            // empty → use name
-    string user;               // empty → ssh default
+    string address; // empty → use name
+    string user; // empty → ssh default
     int port = 22;
-    string key;                // identity file, empty → ssh default
+    string key; // identity file, empty → ssh default
     string[] tags;
     Val[string] vars;
 }
 
-class Inventory
-{
+class Inventory {
     private HostConfig[string] hosts_;
     private Val[string] globalVars_;
 
@@ -49,12 +47,10 @@ class Inventory
         auto doc = loadPractic(path);
         auto inv = new Inventory;
         Val[string] globalVars;
-        foreach (const ref s; doc.stmts)
-        {
-            if (s.kind == "hosts")
-            {
+        foreach(const ref s; doc.stmts) {
+            if(s.kind == "hosts") {
                 const string ctx = path ~ ": hosts." ~ s.key;
-                if (s.value.kind != Val.Kind.table_)
+                if(s.value.kind != Val.Kind.table_)
                     throw new TachyError(ctx ~ " must be a block of parameters");
                 auto ht = s.value.table_;
                 checkKeys(ht, ["address", "user", "port", "key", "connection", "tags", "vars"], ctx);
@@ -64,27 +60,26 @@ class Inventory
                 h.address = optString(ht, "address", ctx);
                 h.user = optString(ht, "user", ctx);
                 h.port = cast(int) optInt(ht, "port", ctx, 22);
-                if (h.port < 1 || h.port > 65535)
+                if(h.port < 1 || h.port > 65535)
                     throw new TachyError(ctx ~ ": 'port' must be between 1 and 65535");
                 h.key = optString(ht, "key", ctx);
                 h.connection = optString(ht, "connection", ctx, "ssh");
-                if (h.connection != "ssh" && h.connection != "local")
+                if(h.connection != "ssh" && h.connection != "local")
                     throw new TachyError(ctx ~ ": 'connection' must be \"ssh\" or \"local\", not \"" ~ h.connection ~ "\"");
                 h.tags = optStringArray(ht, "tags", ctx);
                 h.vars = resolveEnvVars(optTable(ht, "vars", ctx), ctx,
-                    AgeConfig(true, ageIdentity));
+                        AgeConfig(true, ageIdentity));
                 inv.hosts_[s.key] = h;
-            }
-            else if (s.kind == "vars")
+            } else if(s.kind == "vars")
                 globalVars[s.key] = cast(Val) s.value;
             else
                 throw new TachyError(path ~ ": line " ~ text(s.line) ~ ": '"
-                    ~ s.kind ~ "' is not valid in an inventory file");
+                        ~ s.kind ~ "' is not valid in an inventory file");
         }
-        if (inv.hosts_.length == 0)
+        if(inv.hosts_.length == 0)
             throw new TachyError(path ~ ": no hosts — define at least one host");
         inv.globalVars_ = resolveEnvVars(globalVars, path,
-            AgeConfig(true, ageIdentity));
+                AgeConfig(true, ageIdentity));
         return inv;
     }
 
@@ -97,37 +92,32 @@ class Inventory
         import std.array : array;
 
         bool[string] picked;
-        foreach (rawItem; splitter(selection, ','))
-        {
+        foreach(rawItem; splitter(selection, ',')) {
             import std.string : strip;
+
             const string item = strip(rawItem);
-            if (!item.length)
+            if(!item.length)
                 continue;
-            if (item == "all")
-            {
-                foreach (n; hosts_.byKey)
+            if(item == "all") {
+                foreach(n; hosts_.byKey)
                     picked[n] = true;
-            }
-            else if (item[0] == '@')
-            {
+            } else if(item[0] == '@') {
                 const string tag = item[1 .. $];
                 size_t found = 0;
-                foreach (n, const ref h; hosts_)
-                    foreach (tg; h.tags)
-                        if (tg == tag)
-                        {
+                foreach(n, const ref h; hosts_)
+                    foreach(tg; h.tags)
+                        if(tg == tag) {
                             picked[n] = true;
                             found++;
                         }
-                if (found == 0)
+                if(found == 0)
                     throw new TachyError("no host has tag '" ~ tag ~ "' (known tags: "
-                        ~ knownTags().join(", ") ~ ")");
-            }
-            else if (auto _ = item in hosts_)
+                            ~ knownTags().join(", ") ~ ")");
+            } else if(auto _ = item in hosts_)
                 picked[item] = true;
             else
                 throw new TachyError("unknown host '" ~ item ~ "' (known: "
-                    ~ knownNames().join(", ") ~ ")");
+                        ~ knownNames().join(", ") ~ ")");
         }
 
         auto names = picked.byKey.array;
@@ -139,10 +129,10 @@ class Inventory
     /// known hosts (tags and `all` are selection syntax, not names).
     HostConfig host(string name)
     {
-        if (auto h = name in hosts_)
+        if(auto h = name in hosts_)
             return *h;
         throw new TachyError("unknown host '" ~ name ~ "' (known: "
-            ~ knownNames().join(", ") ~ ")");
+                ~ knownNames().join(", ") ~ ")");
     }
 
     /// Effective variables for a host: global < host.
@@ -150,7 +140,7 @@ class Inventory
     Val[string] varsFor(string hostName) const
     {
         Val[string] result = dupTable(globalVars_);
-        if (auto h = hostName in hosts_)
+        if(auto h = hostName in hosts_)
             result = deepMerge(result, (*h).vars);
         result["inventory_hostname"] = Val(hostName);
         return result;
@@ -166,8 +156,8 @@ class Inventory
     private string[] knownTags() const
     {
         bool[string] seen;
-        foreach (const ref h; cast() hosts_)
-            foreach (tg; h.tags)
+        foreach(const ref h; cast() hosts_)
+            foreach(tg; h.tags)
                 seen[tg] = true;
         auto tags = seen.byKey.array;
         tags.sort();

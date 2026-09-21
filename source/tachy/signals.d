@@ -69,17 +69,20 @@ int signalExitCode() @safe nothrow
 /// "SIGINT"/"SIGTERM" (or "SIG<n>" for anything else), for reports.
 string signalName(int sig) @safe pure nothrow
 {
-    switch (sig)
-    {
-        case SIGINT: return "SIGINT";
-        case SIGTERM: return "SIGTERM";
-        default: return "SIG" ~ (sig ? unsignedText(sig) : "0");
+    switch(sig) {
+        case SIGINT:
+            return "SIGINT";
+        case SIGTERM:
+            return "SIGTERM";
+        default:
+            return "SIG" ~ (sig ? unsignedText(sig) : "0");
     }
 }
 
 private string unsignedText(int v) @safe pure nothrow
 {
     import std.conv : text;
+
     return text(v);
 }
 
@@ -88,9 +91,8 @@ private string unsignedText(int v) @safe pure nothrow
 /// untracked (they still die with the process group on Ctrl-C).
 package(tachy) void trackChild(pid_t pid) @trusted
 {
-    synchronized (trackMutex)
-    {
-        if (trackedCount < maxTracked)
+    synchronized(trackMutex) {
+        if(trackedCount < maxTracked)
             trackedPids[trackedCount++] = pid;
     }
 }
@@ -98,30 +100,27 @@ package(tachy) void trackChild(pid_t pid) @trusted
 /// Forget a child (called when it has been reaped).
 package(tachy) void untrackChild(pid_t pid) @trusted
 {
-    synchronized (trackMutex)
-    {
-        foreach (i; 0 .. trackedCount)
-            if (trackedPids[i] == pid)
-            {
+    synchronized(trackMutex) {
+        foreach(i; 0 .. trackedCount)
+            if(trackedPids[i] == pid) {
                 trackedPids[i] = trackedPids[--trackedCount];
                 return;
             }
     }
 }
 
-private extern(C) void signalHandler(int sig) nothrow @nogc @system
+private extern (C) void signalHandler(int sig) nothrow @nogc @system
 {
-    if (gotsig != 0)
-    {
+    if(gotsig != 0) {
         // Second signal: the user insists.  Kill the children hard and
         // leave now — the old die-immediately behavior.
-        foreach (i; 0 .. trackedCount)
+        foreach(i; 0 .. trackedCount)
             kill(trackedPids[i], SIGKILL);
         _exit(128 + sig);
     }
     atomicStore(gotsig, sig);
     // Ask the in-flight commands to terminate so the run loop unblocks
     // and reaches its next interrupted check.
-    foreach (i; 0 .. trackedCount)
+    foreach(i; 0 .. trackedCount)
         kill(trackedPids[i], SIGTERM);
 }

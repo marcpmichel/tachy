@@ -57,3 +57,14 @@ done
 description = "update tachy on the local system"
 run = "sudo install tachy /usr/local/bin"
 
+[tasks.dfmt]
+run = """
+dub run dfmt -- --brace_style knr \
+                --keep_line_breaks true \
+                --space_after_keywords false \
+                --soft_max_line_length 120 \
+                --max_line_length 132 \
+                --align_switch_statements false \
+                -i $1
+"""
+

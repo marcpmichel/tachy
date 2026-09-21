@@ -34,9 +34,11 @@ import std.array : Appender;
 PracticDoc loadPractic(string path)
 {
     import std.file : readText;
+
     string src;
-    try src = readText(path);
-    catch (Exception e)
+    try
+        src = readText(path);
+    catch(Exception e)
         throw new TachyError("cannot read '" ~ path ~ "': " ~ e.msg);
     return parsePractic(src, path);
 }
@@ -48,8 +50,7 @@ PracticDoc loadPractic(string path)
 // and/or newlines; unquoted keys are opaque strings (no dotted paths).
 // ---------------------------------------------------------------------------
 
-private struct Parser
-{
+private struct Parser {
     string src;
     string path;
     size_t i;
@@ -58,10 +59,14 @@ private struct Parser
     private TachyError fail(string msg) @safe pure
     {
         import std.conv : text;
+
         return new TachyError(path ~ ": line " ~ text(line) ~ ": " ~ msg);
     }
 
-    private bool atEnd() @safe pure nothrow const { return i >= src.length; }
+    private bool atEnd() @safe pure nothrow const
+    {
+        return i >= src.length;
+    }
 
     private char cur() @safe pure const
     {
@@ -83,7 +88,7 @@ private struct Parser
     private bool groupFollows(size_t n) @safe pure const
     {
         size_t p = i + n;
-        while (p < src.length && (src[p] == ' ' || src[p] == '\t'))
+        while(p < src.length && (src[p] == ' ' || src[p] == '\t'))
             p++;
         return p < src.length && src[p] == '{';
     }
@@ -91,17 +96,16 @@ private struct Parser
     /// Whether the keyword also has a single form (dual-form keyword).
     private bool isSingleForm(string kw) @safe pure const
     {
-        foreach (immutable k; singleKeywords)
-            if (k == kw)
+        foreach(immutable k; singleKeywords)
+            if(k == kw)
                 return true;
         return false;
     }
 
     private void advance(size_t n = 1) @safe pure nothrow
     {
-        foreach (size_t k; 0 .. n)
-        {
-            if (i < src.length && src[i] == '\n')
+        foreach(size_t k; 0 .. n) {
+            if(i < src.length && src[i] == '\n')
                 line++;
             i++;
         }
@@ -110,16 +114,13 @@ private struct Parser
     /// Horizontal whitespace and comments; never crosses a newline.
     private void hs() @safe pure
     {
-        while (!atEnd())
-        {
-            if (src[i] == ' ' || src[i] == '\t' || src[i] == '\r')
+        while(!atEnd()) {
+            if(src[i] == ' ' || src[i] == '\t' || src[i] == '\r')
                 i++;
-            else if (src[i] == '#')
-            {
-                while (!atEnd() && src[i] != '\n')
+            else if(src[i] == '#') {
+                while(!atEnd() && src[i] != '\n')
                     i++;
-            }
-            else
+            } else
                 break;
         }
     }
@@ -127,10 +128,9 @@ private struct Parser
     /// Full skip: blank/comment lines and horizontal whitespace.
     private void ws() @safe pure
     {
-        while (!atEnd())
-        {
+        while(!atEnd()) {
             hs();
-            if (!atEnd() && src[i] == '\n')
+            if(!atEnd() && src[i] == '\n')
                 advance();
             else
                 break;
@@ -139,7 +139,7 @@ private struct Parser
 
     private void expect(char c, string what) @safe pure
     {
-        if (cur() != c)
+        if(cur() != c)
             throw fail("expected '" ~ c ~ "' " ~ what);
         advance();
     }
@@ -151,40 +151,54 @@ private struct Parser
     /// unknown directive, not `var site`, and long/short spellings never
     /// collide.  Order within a set does not matter (the guard decides).
     private static immutable string[] groupKeywords =
-        ["vars", "files", "directories", "packages", "groups",
-         "users", "services", "repos", "asserts", "hosts", "imports",
-         "webui", "identity", "output"];
+        [
+            "vars", "files", "directories", "packages", "groups",
+            "users", "services", "repos", "asserts", "hosts", "imports",
+            "webui", "identity", "output"
+    ];
     private static immutable string[] singleKeywords =
-        ["var", "file", "directory", "package", "group", "user",
-         "service", "host", "apply", "assert", "ensure", "compose",
-         "import", "identity", "probe", "repo", "debug"];
+        [
+            "var", "file", "directory", "package", "group", "user",
+            "service", "host", "apply", "assert", "ensure", "compose",
+            "import", "identity", "probe", "repo", "debug"
+    ];
 
     /// Canonical directive names for the single-form keywords (group-form
     /// keywords are their own canonical name).
     private static string canonical(string kw) @safe pure nothrow
     {
-        switch (kw)
-        {
-            case "var": return "vars";
-            case "file": return "files";
-            case "directory": return "directories";
-            case "package": return "packages";
-            case "group": return "groups";
-            case "user": return "users";
-            case "service": return "services";
-            case "repo": return "repos";
-            case "assert": return "asserts";
-            case "host": return "hosts";
-            default: return kw; // apply, ensure, compose, import
+        switch(kw) {
+            case "var":
+                return "vars";
+            case "file":
+                return "files";
+            case "directory":
+                return "directories";
+            case "package":
+                return "packages";
+            case "group":
+                return "groups";
+            case "user":
+                return "users";
+            case "service":
+                return "services";
+            case "repo":
+                return "repos";
+            case "assert":
+                return "asserts";
+            case "host":
+                return "hosts";
+            default:
+                return kw; // apply, ensure, compose, import
         }
     }
 
     private bool isKeyChar(char c) @safe pure nothrow const
     {
-        if (c <= ' ' || c == 0x7F)
+        if(c <= ' ' || c == 0x7F)
             return false; // whitespace and control characters
-        foreach (bad; "\"'{}[]=,#\\")
-            if (c == bad)
+        foreach(bad; "\"'{}[]=,#\\")
+            if(c == bad)
                 return false;
         return true;
     }
@@ -194,19 +208,18 @@ private struct Parser
         PracticStmt[] stmts;
         size_t[string] firstSeen;
         ws();
-        while (!atEnd())
-        {
+        while(!atEnd()) {
             hs();
-            if (atEnd())
+            if(atEnd())
                 break;
             auto fresh = parseStatement();
-            foreach (ref s; fresh)
-            {
+            foreach(ref s; fresh) {
                 const string dedup = s.kind ~ '\0' ~ s.key;
-                if (auto first = dedup in firstSeen)
-                    throw new TachyError(path ~ ": line " ~ toText(s.line)
-                        ~ ": duplicate " ~ s.kind ~ " \"" ~ s.key
-                        ~ "\" (first stated at line " ~ toText(*first) ~ ")");
+                if(auto first = dedup in firstSeen)
+                    throw new TachyError(path ~ ": line " ~ toText(
+                            s.line)
+                            ~ ": duplicate " ~ s.kind ~ " \"" ~ s.key
+                            ~ "\" (first stated at line " ~ toText(*first) ~ ")");
                 firstSeen[dedup] = s.line;
                 stmts ~= s;
             }
@@ -214,15 +227,14 @@ private struct Parser
             // lines may follow before the next one.
             size_t newlines;
             hs();
-            while (!atEnd() && src[i] == '\n')
-            {
+            while(!atEnd() && src[i] == '\n') {
                 advance();
                 newlines++;
                 hs();
             }
-            if (atEnd())
+            if(atEnd())
                 break;
-            if (newlines == 0)
+            if(newlines == 0)
                 throw fail("expected end of line after statement");
         }
         return stmts;
@@ -231,25 +243,25 @@ private struct Parser
     private PracticStmt[] parseStatement() @safe pure
     {
         const size_t stmtLine = line;
-        foreach (immutable kw; groupKeywords)
-            if (lookingAt(kw) && !isKeyChar(charAfter(kw.length)))
-            {
+        foreach(immutable kw; groupKeywords)
+            if(lookingAt(kw) && !isKeyChar(charAfter(kw.length))) {
                 // A keyword with both forms (`identity`) takes its
                 // group form when a block follows, and falls through
                 // to the single form below otherwise; group-only
                 // keywords must still open their block.
-                if (groupFollows(kw.length) || !isSingleForm(kw))
+                if(groupFollows(kw.length) || !isSingleForm(kw))
                     return expandGroup(kw);
             }
-        foreach (immutable kw; singleKeywords)
-            if (lookingAt(kw) && !isKeyChar(charAfter(kw.length)))
+        foreach(immutable kw; singleKeywords)
+            if(lookingAt(kw) && !isKeyChar(charAfter(kw.length)))
                 return [parseSingle(kw, stmtLine)];
 
         // Not a known directive: name the word for a useful error.
         size_t e = i;
-        while (e < src.length && src[e] != '\n' && src[e] != '{' && src[e] != '=')
+        while(e < src.length && src[e] != '\n' && src[e] != '{' && src[e] != '=')
             e++;
         import std.string : strip;
+
         const string word = src[i .. e].strip();
         throw fail("unknown directive '" ~ word ~ "'");
     }
@@ -258,11 +270,10 @@ private struct Parser
     {
         advance(kw.length);
         hs();
-        if (cur() != '{')
+        if(cur() != '{')
             throw fail("directive '" ~ kw ~ "' opens a block: expected '{'");
         PracticStmt[] out_;
-        foreach (ref entry; parseBlockEntries())
-        {
+        foreach(ref entry; parseBlockEntries()) {
             PracticStmt s;
             s.kind = kw;
             s.key = entry.key;
@@ -282,21 +293,18 @@ private struct Parser
         const string key = parseKey("a key after '" ~ kw ~ "'");
         hs();
         Val value;
-        if (cur() == '{')
+        if(cur() == '{')
             value = tableOf(parseBlockEntries());
-        else if (cur() == '=')
-        {
+        else if(cur() == '=') {
             advance();
             ws();
             value = parseAssignedValue();
-        }
-        else if (cur() == '\n' || atEnd())
-            // No attributes: an instruction whose block would be empty
+        } else if(cur() == '\n' || atEnd()) // No attributes: an instruction whose block would be empty
             // may omit the braces (`directory /tmp/two`).
             value = emptyTable();
         else
             throw fail("expected '{', '=' or end of line after '"
-                ~ kw ~ " " ~ key ~ "'");
+                    ~ kw ~ " " ~ key ~ "'");
 
         PracticStmt s;
         s.kind = canonical(kw);
@@ -313,41 +321,38 @@ private struct Parser
     /// choose — job parameters, apply bindings, host attributes, config
     /// entries — is a load-time error.
     private void checkChoosePlacement(string kind, in Val v, size_t line)
-        @safe pure
+    @safe pure
     {
-        if (kind == "vars")
+        if(kind == "vars")
             return; // a var assignation: choose allowed anywhere in the value
-        if (kind == "hosts")
-        {
+        if(kind == "hosts") {
             // A host entry may hold choose values inside its `vars`
             // block only (inventory var assignations); its other
             // attributes are plain values.
-            if (v.kind == Val.Kind.table_)
-            {
-                foreach (string k, const Val e; v.table_)
-                    if (k != "vars")
+            if(v.kind == Val.Kind.table_) {
+                foreach(string k, const Val e; v.table_)
+                    if(k != "vars")
                         checkChoosePlacement("hosts", e, line);
                 return;
             }
         }
-        if (hasChoose(v))
+        if(hasChoose(v))
             throw fail("'choose' is only available inside a var assignation");
     }
 
     private static bool hasChoose(in Val v) @safe pure
     {
-        final switch (v.kind)
-        {
+        final switch(v.kind) {
             case Val.Kind.choose_:
                 return true;
             case Val.Kind.array_:
-                foreach (const ref e; v.array_)
-                    if (hasChoose(e))
+                foreach(const ref e; v.array_)
+                    if(hasChoose(e))
                         return true;
                 return false;
             case Val.Kind.table_:
-                foreach (string k, const Val e; v.table_)
-                    if (hasChoose(e))
+                foreach(string k, const Val e; v.table_)
+                    if(hasChoose(e))
                         return true;
                 return false;
             case Val.Kind.string_:
@@ -360,8 +365,7 @@ private struct Parser
 
     // -- blocks and entries ----------------------------------------------------
 
-    private struct Entry
-    {
+    private struct Entry {
         string key;
         Val value;
         size_t line;
@@ -374,12 +378,10 @@ private struct Parser
         expect('{', "to open a block");
         Entry[] entries;
         ws();
-        while (true)
-        {
-            if (atEnd())
+        while(true) {
+            if(atEnd())
                 throw fail("unterminated block (missing '}')");
-            if (cur() == '}')
-            {
+            if(cur() == '}') {
                 advance();
                 return entries;
             }
@@ -387,58 +389,53 @@ private struct Parser
             e.line = line;
             e.key = parseKey("a key");
             hs();
-            if (cur() == '{')
+            if(cur() == '{')
                 e.value = tableOf(parseBlockEntries());
-            else if (cur() == '=')
-            {
+            else if(cur() == '=') {
                 advance();
                 ws();
                 e.value = parseAssignedValue();
-            }
-            else if (cur() == '}' || cur() == ',' || cur() == '\n' || atEnd())
-                // Same rule as statements: an entry with no attributes
+            } else if(cur() == '}' || cur() == ',' || cur() == '\n' || atEnd()) // Same rule as statements: an entry with no attributes
                 // may omit the braces (`hosts { web1 }`).
                 e.value = emptyTable();
             else
                 throw fail("expected '{', '=' or a separator after key '"
-                    ~ e.key ~ "'");
-            foreach (const ref prev; entries)
-                if (prev.key == e.key)
-                    throw new TachyError(path ~ ": line " ~ toText(e.line)
-                        ~ ": duplicate key '" ~ e.key ~ "' in this block"
-                        ~ " (first set at line " ~ toText(prev.line) ~ ")");
+                        ~ e.key ~ "'");
+            foreach(const ref prev; entries)
+                if(prev.key == e.key)
+                    throw new TachyError(path ~ ": line " ~ toText(
+                            e.line)
+                            ~ ": duplicate key '" ~ e.key ~ "' in this block"
+                            ~ " (first set at line " ~ toText(prev.line) ~ ")");
             entries ~= e;
 
             // Separator: a comma and/or at least one newline; a trailing
             // separator before '}' is fine.
             size_t newlines;
             hs();
-            while (!atEnd() && src[i] == '\n')
-            {
+            while(!atEnd() && src[i] == '\n') {
                 advance();
                 newlines++;
                 hs();
             }
             bool comma = false;
-            if (cur() == ',')
-            {
+            if(cur() == ',') {
                 advance();
                 comma = true;
                 hs();
-                while (!atEnd() && src[i] == '\n')
-                {
+                while(!atEnd() && src[i] == '\n') {
                     advance();
                     newlines++;
                     hs();
                 }
             }
-            if (cur() == '}')
+            if(cur() == '}')
                 continue; // closing handled at the loop top
-            if (atEnd())
+            if(atEnd())
                 throw fail("unterminated block (missing '}')");
-            if (!comma && newlines == 0)
+            if(!comma && newlines == 0)
                 throw fail("expected ',' or a newline between entries after '"
-                    ~ e.key ~ "'");
+                        ~ e.key ~ "'");
         }
     }
 
@@ -446,7 +443,7 @@ private struct Parser
     {
         Val r;
         r.kind = Val.Kind.table_;
-        foreach (const ref e; entries)
+        foreach(const ref e; entries)
             r.table_[e.key] = cast(Val) e.value;
         return r;
     }
@@ -466,14 +463,14 @@ private struct Parser
     /// need no quotes.
     private string parseKey(string what) @safe pure
     {
-        if (cur() == '"')
+        if(cur() == '"')
             return parseBasicString();
-        if (cur() == '\'')
+        if(cur() == '\'')
             return parseLiteralString();
         size_t e = i;
-        while (e < src.length && isKeyChar(src[e]))
+        while(e < src.length && isKeyChar(src[e]))
             e++;
-        if (e == i)
+        if(e == i)
             throw fail("expected " ~ what);
         const string key = src[i .. e];
         i = e;
@@ -488,7 +485,7 @@ private struct Parser
     /// anonymous `choose` production.
     private Val parseAssignedValue() @safe pure
     {
-        if (cur() == '{' && lookingAtWrappedChoose())
+        if(cur() == '{' && lookingAtWrappedChoose())
             return parseWrappedChoose();
         return parseValue();
     }
@@ -513,7 +510,7 @@ private struct Parser
     private bool nextNonHsIsQuote(size_t n) @safe pure
     {
         size_t p = i + n;
-        while (p < src.length && (src[p] == ' ' || src[p] == '\t' || src[p] == '\r'))
+        while(p < src.length && (src[p] == ' ' || src[p] == '\t' || src[p] == '\r'))
             p++;
         return p < src.length && (src[p] == '"' || src[p] == '\'');
     }
@@ -533,19 +530,17 @@ private struct Parser
 
     private Val parseValue() @safe pure
     {
-        if (cur() == 'c' && lookingAt("choose") && !isKeyChar(charAfter(6)))
-        {
+        if(cur() == 'c' && lookingAt("choose") && !isKeyChar(charAfter(6))) {
             advance(6);
             return parseChooseBody();
         }
-        switch (cur())
-        {
+        switch(cur()) {
             case '"':
-                if (lookingAt(`"""`))
+                if(lookingAt(`"""`))
                     return Val(parseMultilineBasic());
                 return Val(parseBasicString());
             case '\'':
-                if (lookingAt("'''"))
+                if(lookingAt("'''"))
                     return Val(parseMultilineLiteral());
                 return Val(parseLiteralString());
             case '[':
@@ -573,7 +568,7 @@ private struct Parser
     private Val parseChooseBody() @trusted pure
     {
         hs();
-        if (cur() != '"' && cur() != '\'')
+        if(cur() != '"' && cur() != '\'')
             throw fail("the choose selector must be a quoted string");
         Val r;
         r.kind = Val.Kind.choose_;
@@ -581,27 +576,24 @@ private struct Parser
         hs();
         auto entries = parseBlockEntries();
         bool haveDefault;
-        foreach (const ref e; entries)
-        {
-            if (e.key == "_")
+        foreach(const ref e; entries) {
+            if(e.key == "_")
                 haveDefault = true;
             r.choosePatterns_ ~= e.key;
             r.chooseValues_ ~= cast(Val) e.value;
         }
-        if (!haveDefault)
+        if(!haveDefault)
             throw fail("a choose block needs a default '_' case");
         return r;
     }
 
     private Val parseBoolean() @safe pure
     {
-        if (lookingAt("true"))
-        {
+        if(lookingAt("true")) {
             advance(4);
             return Val(true);
         }
-        if (lookingAt("false"))
-        {
+        if(lookingAt("false")) {
             advance(5);
             return Val(false);
         }
@@ -612,127 +604,116 @@ private struct Parser
     {
         const size_t start = i;
         bool neg;
-        if (cur() == '+' || cur() == '-')
-        {
+        if(cur() == '+' || cur() == '-') {
             neg = cur() == '-';
             advance();
         }
         // Special floats.
-        if ((lookingAt("inf") || lookingAt("nan")) && !isKeyChar(charAfter(3)))
-        {
+        if((lookingAt("inf") || lookingAt("nan")) && !isKeyChar(charAfter(3))) {
             const bool isInf = src[i] == 'i';
             advance(3);
-            if (isInf)
+            if(isInf)
                 return Val(neg ? -double.infinity : double.infinity);
             return Val(neg ? -double.nan : double.nan);
         }
         // Radix prefixes are integers.
-        if (src.length - i >= 2 && cur() == '0'
-                && (src[i + 1] == 'x' || src[i + 1] == 'o' || src[i + 1] == 'b'))
-        {
+        if(src.length - i >= 2 && cur() == '0'
+                && (src[i + 1] == 'x' || src[i + 1] == 'o' || src[i + 1] == 'b')) {
             const char radix = src[i + 1];
             advance(2);
             long v;
             size_t digits;
-            while (!atEnd() && (isRadixDigit(src[i], radix) || src[i] == '_'))
-            {
-                if (src[i] != '_')
-                {
+            while(!atEnd() && (isRadixDigit(src[i], radix) || src[i] == '_')) {
+                if(src[i] != '_') {
                     v = v * radixValue(radix) + digitValue(src[i]);
                     digits++;
                 }
                 advance();
             }
-            if (digits == 0)
+            if(digits == 0)
                 throw fail("expected digits after the number prefix");
-            if (!atEnd() && isKeyChar(src[i]))
+            if(!atEnd() && isKeyChar(src[i]))
                 throw fail("invalid characters in number '" ~ src[start .. i] ~ "'");
             return Val(neg ? -v : v);
         }
         // Decimal digits (with underscores) — integer or float.
         long mant;
         size_t digits;
-        while (!atEnd() && (src[i] >= '0' && src[i] <= '9' || src[i] == '_'))
-        {
-            if (src[i] != '_')
-            {
+        while(!atEnd() && (src[i] >= '0' && src[i] <= '9' || src[i] == '_')) {
+            if(src[i] != '_') {
                 mant = mant * 10 + (src[i] - '0');
                 digits++;
             }
             advance();
         }
-        if (digits == 0)
+        if(digits == 0)
             throw fail("expected a value");
         const bool frac = cur() == '.';
         const bool exp = cur() == 'e' || cur() == 'E';
-        if (!frac && !exp)
-        {
+        if(!frac && !exp) {
             const size_t firstDigit = start + ((src[start] == '+' || src[start] == '-') ? 1 : 0);
-            if (digits > 1 && src[firstDigit] == '0')
+            if(digits > 1 && src[firstDigit] == '0')
                 throw fail("integers may not have leading zeros");
-            if (!atEnd() && isKeyChar(src[i]))
+            if(!atEnd() && isKeyChar(src[i]))
                 throw fail("invalid characters in number '" ~ src[start .. i] ~ "'");
             return Val(neg ? -mant : mant);
         }
         // Float: rescan from the start so the value builds exactly.
         double v = 0;
         size_t j = start;
-        if (src[j] == '+' || src[j] == '-')
+        if(src[j] == '+' || src[j] == '-')
             j++;
-        for (; j < src.length && (src[j] >= '0' && src[j] <= '9' || src[j] == '_'); j++)
-            if (src[j] != '_')
+        for(; j < src.length && (src[j] >= '0' && src[j] <= '9' || src[j] == '_'); j++)
+            if(src[j] != '_')
                 v = v * 10 + (src[j] - '0');
-        if (j < src.length && src[j] == '.')
-        {
+        if(j < src.length && src[j] == '.') {
             j++;
             double scale = 0.1;
-            for (; j < src.length && (src[j] >= '0' && src[j] <= '9' || src[j] == '_'); j++)
-            {
-                if (src[j] != '_')
-                {
+            for(; j < src.length && (src[j] >= '0' && src[j] <= '9' || src[j] == '_'); j++) {
+                if(src[j] != '_') {
                     v += (src[j] - '0') * scale;
                     scale /= 10;
                 }
             }
-            if (scale == 0.1)
+            if(scale == 0.1)
                 throw fail("a fractional part needs digits after '.'");
         }
-        if (j < src.length && (src[j] == 'e' || src[j] == 'E'))
-        {
+        if(j < src.length && (src[j] == 'e' || src[j] == 'E')) {
             j++;
             bool eneg;
-            if (j < src.length && (src[j] == '+' || src[j] == '-'))
-            {
+            if(j < src.length && (src[j] == '+' || src[j] == '-')) {
                 eneg = src[j] == '-';
                 j++;
             }
             long ep;
             size_t ed;
-            for (; j < src.length && src[j] >= '0' && src[j] <= '9'; j++)
-            {
+            for(; j < src.length && src[j] >= '0' && src[j] <= '9'; j++) {
                 ep = ep * 10 + (src[j] - '0');
                 ed++;
             }
-            if (ed == 0)
+            if(ed == 0)
                 throw fail("an exponent needs digits");
             import std.math : pow;
-            v *= pow(10.0, cast(double) (eneg ? -ep : ep));
+
+            v *= pow(10.0, cast(double)(eneg ? -ep : ep));
         }
-        if (j < src.length && isKeyChar(src[j]))
+        if(j < src.length && isKeyChar(src[j]))
             throw fail("invalid characters in number '" ~ src[start .. j] ~ "'");
         i = j;
         return Val(neg ? -v : v);
     }
 
-
     private static bool isRadixDigit(char c, char radix) @safe pure nothrow
     {
-        switch (radix)
-        {
-            case 'x': return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F';
-            case 'o': return c >= '0' && c <= '7';
-            case 'b': return c == '0' || c == '1';
-            default: assert(0);
+        switch(radix) {
+            case 'x':
+                return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F';
+            case 'o':
+                return c >= '0' && c <= '7';
+            case 'b':
+                return c == '0' || c == '1';
+            default:
+                assert(0);
         }
     }
 
@@ -743,9 +724,9 @@ private struct Parser
 
     private static long digitValue(char c) @safe pure nothrow
     {
-        if (c <= '9')
+        if(c <= '9')
             return c - '0';
-        if (c <= 'F')
+        if(c <= 'F')
             return c - 'A' + 10;
         return c - 'a' + 10;
     }
@@ -756,29 +737,26 @@ private struct Parser
         Val r;
         r.kind = Val.Kind.array_;
         ws();
-        if (cur() == ']')
-        {
+        if(cur() == ']') {
             advance();
             return r;
         }
-        while (true)
-        {
+        while(true) {
             ws();
             r.array_ ~= parseValue();
             ws();
-            if (cur() == ',')
-            {
+            if(cur() == ',') {
                 advance();
                 ws();
-                if (cur() == ']') // trailing comma
+                if(cur() == ']') // trailing comma
                     break;
                 continue;
             }
-            if (cur() == ']')
+            if(cur() == ']')
                 break;
             throw fail("expected ',' or ']' between array elements");
         }
-        if (atEnd() || cur() != ']')
+        if(atEnd() || cur() != ']')
             throw fail("unterminated array (missing ']')");
         advance();
         return r;
@@ -790,18 +768,16 @@ private struct Parser
     {
         expect('"', "to open a string");
         import std.array : appender;
+
         auto app = appender!string;
-        while (true)
-        {
-            if (atEnd() || src[i] == '\n')
+        while(true) {
+            if(atEnd() || src[i] == '\n')
                 throw fail("unterminated string");
-            if (src[i] == '"')
-            {
+            if(src[i] == '"') {
                 advance();
                 return app.data;
             }
-            if (src[i] == '\\')
-            {
+            if(src[i] == '\\') {
                 advance();
                 parseEscape(app);
                 continue;
@@ -815,9 +791,9 @@ private struct Parser
     {
         expect('\'', "to open a string");
         size_t e = i;
-        while (e < src.length && src[e] != '\'' && src[e] != '\n')
+        while(e < src.length && src[e] != '\'' && src[e] != '\n')
             e++;
-        if (e == src.length || src[e] != '\'')
+        if(e == src.length || src[e] != '\'')
             throw fail("unterminated string");
         const string s = src[i .. e];
         advance(e - i + 1);
@@ -828,48 +804,44 @@ private struct Parser
     {
         advance(3);
         // A newline immediately after the opening quotes is trimmed.
-        if (cur() == '\r')
+        if(cur() == '\r')
             advance();
-        if (cur() == '\n')
+        if(cur() == '\n')
             advance();
         import std.array : appender;
+
         auto app = appender!string;
-        while (true)
-        {
-            if (atEnd())
+        while(true) {
+            if(atEnd())
                 throw fail("unterminated multi-line string");
-            if (src[i] == '"')
-            {
+            if(src[i] == '"') {
                 // TOML rule: a run of quotes closes at its last trio; one
                 // or two extra quotes before it belong to the content.
                 size_t run = 0;
-                while (i + run < src.length && src[i + run] == '"')
+                while(i + run < src.length && src[i + run] == '"')
                     run++;
-                if (run < 3)
-                {
-                    foreach (size_t k; 0 .. run)
+                if(run < 3) {
+                    foreach(size_t k; 0 .. run)
                         app.put('"');
                     advance(run);
                     continue;
                 }
-                if (run > 5)
+                if(run > 5)
                     throw fail("too many consecutive '\"' — escape them");
-                foreach (size_t k; 0 .. run - 3)
+                foreach(size_t k; 0 .. run - 3)
                     app.put('"');
                 advance(run);
                 return app.data;
             }
-            if (src[i] == '\\')
-            {
+            if(src[i] == '\\') {
                 // A backslash at end of line trims all whitespace up to
                 // the next non-whitespace character.
                 size_t j = i + 1;
-                while (j < src.length && (src[j] == ' ' || src[j] == '\t' || src[j] == '\r'))
+                while(j < src.length && (src[j] == ' ' || src[j] == '\t' || src[j] == '\r'))
                     j++;
-                if (j < src.length && src[j] == '\n')
-                {
+                if(j < src.length && src[j] == '\n') {
                     j++;
-                    while (j < src.length && (src[j] == ' ' || src[j] == '\t'
+                    while(j < src.length && (src[j] == ' ' || src[j] == '\t'
                             || src[j] == '\r' || src[j] == '\n'))
                         j++;
                     line += countNewlines(src[i .. j]);
@@ -888,36 +860,34 @@ private struct Parser
     private string parseMultilineLiteral() @safe pure
     {
         advance(3);
-        if (cur() == '\r')
+        if(cur() == '\r')
             advance();
-        if (cur() == '\n')
+        if(cur() == '\n')
             advance();
         size_t e = i;
-        while (e < src.length)
-        {
-            if (src[e] == '\'')
-            {
+        while(e < src.length) {
+            if(src[e] == '\'') {
                 size_t run = 0;
-                while (e + run < src.length && src[e + run] == '\'')
+                while(e + run < src.length && src[e + run] == '\'')
                     run++;
-                if (run >= 3)
+                if(run >= 3)
                     break;
                 e += run;
-            }
-            else
+            } else
                 e++;
         }
-        if (e >= src.length)
+        if(e >= src.length)
             throw fail("unterminated multi-line string");
         // The closer is the last trio of the run: content keeps run - 3.
         size_t run = 0;
-        while (e + run < src.length && src[e + run] == '\'')
+        while(e + run < src.length && src[e + run] == '\'')
             run++;
-        if (run > 5)
+        if(run > 5)
             throw fail("too many consecutive \"'\" — use a basic string");
         import std.array : appender;
+
         auto app = appender!string;
-        foreach (size_t k; 0 .. run - 3)
+        foreach(size_t k; 0 .. run - 3)
             app.put('\'');
         const size_t end = e + run;
         const string body = src[i .. e];
@@ -929,24 +899,41 @@ private struct Parser
 
     private void parseEscape(ref Appender!string app) @safe pure
     {
-        if (atEnd())
+        if(atEnd())
             throw fail("unterminated escape sequence");
         const char c = src[i];
         advance();
-        switch (c)
-        {
-            case 'b': app.put('\b'); break;
-            case 't': app.put('\t'); break;
-            case 'n': app.put('\n'); break;
-            case 'f': app.put('\f'); break;
-            case 'r': app.put('\r'); break;
-            case '"': app.put('"'); break;
-            case '\\': app.put('\\'); break;
-            case 'u': app.put(hexChar(4)); break;
-            case 'U': app.put(hexChar(8)); break;
+        switch(c) {
+            case 'b':
+                app.put('\b');
+                break;
+            case 't':
+                app.put('\t');
+                break;
+            case 'n':
+                app.put('\n');
+                break;
+            case 'f':
+                app.put('\f');
+                break;
+            case 'r':
+                app.put('\r');
+                break;
+            case '"':
+                app.put('"');
+                break;
+            case '\\':
+                app.put('\\');
+                break;
+            case 'u':
+                app.put(hexChar(4));
+                break;
+            case 'U':
+                app.put(hexChar(8));
+                break;
             case '\n':
                 throw fail("a backslash at the end of the line is only"
-                    ~ " valid in a multi-line string");
+                        ~ " valid in a multi-line string");
             default:
                 throw fail("unknown escape '\\" ~ c ~ "'");
         }
@@ -954,26 +941,26 @@ private struct Parser
 
     private string hexChar(size_t n) @safe pure
     {
-        if (src.length - i < n)
+        if(src.length - i < n)
             throw fail("expected " ~ toText(n) ~ " hexadecimal digits");
         dchar cp;
-        foreach (size_t k; 0 .. n)
-        {
+        foreach(size_t k; 0 .. n) {
             const char c = src[i + k];
             long v;
-            if (c >= '0' && c <= '9')
+            if(c >= '0' && c <= '9')
                 v = c - '0';
-            else if (c >= 'a' && c <= 'f')
+            else if(c >= 'a' && c <= 'f')
                 v = c - 'a' + 10;
-            else if (c >= 'A' && c <= 'F')
+            else if(c >= 'A' && c <= 'F')
                 v = c - 'A' + 10;
             else
                 throw fail("expected hexadecimal digits after '\\"
-                    ~ (n == 4 ? 'u' : 'U'));
-            cp = cast(dchar) (cp * 16 + v);
+                        ~ (n == 4 ? 'u' : 'U'));
+            cp = cast(dchar)(cp * 16 + v);
         }
         advance(n);
         import std.utf : encode;
+
         char[4] buf;
         const size_t len = encode(buf, cp);
         return buf[0 .. len].idup;
@@ -982,8 +969,8 @@ private struct Parser
     private static size_t countNewlines(in char[] s) @safe pure nothrow
     {
         size_t n;
-        foreach (char c; s)
-            if (c == '\n')
+        foreach(char c; s)
+            if(c == '\n')
                 n++;
         return n;
     }
@@ -992,6 +979,7 @@ private struct Parser
 private string toText(T)(T v) @safe pure
 {
     import std.conv : text;
+
     return text(v);
 }
 

@@ -50,52 +50,50 @@ import tachy.value : Val;
 /// `"<file>: compose \"<dir>\" (compose)"`.
 void validateComposeParams(in Val[string] params, string context)
 {
-    if ("file" !in params)
+    if("file" !in params)
         throw new TachyError(context ~ ": 'file' is required");
-    foreach (k; ["file", "project"])
-        if (auto p = k in params)
-            if ((*p).kind != Val.Kind.string_)
+    foreach(k; ["file", "project"])
+        if(auto p = k in params)
+            if((*p).kind != Val.Kind.string_)
                 throw new TachyError(context ~ ": '" ~ k ~ "' must be a string, not a "
-                    ~ (*p).typeName());
-    if (auto p = "dir" in params)
-        if ((*p).kind == Val.Kind.string_ && !canFind((*p).str_, "{{")
+                        ~ (*p).typeName());
+    if(auto p = "dir" in params)
+        if((*p).kind == Val.Kind.string_ && !canFind((*p).str_, "{{")
                 && !isAbsolute((*p).str_))
             throw new TachyError(context ~ ": 'dir' must be an absolute path, not \""
-                ~ (*p).str_ ~ "\"");
-    if (auto p = "project" in params)
-        if ((*p).kind == Val.Kind.string_ && !canFind((*p).str_, "{{"))
+                    ~ (*p).str_ ~ "\"");
+    if(auto p = "project" in params)
+        if((*p).kind == Val.Kind.string_ && !canFind((*p).str_, "{{"))
             checkProjectName((*p).str_, context);
-    if (auto p = "services" in params)
-    {
-        if ((*p).kind != Val.Kind.array_)
+    if(auto p = "services" in params) {
+        if((*p).kind != Val.Kind.array_)
             throw new TachyError(context ~ ": 'services' must be an array of strings, not a "
-                ~ (*p).typeName());
-        foreach (const e; (*p).array_)
-            if (e.kind != Val.Kind.string_)
+                    ~ (*p).typeName());
+        foreach(const e; (*p).array_)
+            if(e.kind != Val.Kind.string_)
                 throw new TachyError(context ~ ": 'services' must contain only strings (got "
-                    ~ e.display() ~ ")");
-            else if (!e.str_.length)
+                        ~ e.display() ~ ")");
+            else if(!e.str_.length)
                 throw new TachyError(context ~ ": 'services' must not contain an empty service name");
     }
-    if (auto p = "state" in params)
+    if(auto p = "state" in params)
         checkLiteralChoice("state", *p, ["running", "stopped", "absent"], context);
-    if (auto p = "pull" in params)
+    if(auto p = "pull" in params)
         checkLiteralChoice("pull", *p, ["missing", "always", "never"], context);
-    foreach (k; ["build", "recreate"])
-        if (auto p = k in params)
+    foreach(k; ["build", "recreate"])
+        if(auto p = k in params)
             checkLiteralChoice(k, *p, ["auto", "always", "never"], context);
-    foreach (k; ["wait", "remove_orphans", "remove_volumes", "remove_images"])
-        if (auto p = k in params)
-            if ((*p).kind != Val.Kind.boolean_)
+    foreach(k; ["wait", "remove_orphans", "remove_volumes", "remove_images"])
+        if(auto p = k in params)
+            if((*p).kind != Val.Kind.boolean_)
                 throw new TachyError(context ~ ": '" ~ k ~ "' must be a boolean, not a "
-                    ~ (*p).typeName());
-    foreach (k; ["wait_timeout", "timeout"])
-        if (auto p = k in params)
-        {
-            if ((*p).kind != Val.Kind.integer_)
+                        ~ (*p).typeName());
+    foreach(k; ["wait_timeout", "timeout"])
+        if(auto p = k in params) {
+            if((*p).kind != Val.Kind.integer_)
                 throw new TachyError(context ~ ": '" ~ k ~ "' must be an integer, not a "
-                    ~ (*p).typeName());
-            if ((*p).integer_ <= 0)
+                        ~ (*p).typeName());
+            if((*p).integer_ <= 0)
                 throw new TachyError(context ~ ": '" ~ k ~ "' must be a positive number of seconds");
         }
 
@@ -103,27 +101,26 @@ void validateComposeParams(in Val[string] params, string context)
     // the combinations early; a templated state is re-checked against the
     // rendered value at run time.
     bool templatedState;
-    if (auto p = "state" in params)
+    if(auto p = "state" in params)
         templatedState = canFind((*p).str_, "{{");
-    if (!templatedState)
-    {
+    if(!templatedState) {
         string state = "running";
-        if (auto p = "state" in params)
+        if(auto p = "state" in params)
             state = (*p).str_;
-        if (state != "running")
-            foreach (k; ["wait", "wait_timeout"])
-                if (k in params)
+        if(state != "running")
+            foreach(k; ["wait", "wait_timeout"])
+                if(k in params)
                     throw new TachyError(context ~ ": '" ~ k
-                        ~ "' is only meaningful with state = \"running\"");
-        if (state != "stopped" && "remove_orphans" in params)
+                            ~ "' is only meaningful with state = \"running\"");
+        if(state != "stopped" && "remove_orphans" in params)
             throw new TachyError(context ~ ": 'remove_orphans' is only meaningful with state = \"stopped\"");
-        if (state != "absent")
-            foreach (k; ["remove_volumes", "remove_images"])
-                if (k in params)
+        if(state != "absent")
+            foreach(k; ["remove_volumes", "remove_images"])
+                if(k in params)
                     throw new TachyError(context ~ ": '" ~ k
-                        ~ "' is only meaningful with state = \"absent\"");
+                            ~ "' is only meaningful with state = \"absent\"");
     }
-    if ("wait_timeout" in params && "wait" in params
+    if("wait_timeout" in params && "wait" in params
             && params["wait"].kind == Val.Kind.boolean_ && !params["wait"].boolean_)
         throw new TachyError(context ~ ": 'wait_timeout' is only meaningful with 'wait = true'");
 }
@@ -133,7 +130,7 @@ TaskResult runComposeModule(Val[string] params, TaskContext ctx)
     auto t = ctx.transport;
 
     const string dir = requireStr(params, "dir", "compose");
-    if (!isAbsolute(dir))
+    if(!isAbsolute(dir))
         throw new TachyError("compose: 'dir' must be an absolute path, not \"" ~ dir ~ "\"");
     const string fileAttr = requireStr(params, "file", "compose");
     const string file = isAbsolute(fileAttr) ? fileAttr : buildPath(dir, fileAttr);
@@ -149,23 +146,23 @@ TaskResult runComposeModule(Val[string] params, TaskContext ctx)
 
     // Run-time re-checks of the combinations a templated state can produce
     // (literal contradictions were rejected at load time).
-    if (state != "running")
-        foreach (k; ["wait", "wait_timeout"])
-            if (k in params)
+    if(state != "running")
+        foreach(k; ["wait", "wait_timeout"])
+            if(k in params)
                 throw new TachyError("compose: '" ~ k
-                    ~ "' is only meaningful with state = \"running\"");
-    if (state != "stopped" && "remove_orphans" in params)
+                        ~ "' is only meaningful with state = \"running\"");
+    if(state != "stopped" && "remove_orphans" in params)
         throw new TachyError("compose: 'remove_orphans' is only meaningful with state = \"stopped\"");
-    if (state != "absent")
-        foreach (k; ["remove_volumes", "remove_images"])
-            if (k in params)
+    if(state != "absent")
+        foreach(k; ["remove_volumes", "remove_images"])
+            if(k in params)
                 throw new TachyError("compose: '" ~ k
-                    ~ "' is only meaningful with state = \"absent\"");
+                        ~ "' is only meaningful with state = \"absent\"");
 
     const bool wait = optBool(params, "wait", "compose", true);
     const long waitTimeout = optIntParam(params, "wait_timeout", "compose");
     const long timeout = optIntParam(params, "timeout", "compose");
-    if ("wait_timeout" in params && !wait)
+    if("wait_timeout" in params && !wait)
         throw new TachyError("compose: 'wait_timeout' is only meaningful with 'wait = true'");
 
     const string projectAttr = optStr(params, "project", "compose");
@@ -175,9 +172,10 @@ TaskResult runComposeModule(Val[string] params, TaskContext ctx)
 
     {
         auto r = t.run("docker compose version");
-        if (!r.ok)
-            throw new TachyError("compose: docker compose is not available on " ~ ctx.hostName
-                ~ "; the docker CLI with the compose plugin is required");
+        if(!r.ok)
+            throw new TachyError(
+                    "compose: docker compose is not available on " ~ ctx.hostName
+                    ~ "; the docker CLI with the compose plugin is required");
     }
 
     // One stable invocation prefix: the file, the project name and the
@@ -190,122 +188,111 @@ TaskResult runComposeModule(Val[string] params, TaskContext ctx)
     string[] details;
     string okMsg = "up to date";
 
-    switch (state)
-    {
-        case "running":
-        {
+    switch(state) {
+        case "running": {
             auto model = modelServices(t, base, file);
             const string[] selected = resolveSelected(services, model, file);
             string[string] want;
-            foreach (s; selected)
+            foreach(s; selected)
                 want[s] = configHash(t, base, s, file);
 
             auto drift = runningDrift(t, project, selected, want);
             details ~= drift.reasons;
             okMsg = text(selected.length) ~ " service(s) up to date";
-            if (drift.reasons.length)
-            {
+            if(drift.reasons.length) {
                 string cmd = base ~ " up --detach";
-                if (pull != "missing")
+                if(pull != "missing")
                     cmd ~= " --pull " ~ pull;
-                if (build == "always")
+                if(build == "always")
                     cmd ~= " --build";
-                else if (build == "never")
+                else if(build == "never")
                     cmd ~= " --no-build";
-                if (recreate == "always")
+                if(recreate == "always")
                     cmd ~= " --force-recreate";
-                else if (recreate == "never")
+                else if(recreate == "never")
                     cmd ~= " --no-recreate";
-                if (wait)
-                {
+                if(wait) {
                     cmd ~= " --wait";
-                    if (waitTimeout > 0)
+                    if(waitTimeout > 0)
                         cmd ~= " --wait-timeout " ~ text(waitTimeout);
                 }
-                if (timeout > 0)
+                if(timeout > 0)
                     cmd ~= " -t " ~ text(timeout);
-                if (services.length)
+                if(services.length)
                     cmd ~= " " ~ selected.map!shQuote.join(" ");
                 mustRun(t, ctx, details, cmd, "compose up '" ~ project ~ "'");
                 actions = drift.actions;
                 // up --wait only returns once every selected service runs
                 // (and passes its healthcheck); confirm the probe agrees.
-                if (!ctx.checkMode && wait)
-                {
+                if(!ctx.checkMode && wait) {
                     auto still = runningDrift(t, project, selected, want);
-                    if (still.reasons.length)
+                    if(still.reasons.length)
                         throw new TachyError("compose '" ~ dir ~ "': still not conformant after up: "
-                            ~ still.reasons.join("; "));
+                                ~ still.reasons.join("; "));
                 }
             }
             break;
         }
-        case "stopped":
-        {
+        case "stopped": {
             auto model = modelServices(t, base, file);
             const string[] selected = resolveSelected(services, model, file);
             auto containers = projectContainers(t, project);
             okMsg = "already stopped";
 
             string[] toStop;
-            foreach (s; selected)
-                foreach (c; containers)
-                    if (c.service == s && c.state == "running")
-                    {
-                        if (!canFind(toStop, s))
+            foreach(s; selected)
+                foreach(c; containers)
+                    if(c.service == s && c.state == "running") {
+                        if(!canFind(toStop, s))
                             toStop ~= s;
                         break;
                     }
-            if (toStop.length)
-            {
+            if(toStop.length) {
                 string cmd = base ~ " stop";
-                if (timeout > 0)
+                if(timeout > 0)
                     cmd ~= " -t " ~ text(timeout);
-                if (services.length)
+                if(services.length)
                     cmd ~= " " ~ selected.map!shQuote.join(" ");
                 mustRun(t, ctx, details, cmd, "compose stop '" ~ project ~ "'");
                 actions ~= "stopped " ~ toStop.map!(s => "'" ~ s ~ "'").join(", ");
             }
-            if (optBool(params, "remove_orphans", "compose"))
-            {
+            if(optBool(params, "remove_orphans", "compose")) {
                 string[] orphans;
-                foreach (c; containers)
-                    if (!canFind(model, c.service))
+                foreach(c; containers)
+                    if(!canFind(model, c.service))
                         orphans ~= c.name;
-                if (orphans.length)
-                {
+                if(orphans.length) {
                     mustRun(t, ctx, details,
-                        "docker rm -f " ~ orphans.map!shQuote.join(" "),
-                        "remove orphan containers of '" ~ project ~ "'");
+                            "docker rm -f " ~ orphans.map!shQuote.join(" "),
+                            "remove orphan containers of '" ~ project ~ "'");
                     actions ~= "removed " ~ text(orphans.length) ~ " orphan container(s)";
                 }
             }
             break;
         }
-        case "absent":
-        {
+        case "absent": {
             const bool removeVolumes = optBool(params, "remove_volumes", "compose");
             const bool removeImages = optBool(params, "remove_images", "compose");
             okMsg = "already absent";
-            if (projectExists(t, project, removeVolumes))
-            {
+            if(projectExists(t, project, removeVolumes)) {
                 string cmd = base ~ " down --remove-orphans";
-                if (timeout > 0)
+                if(timeout > 0)
                     cmd ~= " -t " ~ text(timeout);
-                if (removeVolumes)
+                if(removeVolumes)
                     cmd ~= " --volumes";
-                if (removeImages)
+                if(removeImages)
                     cmd ~= " --rmi all";
                 mustRun(t, ctx, details, cmd, "compose down '" ~ project ~ "'");
                 actions ~= "brought down";
-                if (removeVolumes)
+                if(removeVolumes)
                     actions ~= "volumes removed";
-                if (removeImages)
+                if(removeImages)
                     actions ~= "images removed";
-                if (!ctx.checkMode && projectExists(t, project, removeVolumes))
-                    throw new TachyError("compose '" ~ dir
-                        ~ "': compose down left containers, networks or volumes of project '"
-                        ~ project ~ "' behind");
+                if(!ctx.checkMode && projectExists(t, project, removeVolumes))
+                    throw new TachyError(
+                            "compose '" ~ dir
+                            ~ "': compose down left containers, networks or volumes of project '"
+                            ~ project ~ "' behind");
             }
             break;
         }
@@ -329,13 +316,14 @@ TaskResult runComposeModule(Val[string] params, TaskContext ctx)
 private string defaultProjectName(string dir)
 {
     import std.string : toLower;
+
     string r;
-    foreach (char c; baseName(dir).toLower)
-        if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-')
+    foreach(char c; baseName(dir).toLower)
+        if((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-')
             r ~= c;
-    if (!r.length)
+    if(!r.length)
         throw new TachyError("compose: cannot derive a project name from '" ~ dir
-            ~ "'; set 'project' explicitly");
+                ~ "'; set 'project' explicitly");
     return r;
 }
 
@@ -343,37 +331,37 @@ private string defaultProjectName(string dir)
 private void checkProjectName(string p, string context)
 {
     bool ok = p.length && p[0] != '-' && p[0] != '_';
-    foreach (char c; p)
-        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-'))
+    foreach(char c; p)
+        if(!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-'))
             ok = false;
-    if (!ok)
+    if(!ok)
         throw new TachyError(context ~ ": project name \"" ~ p
-            ~ "\" is invalid (docker wants [a-z0-9][a-z0-9_-]*)");
+                ~ "\" is invalid (docker wants [a-z0-9][a-z0-9_-]*)");
 }
 
 private void checkChoice(string key, string v, string[] allowed)
 {
-    if (!canFind(allowed, v))
+    if(!canFind(allowed, v))
         throw new TachyError("compose: '" ~ key ~ "' must be one of " ~ allowed.join(", ")
-            ~ ", not \"" ~ v ~ "\"");
+                ~ ", not \"" ~ v ~ "\"");
 }
 
 /// Like checkChoice, but tolerant of templates (checked again at run time).
 private void checkLiteralChoice(string key, in Val v, string[] allowed, string context)
 {
-    if (v.kind != Val.Kind.string_)
+    if(v.kind != Val.Kind.string_)
         throw new TachyError(context ~ ": '" ~ key ~ "' must be a string, not a " ~ v.typeName());
-    if (canFind(v.str_, "{{") || canFind(allowed, v.str_))
+    if(canFind(v.str_, "{{") || canFind(allowed, v.str_))
         return;
     throw new TachyError(context ~ ": '" ~ key ~ "' must be one of " ~ allowed.join(", ")
-        ~ ", not \"" ~ v.str_ ~ "\"");
+            ~ ", not \"" ~ v.str_ ~ "\"");
 }
 
 /// The literal value of `key`, or null when absent, non-string or templated.
 private string literalStr(in Val[string] params, string key)
 {
     auto p = key in params;
-    if (p is null || (*p).kind != Val.Kind.string_ || canFind((*p).str_, "{{"))
+    if(p is null || (*p).kind != Val.Kind.string_ || canFind((*p).str_, "{{"))
         return null;
     return (*p).str_;
 }
@@ -381,18 +369,17 @@ private string literalStr(in Val[string] params, string key)
 private string[] servicesParam(in Val[string] params)
 {
     auto pv = "services" in params;
-    if (pv is null)
+    if(pv is null)
         return null;
-    if ((*pv).kind != Val.Kind.array_)
+    if((*pv).kind != Val.Kind.array_)
         throw new TachyError("compose: 'services' must be an array of strings, not a "
-            ~ (*pv).typeName());
+                ~ (*pv).typeName());
     string[] r;
-    foreach (const e; (*pv).array_)
-    {
-        if (e.kind != Val.Kind.string_)
+    foreach(const e; (*pv).array_) {
+        if(e.kind != Val.Kind.string_)
             throw new TachyError("compose: 'services' must contain only strings (got "
-                ~ e.display() ~ ")");
-        if (!e.str_.length)
+                    ~ e.display() ~ ")");
+        if(!e.str_.length)
             throw new TachyError("compose: 'services' must not contain an empty service name");
         r ~= e.str_;
     }
@@ -402,12 +389,12 @@ private string[] servicesParam(in Val[string] params)
 private long optIntParam(in Val[string] p, string key, string mod)
 {
     auto pv = key in p;
-    if (pv is null)
+    if(pv is null)
         return 0;
-    if ((*pv).kind != Val.Kind.integer_)
+    if((*pv).kind != Val.Kind.integer_)
         throw new TachyError(mod ~ ": '" ~ key ~ "' must be an integer, not a "
-            ~ (*pv).typeName());
-    if ((*pv).integer_ <= 0)
+                ~ (*pv).typeName());
+    if((*pv).integer_ <= 0)
         throw new TachyError(mod ~ ": '" ~ key ~ "' must be a positive number of seconds");
     return (*pv).integer_;
 }
@@ -416,10 +403,10 @@ private long optIntParam(in Val[string] p, string key, string mod)
 /// selected file enables (profile-gated services are excluded by compose).
 private string[] resolveSelected(in string[] services, in string[] model, string file)
 {
-    if (!services.length)
+    if(!services.length)
         return model.dup;
-    foreach (s; services)
-        if (!canFind(model, s))
+    foreach(s; services)
+        if(!canFind(model, s))
             throw new TachyError("compose: service '" ~ s ~ "' is not defined in " ~ file);
     return services.dup;
 }
@@ -429,13 +416,12 @@ private string[] resolveSelected(in string[] services, in string[] model, string
 private string[] modelServices(Transport t, string base, string file)
 {
     auto r = t.run(base ~ " config --services");
-    if (!r.ok)
+    if(!r.ok)
         throw new TachyError("compose: cannot load " ~ file ~ ": " ~ firstMeaningful(r));
     string[] list;
-    foreach (line; lineSplitter(r.outText))
-    {
+    foreach(line; lineSplitter(r.outText)) {
         auto l = line.strip;
-        if (l.length)
+        if(l.length)
             list ~= l;
     }
     return list;
@@ -447,45 +433,43 @@ private string[] modelServices(Transport t, string base, string file)
 private string configHash(Transport t, string base, string service, string file)
 {
     auto r = t.run(base ~ " config --hash " ~ shQuote(service));
-    if (!r.ok)
+    if(!r.ok)
         throw new TachyError("compose: cannot hash service '" ~ service ~ "' in " ~ file
-            ~ ": " ~ firstMeaningful(r));
+                ~ ": " ~ firstMeaningful(r));
     auto parts = split(r.outText.strip);
-    if (parts.length != 2 || parts[0] != service)
+    if(parts.length != 2 || parts[0] != service)
         throw new TachyError("compose: unexpected `config --hash` output for '" ~ service
-            ~ "': \"" ~ r.outText.strip ~ "\"");
+                ~ "': \"" ~ r.outText.strip ~ "\"");
     return parts[1];
 }
 
-private struct ContainerInfo
-{
+private struct ContainerInfo {
     string service;
     string name;
-    string state;   // as `docker ps` reports: running, exited, ...
-    string hash;    // com.docker.compose.config-hash label
+    string state; // as `docker ps` reports: running, exited, ...
+    string hash; // com.docker.compose.config-hash label
 }
 
 /// Every container carrying the project's label (running or not).
 private ContainerInfo[] projectContainers(Transport t, string project)
 {
     auto r = t.run("docker ps -a --filter label=com.docker.compose.project="
-        ~ shQuote(project) ~ " --format " ~ shQuote(psFormat));
-    if (!r.ok)
+            ~ shQuote(project) ~ " --format " ~ shQuote(psFormat));
+    if(!r.ok)
         throw new TachyError("compose: cannot list containers of project '" ~ project
-            ~ "': " ~ firstMeaningful(r));
+                ~ "': " ~ firstMeaningful(r));
     ContainerInfo[] list;
-    foreach (line; lineSplitter(r.outText))
-    {
+    foreach(line; lineSplitter(r.outText)) {
         auto l = line.strip;
-        if (!l.length)
+        if(!l.length)
             continue;
         auto f = split(l, "\t");
         // A container without the config-hash label (removed from the
         // compose model, or created outside compose) prints no trailing
         // field: docker drops the separator for an empty last value.
-        if (f.length != 4 && f.length != 3)
+        if(f.length != 4 && f.length != 3)
             throw new TachyError("compose: unexpected `docker ps` output for project '"
-                ~ project ~ "': \"" ~ l ~ "\"");
+                    ~ project ~ "': \"" ~ l ~ "\"");
         list ~= ContainerInfo(f[0], f[1], f[2], f.length == 4 ? f[3] : "");
     }
     return list;
@@ -493,11 +477,10 @@ private ContainerInfo[] projectContainers(Transport t, string project)
 
 private immutable string psFormat = "{{.Label \"com.docker.compose.service\"}}\\t{{.Names}}\\t{{.State}}\\t{{.Label \"com.docker.compose.config-hash\"}}";
 
-private struct HealthInfo
-{
+private struct HealthInfo {
     string name;
     string status;
-    string health;   // healthy | unhealthy | starting | none
+    string health; // healthy | unhealthy | starting | none
 }
 
 /// Runtime state and health of given containers; "none" when the container
@@ -505,20 +488,19 @@ private struct HealthInfo
 private HealthInfo[] containerHealth(Transport t, string[] names, string project)
 {
     auto r = t.run("docker inspect --format " ~ shQuote(inspectFormat) ~ " "
-        ~ names.map!shQuote.join(" "));
-    if (!r.ok)
+            ~ names.map!shQuote.join(" "));
+    if(!r.ok)
         throw new TachyError("compose: cannot inspect containers of project '" ~ project
-            ~ "': " ~ firstMeaningful(r));
+                ~ "': " ~ firstMeaningful(r));
     HealthInfo[] list;
-    foreach (line; lineSplitter(r.outText))
-    {
+    foreach(line; lineSplitter(r.outText)) {
         auto l = line.strip;
-        if (!l.length)
+        if(!l.length)
             continue;
         auto f = split(l);
-        if (f.length != 3)
+        if(f.length != 3)
             throw new TachyError("compose: unexpected `docker inspect` output for project '"
-                ~ project ~ "': \"" ~ l ~ "\"");
+                    ~ project ~ "': \"" ~ l ~ "\"");
         auto name = f[0].length && f[0][0] == '/' ? f[0][1 .. $] : f[0];
         list ~= HealthInfo(name, f[1], f[2]);
     }
@@ -528,54 +510,45 @@ private HealthInfo[] containerHealth(Transport t, string[] names, string project
 private immutable string inspectFormat =
     "{{.Name}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}";
 
-private struct Drift
-{
-    string[] reasons;   // what differs (details, shown with -v)
-    string[] actions;   // what up will do (the changed message)
+private struct Drift {
+    string[] reasons; // what differs (details, shown with -v)
+    string[] actions; // what up will do (the changed message)
 }
 
 /// Compare every selected service's containers against the canonical
 /// hashes; when those hold, check runtime state and health.
 private Drift runningDrift(Transport t, string project, in string[] selected,
-    in string[string] want)
+        in string[string] want)
 {
     Drift d;
     auto containers = projectContainers(t, project);
-    foreach (s; selected)
-    {
+    foreach(s; selected) {
         size_t count;
-        foreach (c; containers)
-            if (c.service == s)
-            {
+        foreach(c; containers)
+            if(c.service == s) {
                 count++;
-                if (c.state != "running")
-                {
+                if(c.state != "running") {
                     d.reasons ~= "container '" ~ c.name ~ "' is " ~ c.state;
                     put(d.actions, "started '" ~ c.name ~ "'");
-                }
-                else if (c.hash != want[s])
-                {
+                } else if(c.hash != want[s]) {
                     d.reasons ~= "container '" ~ c.name
                         ~ "' predates the current compose file (config hash differs)";
                     put(d.actions, "recreated '" ~ c.name ~ "'");
                 }
             }
-        if (!count)
-        {
+        if(!count) {
             d.reasons ~= "service '" ~ s ~ "' has no container";
             put(d.actions, "started '" ~ s ~ "'");
         }
     }
-    if (!d.reasons.length)
-    {
+    if(!d.reasons.length) {
         string[] names;
-        foreach (c; containers)
-            if (canFind(selected, c.service))
+        foreach(c; containers)
+            if(canFind(selected, c.service))
                 names ~= c.name;
-        if (names.length)
-            foreach (h; containerHealth(t, names, project))
-                if (h.status != "running" || (h.health != "none" && h.health != "healthy"))
-                {
+        if(names.length)
+            foreach(h; containerHealth(t, names, project))
+                if(h.status != "running" || (h.health != "none" && h.health != "healthy")) {
                     d.reasons ~= "container '" ~ h.name ~ "' is " ~ h.status
                         ~ (h.health != "none" ? " (health " ~ h.health ~ ")" : "");
                     put(d.actions, "awaited '" ~ h.name ~ "'");
@@ -586,7 +559,7 @@ private Drift runningDrift(Transport t, string project, in string[] selected,
 
 private void put(ref string[] a, string v)
 {
-    if (!canFind(a, v))
+    if(!canFind(a, v))
         a ~= v;
 }
 
@@ -596,27 +569,26 @@ private void put(ref string[] a, string v)
 private bool projectExists(Transport t, string project, bool volumesToo)
 {
     auto r = t.run("docker ps -a --filter label=com.docker.compose.project="
-        ~ shQuote(project) ~ " -q");
-    if (!r.ok)
+            ~ shQuote(project) ~ " -q");
+    if(!r.ok)
         throw new TachyError("compose: cannot list containers of project '" ~ project
-            ~ "': " ~ firstMeaningful(r));
-    if (r.outText.strip.length)
+                ~ "': " ~ firstMeaningful(r));
+    if(r.outText.strip.length)
         return true;
     r = t.run("docker network ls --filter label=com.docker.compose.project="
-        ~ shQuote(project) ~ " -q");
-    if (!r.ok)
-        throw new TachyError("compose: cannot list networks of project '" ~ project
-            ~ "': " ~ firstMeaningful(r));
-    if (r.outText.strip.length)
-        return true;
-    if (volumesToo)
-    {
-        r = t.run("docker volume ls --filter label=com.docker.compose.project="
             ~ shQuote(project) ~ " -q");
-        if (!r.ok)
-            throw new TachyError("compose: cannot list volumes of project '" ~ project
+    if(!r.ok)
+        throw new TachyError("compose: cannot list networks of project '" ~ project
                 ~ "': " ~ firstMeaningful(r));
-        if (r.outText.strip.length)
+    if(r.outText.strip.length)
+        return true;
+    if(volumesToo) {
+        r = t.run("docker volume ls --filter label=com.docker.compose.project="
+                ~ shQuote(project) ~ " -q");
+        if(!r.ok)
+            throw new TachyError("compose: cannot list volumes of project '" ~ project
+                    ~ "': " ~ firstMeaningful(r));
+        if(r.outText.strip.length)
             return true;
     }
     return false;
@@ -626,13 +598,13 @@ private bool projectExists(Transport t, string project, bool volumesToo)
 private string firstMeaningful(in CommandResult r)
 {
     auto m = r.errText.strip;
-    if (!m.length)
+    if(!m.length)
         m = r.outText.strip;
-    if (!m.length)
+    if(!m.length)
         return "exit status " ~ text(r.status);
-    foreach (l; lineSplitter(m))
+    foreach(l; lineSplitter(m))
         return l;
-    return m;   // no newline: the whole (stripped) text
+    return m; // no newline: the whole (stripped) text
 }
 
 // ---------------------------------------------------------------------------

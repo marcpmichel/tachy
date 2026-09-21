@@ -38,16 +38,16 @@ private void parseKey(string key, out string manager, out string pkg, string con
     import std.algorithm.searching : canFind;
     import std.string : indexOf;
 
-    if (!canFind(key, ":"))
+    if(!canFind(key, ":"))
         throw new TachyError(context ~ ": package keys must be \"<manager>:<name>\""
-            ~ " like \"apt:vim\", not \"" ~ key ~ "\"");
+                ~ " like \"apt:vim\", not \"" ~ key ~ "\"");
     const size_t colon = indexOf(key, ':');
     manager = key[0 .. colon];
     pkg = key[colon + 1 .. $];
-    if (manager != "apt")
+    if(manager != "apt")
         throw new TachyError(context ~ ": unsupported package manager '" ~ manager
-            ~ "' (only \"apt\" is implemented)");
-    if (!pkg.length)
+                ~ "' (only \"apt\" is implemented)");
+    if(!pkg.length)
         throw new TachyError(context ~ ": empty package name in \"" ~ key ~ "\"");
 }
 
@@ -74,46 +74,38 @@ TaskResult runPackageModule(Val[string] params, TaskContext ctx)
     // Read-only probe: "install ok installed 2:1.0-1" when installed.
     auto probe = t.run("dpkg-query -W -f=" ~ q("${Status} ${Version}") ~ " " ~ q(pkg));
     string installedVersion;
-    if (probe.ok)
-    {
+    if(probe.ok) {
         const string[] tokens = split(probe.outText.strip);
         const string status = tokens.length > 1
             ? tokens[0 .. $ - 1].join(" ") : probe.outText.strip;
-        if (status == "install ok installed")
+        if(status == "install ok installed")
             installedVersion = tokens[$ - 1];
     }
 
-    if (present)
-    {
-        if (!installedVersion.length)
-        {
+    if(present) {
+        if(!installedVersion.length) {
             const string spec = ver == "latest" ? pkg : pkg ~ "=" ~ ver;
             mustRun(t, ctx, details,
-                "DEBIAN_FRONTEND=noninteractive apt-get install -y " ~ q(spec),
-                "install package '" ~ pkg ~ "'");
+                    "DEBIAN_FRONTEND=noninteractive apt-get install -y " ~ q(spec),
+                    "install package '" ~ pkg ~ "'");
             actions ~= "installed";
-        }
-        else if (ver != "latest" && ver != installedVersion)
-        {
+        } else if(ver != "latest" && ver != installedVersion) {
             mustRun(t, ctx, details,
-                "DEBIAN_FRONTEND=noninteractive apt-get install -y --allow-downgrades "
+                    "DEBIAN_FRONTEND=noninteractive apt-get install -y --allow-downgrades "
                     ~ q(pkg ~ "=" ~ ver),
-                "pin package '" ~ pkg ~ "' to " ~ ver);
+                    "pin package '" ~ pkg ~ "' to " ~ ver);
             actions ~= text("version ", installedVersion, " -> ", ver);
         }
-    }
-    else if (installedVersion.length)
-    {
+    } else if(installedVersion.length) {
         mustRun(t, ctx, details,
-            "DEBIAN_FRONTEND=noninteractive apt-get remove -y " ~ q(pkg),
-            "remove package '" ~ pkg ~ "'");
+                "DEBIAN_FRONTEND=noninteractive apt-get remove -y " ~ q(pkg),
+                "remove package '" ~ pkg ~ "'");
         actions ~= "removed";
     }
 
     TaskResult res;
     res.changed = actions.length != 0;
-    res.msg = actions.length ? actions.join("; ")
-        : present ? "installed (" ~ installedVersion ~ ")" : "already absent";
+    res.msg = actions.length ? actions.join("; ") : present ? "installed (" ~ installedVersion ~ ")" : "already absent";
     res.details = details;
     return res;
 }
@@ -121,6 +113,7 @@ TaskResult runPackageModule(Val[string] params, TaskContext ctx)
 private string q(string s) @safe pure
 {
     import tachy.transport : shQuote;
+
     return shQuote(s);
 }
 

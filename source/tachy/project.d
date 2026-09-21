@@ -41,11 +41,10 @@ import tachy.value : Val;
 
 private alias Sink = Appender!string;
 
-struct ProjectBundle
-{
-    string root;          // temporary directory on the host
-    string projectDir;    // root ~ "/project": the copied project
-    string tachyPath;     // root ~ "/tachy": the copied binary
+struct ProjectBundle {
+    string root; // temporary directory on the host
+    string projectDir; // root ~ "/project": the copied project
+    string tachyPath; // root ~ "/tachy": the copied binary
     string inventoryPath; // root ~ "/inventory.pravic": generated inventory
 }
 
@@ -58,18 +57,15 @@ struct ProjectBundle
 /// on the controller — the identity never travels inside a bundle — and
 /// writes the plaintext over the ciphertext copy, exactly like decrypted
 /// inventory vars travel in the generated inventory.
-struct DecryptedFile
-{
+struct DecryptedFile {
     string relPath; // project-relative path of the source file
-    string bytes;   // plaintext, byte-exact
+    string bytes; // plaintext, byte-exact
 }
 
-struct ImportSpec
-{
+struct ImportSpec {
     string src;
     string dest;
 }
-
 
 /// Deploy a project bundle on the host reached through `t`: copy
 /// `localProjectDir`, the running tachy binary and a generated
@@ -79,67 +75,67 @@ struct ImportSpec
 /// `decrypted` overwrites project files with controller-decrypted
 /// plaintext (age-marked `src` secrets).
 ProjectBundle deployProject(Transport t, string localProjectDir,
-    string hostName, in Val[string] hostVars, in ImportSpec[] imports = [],
-    in DecryptedFile[] decrypted = [])
+        string hostName, in Val[string] hostVars, in ImportSpec[] imports = [],
+        in DecryptedFile[] decrypted = [])
 {
     checkImports(localProjectDir, imports);
 
     auto mk = t.run("mktemp -d \"${TMPDIR:-/tmp}/tachy.XXXXXXXXXX\"");
-    if (!mk.ok)
+    if(!mk.ok)
         throw new TachyError("cannot create a temporary bundle directory on "
-            ~ hostName ~ ": " ~ failText(mk));
+                ~ hostName ~ ": " ~ failText(mk));
 
     ProjectBundle b;
     b.root = mk.outText.strip;
-    if (!b.root.length || !isAbsolute(b.root))
+    if(!b.root.length || !isAbsolute(b.root))
         throw new TachyError("unexpected mktemp output on " ~ hostName ~ ": '" ~ b.root ~ "'");
     b.projectDir = buildPath(b.root, "project");
     b.tachyPath = buildPath(b.root, "tachy");
     b.inventoryPath = buildPath(b.root, "inventory.pravic");
 
     auto mkd = t.run("mkdir -- " ~ shQuote(b.projectDir));
-    if (!mkd.ok)
+    if(!mkd.ok)
         throw new TachyError("cannot create " ~ b.projectDir ~ " on " ~ hostName
-            ~ ": " ~ failText(mkd));
+                ~ ": " ~ failText(mkd));
 
     // Project copy (plus imports): one tar on the controller, untar on
     // the host (stdin).
     auto extract = t.runWithInput("tar -C " ~ shQuote(b.projectDir) ~ " -xf -",
-        tarBundle(localProjectDir, imports));
-    if (!extract.ok)
+            tarBundle(localProjectDir, imports));
+    if(!extract.ok)
         throw new TachyError("cannot copy project '" ~ localProjectDir ~ "' to "
-            ~ hostName ~ ": " ~ failText(extract));
+                ~ hostName ~ ": " ~ failText(extract));
 
     // Decrypted secrets overwrite their ciphertext copies (the tar above
     // brought the encrypted files in; relPath is validated project-relative
     // by the caller, so this stays inside the bundle's project copy).
-    foreach (ref const DecryptedFile d; decrypted)
-    {
+    foreach(ref const DecryptedFile d; decrypted) {
         auto put = t.runWithInput("cat > " ~ shQuote(buildPath(b.projectDir, d.relPath)),
-            d.bytes);
-        if (!put.ok)
+                d.bytes);
+        if(!put.ok)
             throw new TachyError("cannot write decrypted secret '" ~ d.relPath
-                ~ "' into the bundle on " ~ hostName ~ ": " ~ failText(put));
+                    ~ "' into the bundle on " ~ hostName ~ ": " ~ failText(put));
     }
 
     // The binary itself (linux/amd64: same platform as the controller).
     string selfBytes;
-    try selfBytes = cast(string) read(thisExePath());
-    catch (Exception e)
+    try
+        selfBytes = cast(string) read(thisExePath());
+    catch(Exception e)
         throw new TachyError("cannot read the tachy binary '" ~ thisExePath() ~ "': " ~ e.msg);
     auto cp = t.runWithInput("cat > " ~ shQuote(b.tachyPath), selfBytes);
-    if (!cp.ok)
+    if(!cp.ok)
         throw new TachyError("cannot copy the tachy binary to " ~ hostName ~ ": " ~ failText(cp));
     auto chm = t.run("chmod 0755 -- " ~ shQuote(b.tachyPath));
-    if (!chm.ok)
+    if(!chm.ok)
         throw new TachyError("cannot make the tachy binary executable on "
-            ~ hostName ~ ": " ~ failText(chm));
+                ~ hostName ~ ": " ~ failText(chm));
 
     auto inv = t.runWithInput("cat > " ~ shQuote(b.inventoryPath),
-        hostInventoryPravic(hostName, hostVars));
-    if (!inv.ok)
+            hostInventoryPravic(hostName, hostVars));
+    if(!inv.ok)
         throw new TachyError("cannot write the generated inventory on "
-            ~ hostName ~ ": " ~ failText(inv));
+                ~ hostName ~ ": " ~ failText(inv));
 
     return b;
 }
@@ -147,9 +143,9 @@ ProjectBundle deployProject(Transport t, string localProjectDir,
 /// Best-effort bundle removal; never throws.
 void removeBundle(Transport t, in ProjectBundle b)
 {
-    try t.run("rm -rf -- " ~ shQuote(b.root));
-    catch (Exception)
-    {
+    try
+        t.run("rm -rf -- " ~ shQuote(b.root));
+    catch(Exception) {
     }
 }
 
@@ -161,13 +157,13 @@ void removeBundle(Transport t, in ProjectBundle b)
 /// forwarding verbosity and colors, and reporting its counters to
 /// `reportPath`.
 string innerTachyCommand(in ProjectBundle b, string hostName, string tasksBaseName,
-    bool check, bool verbose, bool color, string reportPath)
+        bool check, bool verbose, bool color, string reportPath)
 {
     string cmd = "cd " ~ shQuote(b.projectDir) ~ " && " ~ shQuote(b.tachyPath)
         ~ (check ? " check" : " apply") ~ " --direct --events";
-    if (verbose)
+    if(verbose)
         cmd ~= " --verbose";
-    if (color)
+    if(color)
         cmd ~= " --color";
     cmd ~= " --direct-report " ~ shQuote(reportPath);
     cmd ~= " -i " ~ shQuote(b.inventoryPath);
@@ -180,17 +176,16 @@ bool parseReport(string text, out ulong ok, out ulong changed, out ulong failed)
 {
     import std.array : split;
     import std.conv : to;
+
     ok = changed = failed = 0;
     auto parts = split(text.strip);
-    if (parts.length != 3)
+    if(parts.length != 3)
         return false;
-    try
-    {
+    try {
         ok = to!ulong(parts[0]);
         changed = to!ulong(parts[1]);
         failed = to!ulong(parts[2]);
-    }
-    catch (Exception)
+    } catch(Exception)
         return false;
     return true;
 }
@@ -219,16 +214,13 @@ private void writeVarEntries(ref Sink app, in Val[string] t, int depth)
 {
     auto keys = t.byKey.array;
     keys.sort();
-    foreach (k; keys)
-    {
+    foreach(k; keys) {
         app.put(indentOf(depth));
-        if (t[k].kind == Val.Kind.table_)
-        {
+        if(t[k].kind == Val.Kind.table_) {
             app.put(pravicKey(k) ~ " {\n");
             writeVarEntries(app, t[k].table_, depth + 1);
             app.put(indentOf(depth) ~ "},\n");
-        }
-        else
+        } else
             app.put(pravicKey(k) ~ " = " ~ pravicValue(t[k]) ~ ",\n");
     }
 }
@@ -236,40 +228,41 @@ private void writeVarEntries(ref Sink app, in Val[string] t, int depth)
 private string indentOf(int depth) @safe pure
 {
     import std.array : replicate;
+
     return "    ".replicate(depth);
 }
 
 package(tachy) string pravicValue(in Val v)
 {
-    final switch (v.kind)
-    {
-        case Val.Kind.string_: return pravicString(v.str_);
-        case Val.Kind.integer_: return text(v.integer_);
-        case Val.Kind.float_: return pravicFloat(v.float_);
-        case Val.Kind.boolean_: return v.boolean_ ? "true" : "false";
-        case Val.Kind.array_:
-        {
+    final switch(v.kind) {
+        case Val.Kind.string_:
+            return pravicString(v.str_);
+        case Val.Kind.integer_:
+            return text(v.integer_);
+        case Val.Kind.float_:
+            return pravicFloat(v.float_);
+        case Val.Kind.boolean_:
+            return v.boolean_ ? "true" : "false";
+        case Val.Kind.array_: {
             string[] parts;
-            foreach (const e; v.array_)
+            foreach(const e; v.array_)
                 parts ~= pravicValue(e);
             return "[" ~ parts.join(", ") ~ "]";
         }
-        case Val.Kind.table_:
-        {
+        case Val.Kind.table_: {
             auto keys = v.table_.byKey.array;
             keys.sort();
             string[] parts;
-            foreach (k; keys)
+            foreach(k; keys)
                 parts ~= pravicKey(k) ~ " = " ~ pravicValue(v.table_[k]);
             return "{ " ~ parts.join(", ") ~ " }";
         }
-        case Val.Kind.choose_:
-        {
+        case Val.Kind.choose_: {
             // The parser re-reads exactly this spelling, so a choose in
             // an inventory var round-trips into the generated per-host
             // inventory and is rendered on the host like any var.
             string[] parts;
-            foreach (size_t i; 0 .. v.choosePatterns_.length)
+            foreach(size_t i; 0 .. v.choosePatterns_.length)
                 parts ~= pravicKey(v.choosePatterns_[i]) ~ " = "
                     ~ pravicValue(v.chooseValues_[i]);
             return "choose " ~ pravicString(v.str_)
@@ -286,17 +279,25 @@ private string pravicKey(string k)
 private string pravicString(string s)
 {
     string r = "\"";
-    foreach (char c; s)
-    {
-        switch (c)
-        {
-            case '"': r ~= "\\\""; break;
-            case '\\': r ~= "\\\\"; break;
-            case '\n': r ~= "\\n"; break;
-            case '\r': r ~= "\\r"; break;
-            case '\t': r ~= "\\t"; break;
+    foreach(char c; s) {
+        switch(c) {
+            case '"':
+                r ~= "\\\"";
+                break;
+            case '\\':
+                r ~= "\\\\";
+                break;
+            case '\n':
+                r ~= "\\n";
+                break;
+            case '\r':
+                r ~= "\\r";
+                break;
+            case '\t':
+                r ~= "\\t";
+                break;
             default:
-                if (c < 0x20)
+                if(c < 0x20)
                     r ~= format!"\\u%04X"(c);
                 else
                     r ~= c;
@@ -310,8 +311,9 @@ private string pravicFloat(double d)
 {
     import std.algorithm.searching : canFind;
     import std.string : toLower;
+
     auto s = format!"%s"(d).toLower();
-    if (!canFind(s, '.') && !canFind(s, 'e') && !canFind(s, 'n') && !canFind(s, 'i'))
+    if(!canFind(s, '.') && !canFind(s, 'e') && !canFind(s, 'n') && !canFind(s, 'i'))
         s ~= ".0";
     return s;
 }
@@ -326,25 +328,23 @@ private string tarBundle(string dir, in ImportSpec[] imports)
     // parent directory under its destination name (multiple -C options
     // are positional in GNU tar).
     string[] args = ["tar", "-C", dir, "-cf", "-", "."];
-    foreach (ref const ImportSpec imp; imports)
+    foreach(ref const ImportSpec imp; imports)
         args ~= ["-C", dirName(imp.src), imp.dest];
     auto p = pipeProcess(args, Redirect.stdout);
     auto app = appender!(ubyte[]);
     auto buf = new ubyte[65536];
-    for (;;)
-    {
+    for(;;) {
         auto n = p.stdout.rawRead(buf).length;
-        if (n == 0)
+        if(n == 0)
             break;
         app.put(buf[0 .. n]);
     }
     const int status = wait(p.pid); // tar warnings go to our stderr directly
-    if (status != 0)
+    if(status != 0)
         throw new TachyError("cannot archive the project '" ~ dir
-            ~ "' (tar exit status " ~ text(status) ~ ")");
+                ~ "' (tar exit status " ~ text(status) ~ ")");
     return cast(string) app.data;
 }
-
 
 /// Validate import sources (controller side): each must exist, and its
 /// destination (the base name) must not collide with project content or
@@ -354,26 +354,26 @@ private void checkImports(string localProjectDir, in ImportSpec[] imports) @trus
     import std.file : exists;
 
     bool[string] dests;
-    foreach (ref const ImportSpec imp; imports)
-    {
-        if (!exists(imp.src))
+    foreach(ref const ImportSpec imp; imports) {
+        if(!exists(imp.src))
             throw new TachyError("import '" ~ imp.src ~ "' does not exist");
-        if (dests.get(imp.dest, false))
+        if(dests.get(imp.dest, false))
             throw new TachyError("import '" ~ imp.src ~ "': '" ~ imp.dest
-                ~ "' is already the destination of another import");
+                    ~ "' is already the destination of another import");
         dests[imp.dest] = true;
-        if (exists(buildPath(localProjectDir, imp.dest)))
+        if(exists(buildPath(localProjectDir, imp.dest)))
             throw new TachyError("import '" ~ imp.src ~ "': '" ~ imp.dest
-                ~ "' already exists in the project '" ~ localProjectDir
-                ~ "' (imports may not overwrite project content)");
+                    ~ "' already exists in the project '" ~ localProjectDir
+                    ~ "' (imports may not overwrite project content)");
     }
 }
+
 private string failText(in CommandResult r)
 {
     auto m = r.errText.strip;
-    if (!m.length)
+    if(!m.length)
         m = r.outText.strip;
-    if (!m.length)
+    if(!m.length)
         m = "exit status " ~ text(r.status);
     return m;
 }

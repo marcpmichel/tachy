@@ -20,17 +20,18 @@ import std.string : strip;
 import tachy.errors;
 import tachy.inventory : HostConfig;
 
-struct CommandResult
-{
+struct CommandResult {
     int status;
     string outText;
     string errText;
 
-    bool ok() const @safe pure nothrow { return status == 0; }
+    bool ok() const @safe pure nothrow
+    {
+        return status == 0;
+    }
 }
 
-abstract class Transport
-{
+abstract class Transport {
     /// Run a shell command, /dev/null on stdin.
     CommandResult run(string command);
 
@@ -50,10 +51,11 @@ abstract class Transport
     {
         import std.algorithm.searching : endsWith;
         import std.string : splitLines;
+
         auto r = run(command);
-        foreach (line; r.outText.splitLines())
+        foreach(line; r.outText.splitLines())
             sink(line, false);
-        foreach (line; r.errText.splitLines())
+        foreach(line; r.errText.splitLines())
             sink(line, true);
         return r;
     }
@@ -65,9 +67,8 @@ abstract class Transport
 string shQuote(string s) @safe pure
 {
     string r = "'";
-    foreach (char c; s)
-    {
-        if (c == '\'')
+    foreach(char c; s) {
+        if(c == '\'')
             r ~= "'\\''";
         else
             r ~= c;
@@ -76,7 +77,7 @@ string shQuote(string s) @safe pure
 }
 
 private CommandResult runCommand(string[] argv, string input = null,
-    void delegate(string, bool) sink = null)
+        void delegate(string, bool) sink = null)
 {
     auto outApp = appender!(ubyte[]);
     auto errApp = appender!(ubyte[])();
@@ -84,12 +85,10 @@ private CommandResult runCommand(string[] argv, string input = null,
 
     Pipe pin, pout, perr;
     File stdinFile;
-    if (input !is null)
-    {
+    if(input !is null) {
         pin = pipe();
         stdinFile = pin.readEnd;
-    }
-    else
+    } else
         stdinFile = File("/dev/null", "r");
 
     pout = pipe();
@@ -102,20 +101,20 @@ private CommandResult runCommand(string[] argv, string input = null,
     // numeric pid is captured before wait() invalidates it.
     import tachy.signals : trackChild, untrackChild;
     import core.sys.posix.sys.types : pid_t;
+
     const pid_t pidNum = pid.processID;
     trackChild(pidNum);
-    scope (exit) untrackChild(pidNum);
+    scope(exit)
+        untrackChild(pidNum);
 
     // Parent must drop its copies so EOF semantics work.
     pout.writeEnd.close();
     perr.writeEnd.close();
-    if (input !is null)
-    {
+    if(input !is null) {
         pin.readEnd.close();
         try
             pin.writeEnd.rawWrite(cast(const(ubyte)[]) input);
-        catch (Exception e)
-        {
+        catch(Exception e) {
             // EPIPE: consumer exited early; result below still reflects it.
         }
         pin.writeEnd.close();
@@ -126,31 +125,31 @@ private CommandResult runCommand(string[] argv, string input = null,
     // lines from the calling thread; the sink must synchronize itself.
     auto errThread = new Thread({
         auto buf = new ubyte[4096];
-        for (;;)
-        {
+        for(;;) {
             auto n = posixRead(perr.readEnd.fileno, buf);
-            if (n <= 0) break;
+            if(n <= 0)
+                break;
             errApp.put(buf[0 .. n]);
-            if (sink !is null)
+            if(sink !is null)
                 feedLines(errCarry, cast(string) buf[0 .. n], sink, true);
         }
-        if (sink !is null && errCarry.length)
+        if(sink !is null && errCarry.length)
             sink(errCarry, true);
     });
     errThread.start();
 
     {
         auto buf = new ubyte[65536];
-        for (;;)
-        {
+        for(;;) {
             auto n = posixRead(pout.readEnd.fileno, buf);
-            if (n <= 0) break;
+            if(n <= 0)
+                break;
             outApp.put(buf[0 .. n]);
-            if (sink !is null)
+            if(sink !is null)
                 feedLines(outCarry, cast(string) buf[0 .. n], sink, false);
         }
     }
-    if (sink !is null && outCarry.length)
+    if(sink !is null && outCarry.length)
         sink(outCarry, false);
 
     errThread.join();
@@ -166,20 +165,18 @@ private CommandResult runCommand(string[] argv, string input = null,
 /// signal arriving mid-command silently truncates the output.
 private ptrdiff_t posixRead(int fd, ubyte[] buf) @system
 {
-    version (Posix)
-    {
+    version(Posix) {
         import core.sys.posix.unistd : read;
         import core.stdc.errno : errno, EINTR;
-        for (;;)
-        {
+
+        for(;;) {
             const auto n = read(fd, buf.ptr, buf.length);
-            if (n >= 0)
+            if(n >= 0)
                 return n;
-            if (errno != EINTR)
+            if(errno != EINTR)
                 return n;
         }
-    }
-    else
+    } else
         static assert(false, "tachy requires a POSIX system");
 }
 
@@ -187,12 +184,12 @@ private ptrdiff_t posixRead(int fd, ubyte[] buf) @system
 /// `carry`.  Newlines are byte-level, so multibyte sequences split
 /// across chunks are reassembled safely.
 private void feedLines(ref string carry, string chunk,
-    void delegate(string, bool) sink, bool isErr)
+        void delegate(string, bool) sink, bool isErr)
 {
     import std.algorithm.searching : canFind;
+
     carry ~= chunk;
-    while (canFind(carry, '\n'))
-    {
+    while(canFind(carry, '\n')) {
         const size_t nl = cast(size_t) stdStringIndexOf(carry, '\n');
         sink(carry[0 .. nl], isErr);
         carry = carry[nl + 1 .. $];
@@ -202,12 +199,11 @@ private void feedLines(ref string carry, string chunk,
 private ptrdiff_t stdStringIndexOf(string s, char c) @safe pure
 {
     import std.string : indexOf;
+
     return indexOf(s, c);
 }
 
-
-final class LocalTransport : Transport
-{
+final class LocalTransport : Transport {
     override CommandResult run(string command)
     {
         return runCommand(["/bin/sh", "-c", command]);
@@ -223,11 +219,13 @@ final class LocalTransport : Transport
         return runCommand(["/bin/sh", "-c", command], input);
     }
 
-    override string describe() const { return "local"; }
+    override string describe() const
+    {
+        return "local";
+    }
 }
 
-final class SshTransport : Transport
-{
+final class SshTransport : Transport {
     private string address_;
     private string user_;
     private int port_;
@@ -251,7 +249,6 @@ final class SshTransport : Transport
         return runCommand(argvFor(command), null, sink);
     }
 
-
     override CommandResult runWithInput(string command, string input)
     {
         return runCommand(argvFor(command), input);
@@ -260,20 +257,22 @@ final class SshTransport : Transport
     override string describe() const
     {
         auto s = "ssh://";
-        if (user_.length) s ~= user_ ~ "@";
+        if(user_.length)
+            s ~= user_ ~ "@";
         s ~= address_;
-        if (port_ != 22) s ~= text(":", port_);
+        if(port_ != 22)
+            s ~= text(":", port_);
         return s;
     }
 
     private string[] argvFor(string command)
     {
         string[] argv = ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new"];
-        if (user_.length)
+        if(user_.length)
             argv ~= ["-l", user_];
-        if (port_ != 22)
+        if(port_ != 22)
             argv ~= ["-p", text(port_)];
-        if (keyPath_.length)
+        if(keyPath_.length)
             argv ~= ["-i", keyPath_];
         argv ~= ["--", address_, command];
         return argv;
@@ -282,25 +281,30 @@ final class SshTransport : Transport
 
 Transport makeTransport(in HostConfig host)
 {
-    if (host.connection == "local")
+    if(host.connection == "local")
         return new LocalTransport;
     return new SshTransport(
-        host.address.length ? host.address : host.name,
-        host.user,
-        host.port,
-        host.key);
+            host.address.length ? host.address : host.name,
+            host.user,
+            host.port,
+            host.key);
 }
 
 // ---------------------------------------------------------------------------
 // Remote filesystem primitives built on shell commands (transport agnostic).
 // ---------------------------------------------------------------------------
 
-enum StatKind { nonexistent, file, directory, link, other }
+enum StatKind {
+    nonexistent,
+    file,
+    directory,
+    link,
+    other
+}
 
-struct StatInfo
-{
+struct StatInfo {
     StatKind kind;
-    int mode;      // full st_mode permission bits (0o7777 range from stat %a)
+    int mode; // full st_mode permission bits (0o7777 range from stat %a)
     string owner;
     string group;
 }
@@ -312,23 +316,31 @@ StatInfo statPath(Transport t, string path)
     auto cmd = "if [ -e " ~ q ~ " ] || [ -L " ~ q ~ " ]; then stat -c '%F|%a|%U|%G' -- "
         ~ q ~ "; else echo __TACHY_ABSENT__; fi";
     auto r = t.run(cmd);
-    if (!r.ok)
-        throw new TachyError("stat '" ~ path ~ "' failed: " ~ (r.errText.strip.length ? r.errText.strip : text("exit status ", r.status)));
+    if(!r.ok)
+        throw new TachyError("stat '" ~ path ~ "' failed: " ~ (r.errText.strip.length ? r.errText.strip : text("exit status ", r
+                .status)));
     auto line = r.outText.strip;
-    if (line == "__TACHY_ABSENT__")
+    if(line == "__TACHY_ABSENT__")
         return StatInfo(StatKind.nonexistent, 0, null, null);
 
     auto parts = splitFirstLines(line);
-    if (parts.length != 4)
+    if(parts.length != 4)
         throw new TachyError("unexpected stat output for '" ~ path ~ "': " ~ line);
 
     StatInfo st;
-    switch (parts[0])
-    {
-        case "directory": st.kind = StatKind.directory; break;
-        case "symbolic link": st.kind = StatKind.link; break;
-        case "regular file": st.kind = StatKind.file; break;
-        default: st.kind = StatKind.other; break;
+    switch(parts[0]) {
+        case "directory":
+            st.kind = StatKind.directory;
+            break;
+        case "symbolic link":
+            st.kind = StatKind.link;
+            break;
+        case "regular file":
+            st.kind = StatKind.file;
+            break;
+        default:
+            st.kind = StatKind.other;
+            break;
     }
     st.mode = parseOctal(parts[1]);
     st.owner = parts[2];
@@ -340,7 +352,7 @@ StatInfo statPath(Transport t, string path)
 string readLinkTarget(Transport t, string path)
 {
     auto r = t.run("readlink -- " ~ shQuote(path));
-    if (!r.ok)
+    if(!r.ok)
         throw new TachyError("readlink '" ~ path ~ "' failed: " ~ r.errText.strip);
     return r.outText.strip;
 }
@@ -348,15 +360,15 @@ string readLinkTarget(Transport t, string path)
 private string[] splitFirstLines(string line) @safe pure
 {
     import std.string : split;
+
     return split(line, "|");
 }
 
 private int parseOctal(string s) @safe pure
 {
     int m = 0;
-    foreach (char c; s)
-    {
-        if (c < '0' || c > '7')
+    foreach(char c; s) {
+        if(c < '0' || c > '7')
             return 0;
         m = m * 8 + (c - '0');
     }

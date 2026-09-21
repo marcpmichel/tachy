@@ -39,15 +39,16 @@ import tachy.value : Val, dupTable;
 /// tachy.modules, so both spellings of "no expectation" fail with the
 /// same message.
 package(tachy) Val assertionExpectation(in Val[string] params, string context)
-    @safe pure
+@safe pure
 {
     auto t = dupTable(params);
     t.remove("name");
     t.remove("value");
-    if (!t.length)
-        throw new TachyError(context ~ ": the assertion needs at least one of"
-            ~ " 'equals', 'contains', 'matches', 'not', 'any', 'all' and"
-            ~ " 'none'");
+    if(!t.length)
+        throw new TachyError(
+                context ~ ": the assertion needs at least one of"
+                ~ " 'equals', 'contains', 'matches', 'not', 'any', 'all' and"
+                ~ " 'none'");
     Val r;
     r.kind = Val.Kind.table_;
     r.table_ = t;
@@ -61,11 +62,11 @@ TaskResult runAssertModule(Val[string] params, TaskContext ctx)
     // The shapes were validated at load time; this second parse runs
     // against the rendered patterns (they may hold templates too).
     auto exp = parseOutput(
-        assertionExpectation(params, "assert '" ~ name ~ "'"),
-        "assert '" ~ name ~ "'");
-    if (!exp.matches(value))
+            assertionExpectation(params, "assert '" ~ name ~ "'"),
+            "assert '" ~ name ~ "'");
+    if(!exp.matches(value))
         throw new TachyError("assert '" ~ name ~ "': value '" ~ excerpt(value)
-            ~ "' does not satisfy " ~ exp.describe());
+                ~ "' does not satisfy " ~ exp.describe());
 
     TaskResult res;
     res.changed = false;
