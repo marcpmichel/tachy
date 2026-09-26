@@ -55,7 +55,7 @@ package(tachy) alias ChunkSink = void delegate(string chunk);
 int runWebUi(RunOptions optsIn) @trusted {
     import std.stdio : stdout;
 
-    if(optsIn.webPort < 0 || optsIn.webPort > 65535)
+    if(optsIn.webPort < 0 || optsIn.webPort > 65_535)
         throw new TachyError("--port must be between 0 and 65535");
 
     const Config config = loadConfig(optsIn.config);
@@ -71,7 +71,8 @@ int runWebUi(RunOptions optsIn) @trusted {
     stdout.writefln("tachy webui listening on http://%s — Ctrl-C to stop",
             addr.toString());
     stdout.writefln("inventory: %s — projects: %s", opts.inventoryPath,
-            config.webuiProjects.length ? config.webuiProjects.join(", ") : "none configured (webui projects in config.pravic)");
+            config.webuiProjects.length ? 
+            config.webuiProjects.join(", ") : "none configured (webui projects in config.pravic)");
     stdout.flush();
 
     if(!opts.noBrowser)
@@ -509,7 +510,7 @@ public TcpSocket bindListenerAuto(string address) @trusted {
     auto rng = Random(unpredictableSeed);
     TachyError last;
     foreach(_; 0 .. 16) {
-        const ushort port = cast(ushort) uniform!"[]"(10000, 65534, rng);
+        const ushort port = cast(ushort) uniform!"[]"(10_000, 65_534, rng);
         try
             return bindListener(address, port);
         catch(TachyError e)
@@ -1016,7 +1017,7 @@ private bool among3(string s, string a, string b, string c) @safe pure nothrow {
 /// Milliseconds since the Unix epoch (SysTime.stdTime counts hnsecs
 /// since year 1601; the constant is the 1970 offset in hnsecs).
 private long nowMs() @trusted nothrow {
-    return (Clock.currTime().stdTime - 116444736000000000L) / 10_000;
+    return (Clock.currTime().stdTime - 116_444_736_000_000_000L) / 10_000;
 }
 
 // ---------------------------------------------------------------------------

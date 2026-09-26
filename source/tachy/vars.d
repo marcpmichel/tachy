@@ -264,7 +264,7 @@ private string runCapture(string command, bool wantStderr, string where,
     auto other = wantStderr ? p.stdout : p.stderr;
     auto otherApp = appender!(ubyte[]);
     auto thr = new Thread({
-        auto buf = new ubyte[65536];
+        auto buf = new ubyte[65_536];
         for(;;) {
             auto n = other.rawRead(buf).length;
             if(n == 0)
@@ -278,7 +278,7 @@ private string runCapture(string command, bool wantStderr, string where,
     {
         auto capture = wantStderr ? p.stderr : p.stdout;
         auto app = appender!(ubyte[]);
-        auto buf = new ubyte[65536];
+        auto buf = new ubyte[65_536];
         for(;;) {
             auto n = capture.rawRead(buf).length;
             if(n == 0)
@@ -425,7 +425,7 @@ private string defaultAgeDecrypt(string agePath, in AgeIdentity identity,
     p.stdin.close(); // age sees EOF on the identity stream
 
     auto outApp = appender!(ubyte[]);
-    auto buf = new ubyte[65536];
+    auto buf = new ubyte[65_536];
     for(;;) {
         auto n = p.stdout.rawRead(buf).length;
         if(n == 0)

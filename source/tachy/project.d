@@ -310,7 +310,7 @@ private string tarBundle(string dir, in ImportSpec[] imports) {
         args ~= ["-C", dirName(imp.src), imp.dest];
     auto p = pipeProcess(args, Redirect.stdout);
     auto app = appender!(ubyte[]);
-    auto buf = new ubyte[65536];
+    auto buf = new ubyte[65_536];
     for(;;) {
         auto n = p.stdout.rawRead(buf).length;
         if(n == 0) break;

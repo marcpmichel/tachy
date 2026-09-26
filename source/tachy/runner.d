@@ -113,24 +113,27 @@ int runTachy(RunOptions optsIn) {
 /// line — the machine format the `generate completions` scripts call.
 /// No host is contacted and no tasks file is needed.
 int runHosts(in string[] args, const RunOptions opts) {
-    if(!args.length)
+
+    ulong nargs = args.length;
+
+    if(!nargs)
         throw new TachyError("hosts: expected 'list [<selection>]' or"
                 ~ " 'info <host>' — examples: tachy hosts list,"
                 ~ " tachy hosts list @web, tachy hosts info web1");
     if(!args[0].among!("list", "info"))
         throw new TachyError("hosts: unknown sub-command '" ~ args[0]
                 ~ "' (expected 'list' or 'info')");
-    if(args[0] == "list" && args.length > 2)
+    if(args[0] == "list" && nargs > 2)
         throw new TachyError("hosts list: expected at most one selection"
-                ~ " (host names, @tags or \"all\"), not " ~ text(args.length - 1));
-    if(args[0] == "list" && opts.completion && args.length > 1)
+                ~ " (host names, @tags or \"all\"), not " ~ text(nargs));
+    if(args[0] == "list" && opts.completion && nargs > 1)
         throw new TachyError("hosts list --completion takes no selection —"
                 ~ " it prints every candidate (all, host names, @tags),"
                 ~ " which a selection would only trim");
-    if(args[0] == "info" && args.length != 2)
+    if(args[0] == "info" && nargs != 2)
         throw new TachyError("hosts info: expected exactly one host name");
 
-    const string selection = args.length == 2 ? args[1] : "all";
+    const string selection = nargs == 2 ? args[1] : "all";
     const Config config = loadConfig(opts.config);
     auto inventory = Inventory.load(opts.inventoryPath,
             effectiveIdentity(opts.identity, config));
@@ -616,8 +619,7 @@ private string decryptedSignature(in DecryptedFile[] decrypted) @safe pure {
 /// True when any `file` job of the composition marks its `src` as
 /// age-encrypted (`age = true`): only then does bundled mode do
 /// controller-side decryption work.
-private bool hasAgeSrc(in LoadedTasks loaded) @safe
-{
+private bool hasAgeSrc(in LoadedTasks loaded) @safe {
     foreach(ref const job; loaded.jobs) {
         if(job.moduleName != "file") continue;
 
@@ -687,8 +689,7 @@ package(tachy) DecryptedFile[] collectDecryptedFiles(in LoadedTasks loaded,
 /// relative paths, `..` escapes back into the project and nested
 /// applies under the landing all resolve identically.
 package(tachy) string makeStaging(string projectDir, in ImportSpec[] imports)
-@trusted
-{
+@trusted {
     import std.conv : text;
     import std.file : FileException, SpanMode, dirEntries, mkdir, symlink;
     import std.random : Random, uniform, unpredictableSeed;
@@ -788,7 +789,8 @@ private string defaultLabel(string kind, in Val[string] params) @safe pure {
     // files and directories key their params by "path", compose by the
     // injected "dir", probe by the injected "url", everything else by
     // the injected "name".
-    const string key = kind.among!("file", "directory") ? "path" : kind == "compose" ? "dir" : kind == "probe" ? "url" : "name";
+    const string key = kind.among!("file", "directory") ? 
+      "path" : kind == "compose" ? "dir" : kind == "probe" ? "url" : "name";
     auto pv = key in params;
     if(pv !is null && (*pv).kind == Val.Kind.string_)
         return kind ~ " " ~ (*pv).str_;

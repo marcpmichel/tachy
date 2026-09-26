@@ -39,7 +39,7 @@ import tachy.web : Request, Response, Router, asset, bindListener,
 package(tachy) enum string docSource = import("DOCUMENTATION.md");
 
 int runWebDoc(const RunOptions opts) @trusted {
-    if(opts.webPort < 0 || opts.webPort > 65535)
+    if(opts.webPort < 0 || opts.webPort > 65_535)
         throw new TachyError("--port must be between 0 and 65535");
 
     auto site = new DocSite(docSource);

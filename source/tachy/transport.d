@@ -136,7 +136,7 @@ private CommandResult runCommand(string[] argv, string input = null,
     errThread.start();
 
     {
-        auto buf = new ubyte[65536];
+        auto buf = new ubyte[65_536];
         for(;;) {
             auto n = posixRead(pout.readEnd.fileno, buf);
             if(n <= 0) break;
@@ -293,8 +293,8 @@ StatInfo statPath(Transport t, string path) {
         ~ q ~ "; else echo __TACHY_ABSENT__; fi";
     auto r = t.run(cmd);
     if(!r.ok)
-        throw new TachyError("stat '" ~ path ~ "' failed: " ~ (r.errText.strip.length ? r.errText.strip : text("exit status ", r
-                .status)));
+        throw new TachyError("stat '" ~ path ~ "' failed: " ~ 
+            (r.errText.strip.length ? r.errText.strip : text("exit status ", r.status)));
     auto line = r.outText.strip;
     if(line == "__TACHY_ABSENT__")
         return StatInfo(StatKind.nonexistent, 0, null, null);
@@ -340,4 +340,4 @@ private int parseOctal(string s) @safe pure {
     return m;
 }
 
-// ---------------------------------------------------------------------------
+// ----------------------------apt list --installed "python3-docker" -qq-----------------------------------------------
