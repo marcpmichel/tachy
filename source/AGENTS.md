@@ -15,9 +15,13 @@ This doc owns the source tree's structure and conventions;
 - Layering, top-down:
   - `app.d` — CLI surface only (command word: apply/check/hosts/
     generate/webui/webdoc/man/version/help, with one-letter short
-    forms a/c/g/v for apply/check/generate/version; `help` prints the
-    short form, `man` the full manual, man-page style — the text
-    blocks live in `assets/*.txt`, embedded with `import()` — one
+    forms a/c/g/v for apply/check/generate/version; one `CommandInfo`
+    table is the single source for the words, short forms, one-liners
+    and usage lines the parser, the general help Commands block and
+    man COMMANDS share — display order is the table order; `help`
+    prints the short form, `man` the full manual, man-page style — the
+    text blocks live in `assets/*.txt` (the Commands block is composed
+    from the table), embedded with `import()` — one
     source for both outputs; the `version` command prints the build
     date from `assets/version`, maintained by dub's preBuildCommands — D
     reserves `version`, so the symbol is `tachyVersion` and the enum

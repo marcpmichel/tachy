@@ -286,27 +286,13 @@ private void jsonString(App)(ref App app, string s) @safe pure {
     app.put('"');
     foreach(char c; s) {
         switch(c) {
-            case '"':
-                app.put("\\\"");
-                break;
-            case '\\':
-                app.put("\\\\");
-                break;
-            case '\n':
-                app.put("\\n");
-                break;
-            case '\r':
-                app.put("\\r");
-                break;
-            case '\t':
-                app.put("\\t");
-                break;
-            case '\b':
-                app.put("\\b");
-                break;
-            case '\f':
-                app.put("\\f");
-                break;
+            case '"': app.put("\\\""); break;
+            case '\\': app.put("\\\\"); break;
+            case '\n': app.put("\\n"); break;
+            case '\r': app.put("\\r"); break;
+            case '\t': app.put("\\t"); break;
+            case '\b': app.put("\\b"); break;
+            case '\f': app.put("\\f"); break;
             default:
                 if(c < 0x20)
                     app.put(format!"\\u%04x"(c));

@@ -10,7 +10,6 @@ unittest
 import std.algorithm.comparison : among;
 import std.algorithm.searching : canFind, startsWith;
 import std.exception : assertNotThrown, assertThrown;
-import app : commandEntries;
 import app : optionEntriesText;
 import std.getopt : GetOptException;
 import tachy.errors : TachyError;
@@ -56,7 +55,7 @@ foreach (w; ["h", "w", "m", "x"])
     catch (TachyError e)
         msg = e.msg;
     assert(canFind(msg, "apply (a), check (c), hosts, generate (g),"), msg);
-    assert(canFind(msg, "webui, webdoc, man, version (v), help"), msg);
+    assert(canFind(msg, "webui, webdoc, man, version (v), upgrade, help"), msg);
 }
 
 // help stays short; man carries the full reference

@@ -26,41 +26,87 @@ enum Cmd {
     help,
 }
 
+/// One command's fixed identity: the dispatch tag, the invocation word,
+/// the optional short form and the help lines.  The single source the
+/// parser, the general help, the per-command screens and the man page
+/// read; display order (general help Commands block, man COMMANDS, the
+/// parser's error message) is the array order.
+private struct CommandInfo
+{
+    Cmd cmd;
+    string word; // the canonical word ("version" for Cmd.showVersion)
+    string shortWord; // "" when the command takes no short form
+    string oneLiner; // the general-help/man description
+    string synopsis; // the Usage line(s), in the help markup scheme
+}
+
+private immutable CommandInfo[] commandInfos = [
+    CommandInfo(Cmd.apply, "apply", "a",
+        "Apply the tasks files to the selected hosts",
+        "**tachy apply** `[options] <selection> [<tasks.pravic>...]`"),
+    CommandInfo(Cmd.check, "check", "c",
+        "Check mode: report would-be changes without applying anything",
+        "**tachy check** `[options] <selection> [<tasks.pravic>...]`"),
+    CommandInfo(Cmd.hosts, "hosts", null,
+        "Inspect hosts: \"hosts list [<selection>]\", \"hosts info <host>\"",
+        "**tachy hosts list** `[<selection>]`\n"
+        ~ "       **tachy hosts info** `<host>`"),
+    CommandInfo(Cmd.generate, "generate", "g",
+        "Write scaffolding: age keys, sample tasks/config/project files, shell completions",
+        "**tachy generate** `<what> <path>`   # what: key, task, config, project\n"
+        ~ "       **tachy generate completions** `<shell>`   # shell: bash, zsh, fish"),
+    CommandInfo(Cmd.webui, "webui", null,
+        "Start a local web console: a graphical version of this CLI",
+        "**tachy webui** `[options]`"),
+    CommandInfo(Cmd.webdoc, "webdoc", null,
+        "Serve the built-in documentation as a local web site",
+        "**tachy webdoc** `[options]`"),
+    CommandInfo(Cmd.man, "man", null,
+        "Print the full manual, unix man-page style",
+        "**tachy man**"),
+    CommandInfo(Cmd.showVersion, "version", "v",
+        "Print the version (the build date, YY.mm.dd)",
+        "**tachy version**"),
+    CommandInfo(Cmd.upgrade, "upgrade", null,
+        "Upgrade tachy to the latest GitHub release",
+        "**tachy upgrade** `[-y|--yes]`"),
+    CommandInfo(Cmd.help, "help", null,
+        "Show this help, or \"tachy help <command>\" for one command",
+        "**tachy help** `[command]`"),
+];
+
+/// The CommandInfo of a Cmd.
+private CommandInfo commandInfo(Cmd c) @safe pure nothrow
+{
+    foreach(info; commandInfos)
+        if(info.cmd == c)
+            return info;
+    assert(0, "Cmd without a commandInfos row");
+}
+
+/// The command words with their short forms, comma-separated — the
+/// list the parser names in its error message.
+private string commandWordsText() @safe pure nothrow
+{
+    import std.algorithm.iteration : map;
+    import std.array : join;
+
+    return commandInfos
+        .map!(i => i.word ~ (i.shortWord.length ? " (" ~ i.shortWord ~ ")" : ""))
+        .join(", ");
+}
+
 /// Map a command word; `a`/`c`/`g`/`v` are the short forms of the four
 /// common commands (apply, check, generate, version) — the rest take
 /// none. Anything else is an error naming the commands.
 Cmd parseCommand(string word) @safe pure
 {
-    switch(word) {
-        case "apply":
-        case "a":
-            return Cmd.apply;
-        case "check":
-        case "c":
-            return Cmd.check;
-        case "hosts":
-            return Cmd.hosts;
-        case "generate":
-        case "g":
-            return Cmd.generate;
-        case "webui":
-            return Cmd.webui;
-        case "webdoc":
-            return Cmd.webdoc;
-        case "man":
-            return Cmd.man;
-        case "upgrade":
-            return Cmd.upgrade;
-        case "version":
-        case "v":
-            return Cmd.showVersion;
-        case "help":
-            return Cmd.help;
-        default:
-            throw new TachyError("unknown command '" ~ word
-                    ~ "' (commands: apply (a), check (c), hosts, generate (g),"
-                    ~ " upgrade, webui, webdoc, man, version (v), help)");
-    }
+    foreach(info; commandInfos)
+        if(word == info.word
+                || (info.shortWord.length && word == info.shortWord))
+            return info.cmd;
+    throw new TachyError("unknown command '" ~ word ~ "' (commands: "
+            ~ commandWordsText() ~ ")");
 }
 
 // Under `dub test` (the "unittest" configuration) the silly test
@@ -217,7 +263,6 @@ private void printVersion()
 // ---------------------------------------------------------------------------
 
 private immutable string helpHead = import("assets/helpHead.txt");
-immutable string commandEntries = import("assets/commandEntries.txt");
 
 private immutable string optionEntriesSrc = import("assets/optionEntries.txt");
 
@@ -283,7 +328,29 @@ private string commandOptionsText(Cmd c) @safe pure
         .join("\n");
 }
 
-private enum commandsBlock = "__Commands:__\n" ~ commandEntries;
+/// The Commands block of the general help, composed from the command
+/// table: `**word (short)**`, one column, descriptions aligned after
+/// the widest name.
+private string commandsBlock() @safe pure nothrow
+{
+    import std.array : replicate;
+
+    string r = "__Commands:__\n";
+    size_t width;
+    foreach(info; commandInfos) {
+        const n = info.word.length
+            + (info.shortWord.length ? info.shortWord.length + 3 : 0);
+        if(n > width)
+            width = n;
+    }
+    foreach(info; commandInfos) {
+        const nm = info.word
+            ~ (info.shortWord.length ? " (" ~ info.shortWord ~ ")" : "");
+        r ~= "  **" ~ nm ~ "**" ~ " ".replicate(width - nm.length + 1)
+            ~ info.oneLiner ~ "\n";
+    }
+    return r;
+}
 
 private string optionsBlock() @safe pure
 {
@@ -306,7 +373,7 @@ string helpText() @safe pure
 {
     import std.string : strip;
 
-    return helpHead.strip ~ "\n\n" ~ commandsBlock.strip ~ "\n\n"
+    return helpHead.strip ~ "\n\n" ~ commandsBlock().strip ~ "\n\n"
         ~ optionsBlock().strip ~ "\n\n" ~ helpTail.strip;
 }
 
@@ -351,55 +418,13 @@ private string[string] commandScreens() @safe pure
 /// The command word of a Cmd ("version" for Cmd.showVersion).
 private string commandWord(Cmd c) @safe pure nothrow
 {
-    final switch(c) {
-        case Cmd.apply:
-            return "apply";
-        case Cmd.check:
-            return "check";
-        case Cmd.hosts:
-            return "hosts";
-        case Cmd.generate:
-            return "generate";
-        case Cmd.upgrade:
-            return "upgrade";
-        case Cmd.webui:
-            return "webui";
-        case Cmd.webdoc:
-            return "webdoc";
-        case Cmd.man:
-            return "man";
-        case Cmd.showVersion:
-            return "version";
-        case Cmd.help:
-            return "help";
-    }
+    return commandInfo(c).word;
 }
 
 /// The one-line description a command carries in the general help.
 private string commandOneLiner(Cmd c) @safe pure nothrow
 {
-    final switch(c) {
-        case Cmd.apply:
-            return "Apply the tasks files to the selected hosts";
-        case Cmd.check:
-            return "Check mode: report would-be changes without applying anything";
-        case Cmd.hosts:
-            return "Inspect hosts: \"hosts list [<selection>]\", \"hosts info <host>\"";
-        case Cmd.generate:
-            return "Write scaffolding: age keys, sample tasks/config/project files, shell completions";
-        case Cmd.upgrade:
-            return "Upgrade tachy to the latest GitHub release";
-        case Cmd.webui:
-            return "Start a local web console: a graphical version of this CLI";
-        case Cmd.webdoc:
-            return "Serve the built-in documentation as a local web site";
-        case Cmd.man:
-            return "Print the full manual, unix man-page style";
-        case Cmd.showVersion:
-            return "Print the version (the build date, YY.mm.dd)";
-        case Cmd.help:
-            return "Show this help, or \"tachy help <command>\" for one command";
-    }
+    return commandInfo(c).oneLiner;
 }
 
 /// The one-line description of a command, by command word.
@@ -412,29 +437,7 @@ string commandOneLinerText(string word) @safe pure
 /// command word bold, placeholders colored — the clap/mise scheme.
 private string commandSynopsis(Cmd c) @safe pure nothrow
 {
-    final switch(c) {
-        case Cmd.apply:
-            return "**tachy apply** `[options] <selection> [<tasks.pravic>...]`";
-        case Cmd.check:
-            return "**tachy check** `[options] <selection> [<tasks.pravic>...]`";
-        case Cmd.hosts:
-            return "**tachy hosts list** `[<selection>]`\n       **tachy hosts info** `<host>`";
-        case Cmd.generate:
-            return "**tachy generate** `<what> <path>`   # what: key, task, config, project\n"
-                ~ "       **tachy generate completions** `<shell>`   # shell: bash, zsh, fish";
-        case Cmd.upgrade:
-            return "**tachy upgrade** `[-y|--yes]`";
-        case Cmd.webui:
-            return "**tachy webui** `[options]`";
-        case Cmd.webdoc:
-            return "**tachy webdoc** `[options]`";
-        case Cmd.man:
-            return "**tachy man**";
-        case Cmd.showVersion:
-            return "**tachy version**";
-        case Cmd.help:
-            return "**tachy help** `[command]`";
-    }
+    return commandInfo(c).synopsis;
 }
 
 /// One command's help screen, mise/clap shaped: the one-liner, Usage,
@@ -558,22 +561,23 @@ private string manSection(string title, string body) @safe pure
     return "__" ~ title ~ "__\n" ~ manIndent(body) ~ "\n";
 }
 
-/// The man page's COMMANDS body, composed from the per-command screens
-/// (single source with `tachy help <command>`): each command's
-/// one-liner, usage and body.
+/// The man page's COMMANDS body, composed from the command table —
+/// single source with `tachy help <command>`: each command's
+/// one-liner, usage and body.  `help` is skipped (it has no screen of
+/// its own; it prints the short help).
 private string manCommands() @safe pure
 {
     import std.string : strip;
 
     const screens = commandScreens();
     string s;
-    foreach(w; ["apply", "check", "hosts", "generate", "upgrade", "webui",
-        "webdoc", "man", "version"]) {
-        const c = parseCommand(w);
-        s ~= w ~ "\n";
-        s ~= manIndent(commandOneLiner(c)) ~ "\n";
-        s ~= manIndent("usage: " ~ commandSynopsis(c)) ~ "\n";
-        if(auto body = w in screens) {
+    foreach(info; commandInfos) {
+        if(info.cmd == Cmd.help)
+            continue;
+        s ~= info.word ~ "\n";
+        s ~= manIndent(info.oneLiner) ~ "\n";
+        s ~= manIndent("usage: " ~ info.synopsis) ~ "\n";
+        if(auto body = info.word in screens) {
             s ~= manIndent(strip(*body)) ~ "\n";
         }
     }
