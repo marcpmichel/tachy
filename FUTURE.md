@@ -9,13 +9,25 @@
   * improve css
   * improve line lengths, paragraph formatting ( avoid big paragraph blobs )
 
-- multiline strings: remove spaces from the first line
+- pravic parsing: add multiline strings: calculate the identation of the first line and remove this many spaces for the following lines.
 
 - improve bash completion: after 'tachy apply myhost', [TAB] does not start file autocomplete
 
+- add a 'task' command to parse and execute an inline task (string) instead of reading a pravic file.
+  ```
+  tachy task <host> "package apt:htop"
+  ```
+
+  ```
+  tachy task <host> 'file /tmp/test { content="hello" }'
+  ```
+  
+  Is this silly ? Without it, one just have to create a tiny tasks file "mytask.pravic" with the tasks and use the apply command on it.
+
+
 ## conditions
 
-- Add a `when <condition expression>` attribute for all tasks, conditioning their execution. Does this require a new 'skipped' status ?
+- Add a `when <condition expression>` attribute for most tasks, conditioning their execution. Does this require a new 'skipped' status ?
 
 Examples:
 
@@ -27,13 +39,25 @@ Examples:
   ```
 
   ```
-  ensure "postgresql-server package" {
+  package "apt:postgresql-server" {
     when = "{{ use_postgres_server }}"
-    run = "apt install postgresql-server"
   }
+
+  probe https://google.com {
+    when = "{{ check_internet_access }}"
+  }
+
   ```
 
-- add 'result' to store result of all statements to vars ???
+
+- add 'result' to assign results of all statements to vars ???
+```
+  package 'apt:htop' {
+    result = "htop_install" # htop_install.version, htop_install.installed, ...
+  }
+
+```
+
 
 
 

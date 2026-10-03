@@ -328,6 +328,34 @@ unittest
     assert(canFind(msg, "'args' entries must be strings"), msg);
 }
 
+@("the command sees TACHY_MODE=apply|check")
+unittest
+{
+    auto ctx = ctxLocal;
+
+    // apply mode (checkMode = false)
+    Val[string] p;
+    p["name"] = Val("mode");
+    p["run"] = Val("echo $TACHY_MODE");
+    p["output"] = Val("apply");
+    assert(!runEnsureModule(p, ctx).changed);
+
+    // check mode: ensure jobs still run, and see TACHY_MODE=check
+    TaskContext check = TaskContext(new LocalTransport, true, "localhost", "/tmp");
+    Val[string] q;
+    q["name"] = Val("mode");
+    q["run"] = Val("echo $TACHY_MODE");
+    q["output"] = Val("check");
+    assert(!runEnsureModule(q, check).changed);
+
+    // a subshell sees it too (exported, not a command-prefix assignment)
+    Val[string] sub;
+    sub["name"] = Val("subshell");
+    sub["run"] = Val("( sh -c 'echo $TACHY_MODE' )");
+    sub["output"] = Val("check");
+    assert(!runEnsureModule(sub, check).changed);
+}
+
 @("ensure captures both streams as the verbose payload")
 unittest
 {

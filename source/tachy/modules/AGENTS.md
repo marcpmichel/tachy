@@ -28,9 +28,11 @@ This doc owns module-level contracts.
   `fetch --prune` refresh — remote-tracking refs only, so it runs in
   check mode like a probe — `branch` checkout + ff-only fast-forward,
   `tag` detached checkout; diverged branches error, never rewritten), `ensuremod` (run +
-  exit_status/output assertions behind the `ensure` directive, with
-  `args` — quoted literal arguments appended space-separated to
-  `run`, one element one argument),
+exit_status/output assertions behind the `ensure` directive, with
+`args` — quoted literal arguments appended space-separated to
+`run`, one element one argument — and `TACHY_MODE=apply|check`
+exported for the command, so it knows the invoking tachy mode; from
+`ctx.checkMode`),
   `assertmod` (the `assert` directive: the rendered `value` tested
   against ensure's `output` shapes as expectation keys —
   `equals`/`contains`/`matches`, composed with `not`/`any`/`all`/`none`;

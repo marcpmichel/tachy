@@ -3018,3 +3018,22 @@
      (backslash stripping), leaving module declarations stale while
      everything still compiled — caught by a final audit grep and
      fixed with explicit-path patterns before closeout.
+
+90. set the env variable TACHY_MODE=apply|check when running "ensure"
+    commands (this is to let the started command know in which mode it is).
+   - `runEnsureModule` (ensuremod.d) prefixes every `ensure` command with
+     `export TACHY_MODE=apply;` or `export TACHY_MODE=check;` — from
+     `ctx.checkMode`, i.e. the invoking tachy command — before the
+     tasks-file `cd`; exported, so subshells and pipelines see it too.
+   - Unittest `@("the command sees TACHY_MODE=apply|check")`
+     (tests/ensuremod.d): the command output is `apply` in apply mode and
+     `check` in check mode, including from a subshell.
+   - Verified: `dub build` clean; `dub test` 236 passed, 0 failed; local
+     bundled and `--direct` runs of an `ensure "mode probe"` echoing
+     `$TACHY_MODE` printed `mode=apply` under `tachy apply` and
+     `mode=check` under `tachy check` (the `-v` detail shows the exported
+     command), scratch cleaned up afterwards.
+   - Docs updated: DOCUMENTATION.md `ensure` section, README `ensure`
+     bullet, the `ensure` blurb in the help/man tasks body
+     (source/assets/tasksBody.txt); modules/AGENTS.md records the
+     contract.

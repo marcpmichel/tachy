@@ -32,7 +32,9 @@ module tachy.modules.ensuremod;
  * Entries are keyed by a unique task name, like every managed resource.
  * The command runs through the host's transport in the defining tasks
  * file's directory (like `file.src`: relative paths resolve next to the
- * file that declares the job); the job passes ("ok", never "changed")
+ * file that declares the job); it sees `TACHY_MODE` set to "apply" or
+ * "check" — the invoking tachy command — so one `run` can branch on the
+ * mode.  The job passes ("ok", never "changed")
  * when every assertion holds and fails with a descriptive error
  * otherwise.  Ensure jobs are checks by
  * nature and run even in check mode — keep mutating commands out of
@@ -401,9 +403,14 @@ TaskResult runEnsureModule(Val[string] params, TaskContext ctx)
 
     // The command runs in the defining tasks file's directory, like
     // file.src: relative paths resolve next to the file that declares
-    // the job, not against the process cwd (the project root).
-    const string cmd = ctx.tasksFileDir.length
-        ? "cd " ~ shQuote(ctx.tasksFileDir) ~ " && " ~ runCmd ~ argTail : runCmd ~ argTail;
+    // the job, not against the process cwd (the project root).  The
+    // command learns the mode it runs in through TACHY_MODE ("apply"
+    // or "check", from the invoking tachy command) — exported, so
+    // subshells and pipelines see it too.
+    const string modeEnv = "export TACHY_MODE="
+        ~ (ctx.checkMode ? "check" : "apply") ~ "; ";
+    const string cmd = modeEnv ~ (ctx.tasksFileDir.length
+        ? "cd " ~ shQuote(ctx.tasksFileDir) ~ " && " : "") ~ runCmd ~ argTail;
 
     string[] details;
     details ~= "cmd: " ~ cmd;

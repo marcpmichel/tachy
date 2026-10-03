@@ -515,7 +515,9 @@ Idempotency semantics:
   they run even in check mode, so keep mutating commands out of them.
   The command runs with the defining tasks file's directory as its
   working directory, so relative paths (scripts, data files) resolve
-  next to the file that declares the job.
+  next to the file that declares the job. The command sees `TACHY_MODE`
+  set to `apply` or `check` — the invoking tachy command — so one
+  script can branch on the mode.
 - `probe`: submits one HTTP request and checks the answer — `type` is any
   HTTP method (default `GET`), `headers` an array of `"Name=Value"`
   strings, `data` the body sent verbatim, `code` the expected status

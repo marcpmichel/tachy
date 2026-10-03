@@ -961,7 +961,9 @@ file's directory** (relative paths resolve next to the file that declares
 the job) and asserts on its exit status and/or output. A passing job
 reports `ok` and never `changed`; a failed assertion fails the host with
 the actual status/output. `ensure` jobs are checks by nature: they run even
-in check mode, so keep mutating commands out of them. Both streams the
+in check mode, so keep mutating commands out of them. The command sees
+`TACHY_MODE` set to `apply` or `check` — the invoking tachy command — so
+one `run` can branch on the mode. Both streams the
 command produces travel in the job's verbose payload — with `-v`, `stdout:`
 and `stderr:` excerpts print under the job line (the same is true of every
 command the run executes).
